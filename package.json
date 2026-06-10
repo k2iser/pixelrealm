@@ -1,0 +1,11 @@
+{
+  "name": "pixelrealm",
+  "version": "1.0.0",
+  "description": "Mundo abierto infinito estilo Minecraft con vista isométrica tipo Diablo, en pixel art 100% procedural. JS vanilla, cero dependencias.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["game", "isometric", "pixel-art", "procedural", "open-world", "canvas", "vanilla-js"],
+  "author": "k2iser",
+  "license": "MIT"
+}

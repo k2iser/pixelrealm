@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelRealm — Mundo abierto isométrico</title>
+<meta name="description" content="Un mundo abierto infinito estilo Minecraft con vista isométrica tipo Diablo, hecho en pixel art procedural. JS vanilla, cero dependencias.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <!-- Esquina superior izquierda: vida + día -->
+  <div id="topleft" class="hidden">
+    <div id="hearts"></div>
+    <div id="timehud">
+      <canvas id="clock" width="14" height="14"></canvas>
+      <span id="daylabel">Día 1</span>
+    </div>
+  </div>
+
+  <!-- Minimapa -->
+  <canvas id="minimap" width="132" height="132" class="hidden"></canvas>
+
+  <!-- Barra rápida -->
+  <div id="hotbar" class="hidden"></div>
+
+  <!-- Panel inventario + fabricación -->
+  <div id="panel" class="hidden">
+    <div class="panel-col">
+      <h3>Inventario</h3>
+      <div id="invgrid"></div>
+      <p class="hint">Clic en dos casillas para intercambiarlas</p>
+    </div>
+    <div class="panel-col">
+      <h3>Fabricación</h3>
+      <div id="craftlist"></div>
+    </div>
+    <button id="btn-close-panel" title="Cerrar (E)">✕</button>
+  </div>
+
+  <!-- Ayuda -->
+  <div id="help" class="hidden">
+    <h3>Controles</h3>
+    <table>
+      <tr><td>WASD / Flechas</td><td>Moverse</td></tr>
+      <tr><td>Clic izq. (mantener)</td><td>Golpear / talar / picar</td></tr>
+      <tr><td>Clic derecho</td><td>Colocar objeto / comer</td></tr>
+      <tr><td>1–9 / Rueda</td><td>Elegir de la barra</td></tr>
+      <tr><td>E</td><td>Inventario y fabricación</td></tr>
+      <tr><td>H</td><td>Esta ayuda</td></tr>
+      <tr><td>M</td><td>Silenciar sonido</td></tr>
+    </table>
+    <p class="hint">Tala árboles, fabrica herramientas, construye un refugio…<br>y sobrevive a la noche.</p>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Pantalla de muerte -->
+  <div id="death-overlay" class="overlay hidden">
+    <h1 class="death-title">HAS MUERTO</h1>
+    <p>Las babas de la noche te han alcanzado…</p>
+    <button id="btn-respawn" class="bigbtn">Reaparecer</button>
+  </div>
+
+  <!-- Pantalla de título -->
+  <div id="title-overlay" class="overlay">
+    <div class="title-box">
+      <h1 class="logo">PIXEL<span>REALM</span></h1>
+      <p class="tagline">Mundo abierto infinito · Vista isométrica · Pixel art procedural</p>
+      <div class="menu">
+        <button id="btn-continue" class="bigbtn hidden">Continuar partida</button>
+        <button id="btn-new" class="bigbtn">Nuevo mundo</button>
+        <div class="seedrow">
+          <label for="seed-input">Semilla:</label>
+          <input id="seed-input" type="text" placeholder="aleatoria" maxlength="24" autocomplete="off">
+        </div>
+      </div>
+      <div class="title-controls">
+        <span>WASD moverse</span><span>Clic izq. golpear</span><span>Clic der. colocar</span>
+        <span>E inventario</span><span>H ayuda</span>
+      </div>
+      <p class="credits">Hecho con JS vanilla + Canvas · Sin dependencias · Todo el arte se genera por código</p>
+    </div>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/config.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/world.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/input.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/save.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
