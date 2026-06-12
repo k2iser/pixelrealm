@@ -150,15 +150,15 @@ const BOSS_CFG = {
 
 // Colores del minimapa por tipo de suelo
 const MINIMAP_COLORS = {
-  [T.DEEP]: '#1d3a78', [T.WATER]: '#2f5fb0', [T.SAND]: '#e3cd8b', [T.GRASS]: '#4f9c3e',
-  [T.DIRT]: '#8a6242', [T.STONE]: '#8c8c94', [T.SNOW]: '#e9f1f4', [T.FLOOR]: '#a87b4f',
+  [T.DEEP]: '#253a5e', [T.WATER]: '#4f8fba', [T.SAND]: '#e8c170', [T.GRASS]: '#468232',
+  [T.DIRT]: '#ad7757', [T.STONE]: '#577277', [T.SNOW]: '#ebede9', [T.FLOOR]: '#c09473',
 };
 
-// --- Apariencia del héroe (editor de personaje) ---
-const HERO_COLORS = ['#2e8f83', '#c0563a', '#7a5fc0', '#3a7ac0', '#c09a3a', '#58a04a', '#c05a8a', '#36b3c9'];
-const HERO_SKINS = ['#eab487', '#d9985f', '#b5703f', '#7d4a28'];
-const HERO_HAIRC = ['#4a3120', '#26262c', '#a8742c', '#c8452a', '#6e6e78', '#e8c14d'];
-const HERO_PANTS = ['#3b3b46', '#5a4a32', '#2e4a6e', '#5e2e2e'];
+// --- Apariencia del héroe (editor de personaje) — rampas Apollo ---
+const HERO_COLORS = ['#4f8fba', '#a53030', '#7a367b', '#3c5e8b', '#de9e41', '#75a743', '#a23e8c', '#73bed3'];
+const HERO_SKINS = ['#d7b594', '#c09473', '#ad7757', '#884b2b'];
+const HERO_HAIRC = ['#4d2b32', '#10141f', '#be772b', '#cf573c', '#577277', '#de9e41'];
+const HERO_PANTS = ['#202e37', '#602c2c', '#253a5e', '#411d31'];
 const HERO_STYLES = ['Corto', 'Melena', 'Rapado'];
 const DEFAULT_LOOK = { skin: 0, hair: 0, style: 0, shirt: 0, pants: 0 };
 

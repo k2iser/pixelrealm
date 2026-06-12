@@ -142,6 +142,37 @@ function makeGroundTile(base, dark, light, seed) {
   return c;
 }
 
+// Hierba con matas y florecillas (clusters al estilo Slynyrd):
+// variantes que el renderer elige por hash de casilla -> pradera orgánica
+function makeGrassTile(seed) {
+  const c = makeGroundTile('#468232', '#25562e', '#75a743', seed);
+  const g = c.getContext('2d');
+  const W = CFG.TW, H = CFG.TH;
+  const cx = W / 2 - 0.5, cy = H / 2 - 0.5;
+  const tufts = 4 + Math.floor(hash2(seed, 77, 9) * 5);
+  for (let i = 0; i < tufts; i++) {
+    const x = 6 + Math.floor(hash2(seed, i * 31, 1) * (W - 12));
+    const y = 3 + Math.floor(hash2(seed, i * 31, 2) * (H - 7));
+    const dx = Math.abs(x - cx) / (W / 2), dy = Math.abs(y - cy) / (H / 2);
+    if (dx + dy > 0.82) continue; // dentro del rombo, lejos del borde
+    const r = hash2(seed, i * 31, 3);
+    if (r < 0.08) {
+      // florecilla
+      g.fillStyle = r < 0.04 ? '#df84a5' : '#e8c170';
+      g.fillRect(x, y, 1, 1);
+    } else {
+      // mata de hierba: 2-3 briznas verticales
+      const tall = r < 0.5 ? 2 : 3;
+      g.fillStyle = r < 0.6 ? '#75a743' : '#a8ca58';
+      g.fillRect(x, y - tall + 1, 1, tall);
+      g.fillStyle = '#25562e';
+      g.fillRect(x + 1, y - tall + 2, 1, tall - 1);
+      if (r > 0.75) { g.fillStyle = '#75a743'; g.fillRect(x - 1, y, 1, 1); }
+    }
+  }
+  return c;
+}
+
 /* Transiciones entre biomas (auto-tiling estilo Stardew):
    cuando un material "domina" al vecino, su flequillo se derrama con
    dithering sobre el borde correspondiente del rombo vecino.
@@ -179,7 +210,7 @@ const FRINGE_PRIORITY = {
 };
 
 function makeFloorTile(seed) {
-  const base = '#a87b4f', dark = '#7a5635', light = '#c89b62';
+  const base = '#c09473', dark = '#884b2b', light = '#d7b594';
   const W = CFG.TW, H = CFG.TH, cx = W / 2 - 0.5, cy = H / 2 - 0.5;
   const [c, g] = cv(W, H);
   for (let y = 0; y < H; y++) {
@@ -505,8 +536,8 @@ const BAT_DOWN = [
 
 function buildVegetation() {
   // Árbol frondoso: 5 tonos + variante con frutas
-  const tp = { H: '#b8e88a', L: '#8fd45e', G: '#4e9a3d', D: '#35702a', E: '#274f1e',
-               T: '#8a5a33', t: '#6b4226', a: '#d8484f' };
+  const tp = { H: '#a8ca58', L: '#75a743', G: '#468232', D: '#25562e', E: '#19332d',
+               T: '#884b2b', t: '#4d2b32', a: '#cf573c' };
   const treeRows = (fruit) => [
     '........HHHH',
     '......HHLLLLH',
@@ -534,7 +565,7 @@ function buildVegetation() {
   Assets.obj[O.TREE] = [treeA, treeA, treeA, treeB]; // 1 de cada 4 con fruta
 
   // Pino de tres pisos con nieve en la punta
-  const pp = { A: '#3f7d4e', B: '#2a5c38', C: '#1e4429', S: '#e8f4f8', T: '#8a5a33', t: '#6b4226' };
+  const pp = { A: '#468232', B: '#25562e', C: '#19332d', S: '#ebede9', T: '#884b2b', t: '#4d2b32' };
   const pineRows = (snowy) => [
     '........' + (snowy ? 'SS' : 'AA'),
     '.......' + (snowy ? 'SSSS' : 'ABBA'),
@@ -558,7 +589,7 @@ function buildVegetation() {
     scaleSprite(outlineSprite(gridSprite(pineRows(false), pp), '#13241a'), CFG.SPR),
   ];
 
-  const cactusPal = { C: '#4fae5d', c: '#2e7a3a', F: '#e886a8' };
+  const cactusPal = { C: '#75a743', c: '#468232', F: '#df84a5' };
   Assets.obj[O.CACTUS] = scaleSprite(gridSprite([
     '.....cF',
     '....cCCc',
@@ -576,7 +607,7 @@ function buildVegetation() {
     '...ccCCcc',
   ], cactusPal), CFG.SPR);
 
-  const rockPal = { s: '#55555e', S: '#8c8c94', W: '#b4b4be', d: '#62626c' };
+  const rockPal = { s: '#394a50', S: '#819796', W: '#a8b5b2', d: '#577277' };
   Assets.obj[O.ROCK] = scaleSprite(gridSprite([
     '......ssss',
     '....ssSSSSs',
@@ -601,7 +632,7 @@ function buildVegetation() {
       '..g.g',
       '...gg',
       '....g',
-    ], { R: '#c4344c', r: '#f08a9a', g: '#3c8534' }), 2),
+    ], { R: '#a53030', r: '#cf573c', g: '#25562e' }), 2),
     scaleSprite(gridSprite([
       '...YY',
       '..YyyY',
@@ -612,7 +643,7 @@ function buildVegetation() {
       '..g.g',
       '...gg',
       '....g',
-    ], { Y: '#e8b14d', y: '#ffe28a', g: '#3c8534' }), 2),
+    ], { Y: '#de9e41', y: '#e8c170', g: '#25562e' }), 2),
   ];
 
   Assets.obj[O.TALLGRASS] = scaleSprite(gridSprite([
@@ -624,7 +655,7 @@ function buildVegetation() {
     '...gggG',
     '....gg',
     '....gG',
-  ], { g: '#5fb84d', G: '#3c8534' }), 2);
+  ], { g: '#75a743', G: '#468232' }), 2);
 
   Assets.obj[O.BUSH] = scaleSprite(gridSprite([
     '....gggg',
@@ -636,7 +667,7 @@ function buildVegetation() {
     '.gGGGGGGRGGg',
     '..ggGGGGgg',
     '....gggg',
-  ], { g: '#35702a', G: '#4e9a3d', R: '#c4344c' }), CFG.SPR);
+  ], { g: '#25562e', G: '#468232', R: '#a53030' }), CFG.SPR);
 }
 
 /* ================= construcciones ================= */
@@ -1035,25 +1066,25 @@ function buildItems() {
 /* ================= construcción de todo ================= */
 
 function buildAssets() {
-  // suelos
+  // suelos — rampas de la paleta Apollo (lospec.com/palette-list/apollo)
   const tiles = Assets.tiles;
-  tiles[T.DEEP]  = [1, 2].map(s => makeGroundTile('#27408f', '#1d3a78', '#31509e', s));
-  tiles[T.WATER] = [3, 4].map(s => makeGroundTile('#3a66c4', '#2f55a8', '#4f7fdb', s));
-  tiles[T.SAND]  = [5, 6, 7].map(s => makeGroundTile('#e7d08a', '#d4ba6f', '#f2e2a4', s));
-  tiles[T.GRASS] = [8, 9, 10].map(s => makeGroundTile('#4a9e3f', '#3c8534', '#5fb84d', s));
-  tiles[T.DIRT]  = [11, 12, 13].map(s => makeGroundTile('#8a6242', '#74512f', '#9b7251', s));
-  tiles[T.STONE] = [14, 15, 16].map(s => makeGroundTile('#8d8d96', '#787882', '#a2a2ac', s));
-  tiles[T.SNOW]  = [17, 18, 19].map(s => makeGroundTile('#e8f0f5', '#d6e2ea', '#fafdff', s));
-  tiles[T.FLOOR] = [20, 21].map(s => makeFloorTile(s));
+  tiles[T.DEEP]  = [1, 2].map(s => makeGroundTile('#253a5e', '#172038', '#3c5e8b', s));
+  tiles[T.WATER] = [3, 4].map(s => makeGroundTile('#4f8fba', '#3c5e8b', '#73bed3', s));
+  tiles[T.SAND]  = [5, 6, 7].map(s => makeGroundTile('#e8c170', '#de9e41', '#e7d5b3', s));
+  tiles[T.GRASS] = [8, 9, 10, 11].map(s => makeGrassTile(s));
+  tiles[T.DIRT]  = [12, 13, 14].map(s => makeGroundTile('#ad7757', '#7a4841', '#c09473', s));
+  tiles[T.STONE] = [15, 16, 17].map(s => makeGroundTile('#577277', '#394a50', '#819796', s));
+  tiles[T.SNOW]  = [18, 19, 20].map(s => makeGroundTile('#ebede9', '#c7cfcc', '#ffffff', s));
+  tiles[T.FLOOR] = [21, 22].map(s => makeFloorTile(s));
 
   // flecos de transición entre biomas (auto-tiling)
   const fringeCols = {
-    [T.GRASS]: ['#4a9e3f', '#3c8534'],
-    [T.SNOW]:  ['#e8f0f5', '#d6e2ea'],
-    [T.DIRT]:  ['#8a6242', '#74512f'],
-    [T.SAND]:  ['#e7d08a', '#d4ba6f'],
-    [T.STONE]: ['#8d8d96', '#787882'],
-    [T.WATER]: ['#3a66c4', '#2f55a8'],  // suaviza la orilla del mar profundo
+    [T.GRASS]: ['#468232', '#25562e'],
+    [T.SNOW]:  ['#ebede9', '#c7cfcc'],
+    [T.DIRT]:  ['#ad7757', '#7a4841'],
+    [T.SAND]:  ['#e8c170', '#de9e41'],
+    [T.STONE]: ['#577277', '#394a50'],
+    [T.WATER]: ['#4f8fba', '#3c5e8b'],  // suaviza la orilla del mar profundo
   };
   for (const t in fringeCols) {
     Assets.fringe[t] = [0, 1, 2, 3].map(e => makeFringe(fringeCols[t][0], fringeCols[t][1], e, 400 + (+t)));
@@ -1063,12 +1094,12 @@ function buildAssets() {
 
   // muros
   Assets.obj[O.WALLW] = makeCube(
-    ['#a87b4f', '#7a5635', '#c89b62'], '#8a5a33', '#6b4226', '#9b6a3e', '#7a5230', 31, 8);
+    ['#c09473', '#884b2b', '#d7b594'], '#ad7757', '#7a4841', '#c09473', '#884b2b', 31, 8);
   Assets.obj[O.WALLS] = makeCube(
-    ['#8c8c94', '#787882', '#a2a2ac'], '#6e6e78', '#5a5a64', '#7e7e88', '#646470', 32, 0);
+    ['#819796', '#577277', '#a8b5b2'], '#577277', '#394a50', '#6b8489', '#4a5e63', 32, 0);
 
   // antorcha y fogata
-  const firePal = { f: '#ff8c2e', F: '#ffb347', Y: '#ffe28a', B: '#8a5a33', b: '#6b4226', s: '#8c8c94' };
+  const firePal = { f: '#cf573c', F: '#de9e41', Y: '#e8c170', B: '#884b2b', b: '#4d2b32', s: '#819796' };
   Assets.obj[O.TORCH] = [
     gridSprite([
       '...ff',
@@ -1229,7 +1260,8 @@ async function loadTexturePack() {
 }
 
 function applyTexturePack(pack, img) {
-  const cut = f => {
+  const cut = fr => {
+    const f = fr.frame || fr; // compatible con free-tex-packer/TexturePacker ({frame:{x,y,w,h}})
     const [c, g] = cv(f.w, f.h);
     g.drawImage(img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
     return c;
@@ -1242,7 +1274,8 @@ function applyTexturePack(pack, img) {
   };
   for (const key in pack.frames || {}) {
     const f = pack.frames[key];
-    if (!f || !(f.w > 0) || !(f.h > 0)) continue;
+    const fd = (f && f.frame) || f;
+    if (!fd || !(fd.w > 0) || !(fd.h > 0)) continue;
     const [kind, name, idx] = key.split('.');
     if (kind === 'tile' && TEX_T[name] != null) {
       Assets.tiles[TEX_T[name]] = setIdx(Assets.tiles[TEX_T[name]], idx, cut(f));
