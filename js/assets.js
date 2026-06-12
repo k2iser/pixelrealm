@@ -70,6 +70,46 @@ function darken(hex, f) {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
 
+// Sombra con cambio de matiz (técnica clásica de pixel art): además de
+// oscurecer, empuja el color hacia el azul-violeta. Los brillos, hacia el cálido.
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = ((n >> 16) & 255) * f * 0.88, g = ((n >> 8) & 255) * f * 0.95, b = (n & 255) * f * 1.12 + 14;
+  r = Math.min(255, Math.round(r)); g = Math.min(255, Math.round(g)); b = Math.min(255, Math.round(b));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+function glow(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = ((n >> 16) & 255) * f * 1.1 + 10, g = ((n >> 8) & 255) * f * 1.05 + 6, b = (n & 255) * f * 0.92;
+  r = Math.min(255, Math.round(r)); g = Math.min(255, Math.round(g)); b = Math.min(255, Math.round(b));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+// Contorno selectivo: añade un borde oscuro-violáceo alrededor de la silueta
+// (el truco que hace que los personajes de Stardew "se despeguen" del fondo)
+function outlineSprite(c, color) {
+  const w = c.width, h = c.height;
+  const g = c.getContext('2d');
+  const src = g.getImageData(0, 0, w, h);
+  const out = g.createImageData(w, h);
+  const a = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : src.data[(y * w + x) * 4 + 3];
+  const n = parseInt(color.slice(1), 16);
+  const cr = (n >> 16) & 255, cg = (n >> 8) & 255, cb = n & 255;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (src.data[i + 3] > 0) {
+        out.data[i] = src.data[i]; out.data[i + 1] = src.data[i + 1];
+        out.data[i + 2] = src.data[i + 2]; out.data[i + 3] = src.data[i + 3];
+      } else if (a(x - 1, y) || a(x + 1, y) || a(x, y - 1) || a(x, y + 1)) {
+        out.data[i] = cr; out.data[i + 1] = cg; out.data[i + 2] = cb; out.data[i + 3] = 235;
+      }
+    }
+  }
+  g.putImageData(out, 0, 0);
+  return c;
+}
+
 // Icono 12x12 a partir de un sprite grande (para inventario)
 function spriteIcon(c) {
   const k = Math.min(12 / c.width, 12 / c.height);
@@ -196,11 +236,12 @@ function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeE
 
 function makeHeroFrame(dir, pose, look) {
   const [hi, g] = cv(56, 80);
-  const skin = HERO_SKINS[look.skin], skinD = darken(skin, 0.82),
-        hair = HERO_HAIRC[look.hair], hairL = darken(hair, 1.35),
-        shirt = HERO_COLORS[look.shirt], shirtD = darken(shirt, 0.72),
-        pants = HERO_PANTS[look.pants], pantsD = darken(pants, 0.75),
-        boots = '#5d4427', bootsD = '#44321b', belt = '#2a2018',
+  // sombras con matiz desplazado al azul y brillos cálidos (pixel art clásico)
+  const skin = HERO_SKINS[look.skin], skinD = shade(skin, 0.85), skinL = glow(skin, 1.08),
+        hair = HERO_HAIRC[look.hair], hairL = glow(hair, 1.3), hairD = shade(hair, 0.72),
+        shirt = HERO_COLORS[look.shirt], shirtD = shade(shirt, 0.74), shirtL = glow(shirt, 1.14),
+        pants = HERO_PANTS[look.pants], pantsD = shade(pants, 0.76),
+        boots = '#5d4427', bootsD = shade('#5d4427', 0.74), belt = '#2a2018',
         buckle = '#e8c14d', eyeW = '#f4f4f8', eye = '#20202e';
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
 
@@ -217,7 +258,8 @@ function makeHeroFrame(dir, pose, look) {
 
   // --- torso ---
   R(14, 28 + bob, 28, 26, shirt);
-  R(36, 28 + bob, 6, 26, shirtD);                 // sombreado lateral
+  R(36, 28 + bob, 6, 26, shirtD);                 // sombreado lateral (matiz frío)
+  R(15, 29 + bob, 3, 24, shirtL);                 // luz cálida del otro lado
   R(24, 28 + bob, 8, 3, shirtD);                  // cuello en V
   R(26, 31 + bob, 4, 2, skin);                    // escote
   R(14, 50 + bob, 28, 4, shirtD);                 // bajo de la túnica
@@ -252,41 +294,52 @@ function makeHeroFrame(dir, pose, look) {
   const hairTop = look.style === 2 ? 4 : 0;       // rapado: nacimiento más alto
   R(18, bob, 20, 2, hair);
   R(16, 2 + bob, 24, 10 - hairTop, hair);
-  R(18, 2 + bob, 10, 2, hairL);                   // brillo
-  R(20, 5 + bob, 4, 1, hairL);                    // mechón
+  R(16, 2 + bob, 24, 2, hairD);                   // raíz con sombra
+  R(18, 3 + bob, 10, 2, hairL);                   // brillo
+  R(20, 6 + bob, 4, 1, hairL);                    // mechón
+  R(31, 7 + bob, 3, 1, hairD);                    // mechón oscuro
   R(16, 12 + bob, 24, 14, skin);                  // cara
+  R(17, 13 + bob, 4, 6, skinL);                   // luz en el pómulo
   R(18, 24 + bob, 20, 2, skinD);                  // mandíbula
   R(24, 26 + bob, 8, 2, skinD);                   // cuello
   if (look.style === 0) {                          // corto: patillas
-    R(16, 12 + bob, 2, 4, hair); R(38, 12 + bob, 2, 4, hair);
+    R(16, 12 + bob, 2, 5, hair); R(38, 12 + bob, 2, 5, hair);
   } else if (look.style === 1) {                   // melena hasta los hombros
-    R(14, 8 + bob, 4, 24, hair); R(38, 8 + bob, 4, 24, hair);
-    R(14, 30 + bob, 4, 2, darken(hair, 0.7)); R(38, 30 + bob, 4, 2, darken(hair, 0.7));
+    R(14, 8 + bob, 3, 24, hair); R(39, 8 + bob, 3, 24, hair);   // sin tapar la cara
+    R(14, 8 + bob, 1, 20, hairD); R(41, 8 + bob, 1, 20, hairD);
+    R(14, 30 + bob, 3, 2, hairD); R(39, 30 + bob, 3, 2, hairD);
   }
 
   if (dir === 'up') {
     R(16, 12 + bob, 24, 8, hair);                  // nuca
     R(18, 12 + bob, 8, 2, hairL);
+    R(16, 18 + bob, 24, 2, hairD);
     if (look.style === 1) R(16, 20 + bob, 24, 14, hair); // melena por la espalda
   } else {
     const my = 22 + bob;
     if (dir === 'down') {
-      R(20, 16 + bob, 4, 4, eyeW); R(21, 17 + bob, 2, 3, eye);
-      R(32, 16 + bob, 4, 4, eyeW); R(33, 17 + bob, 2, 3, eye);
+      R(20, 14 + bob, 5, 1, hairD); R(31, 14 + bob, 5, 1, hairD); // cejas
+      R(20, 16 + bob, 4, 4, eyeW); R(21, 17 + bob, 2, 3, eye); R(20, 16 + bob, 1, 1, '#ffffff');
+      R(32, 16 + bob, 4, 4, eyeW); R(33, 17 + bob, 2, 3, eye); R(32, 16 + bob, 1, 1, '#ffffff');
       R(26, my, 4, 1, skinD);                      // boca
+      R(27, my + 1, 2, 1, shade(skin, 0.7));       // sonrisilla
     } else if (dir === 'left') {
-      R(16, 16 + bob, 4, 4, eyeW); R(16, 17 + bob, 2, 3, eye);
-      R(26, 16 + bob, 4, 4, eyeW); R(26, 17 + bob, 2, 3, eye);
+      R(16, 14 + bob, 5, 1, hairD); R(26, 14 + bob, 5, 1, hairD);
+      R(16, 16 + bob, 4, 4, eyeW); R(16, 17 + bob, 2, 3, eye); R(18, 16 + bob, 1, 1, '#ffffff');
+      R(26, 16 + bob, 4, 4, eyeW); R(26, 17 + bob, 2, 3, eye); R(28, 16 + bob, 1, 1, '#ffffff');
       R(34, 12 + bob, 6, 6, hair);                 // pelo de perfil
       R(20, my, 3, 1, skinD);
     } else {
-      R(36, 16 + bob, 4, 4, eyeW); R(38, 17 + bob, 2, 3, eye);
-      R(26, 16 + bob, 4, 4, eyeW); R(28, 17 + bob, 2, 3, eye);
+      R(35, 14 + bob, 5, 1, hairD); R(25, 14 + bob, 5, 1, hairD);
+      R(36, 16 + bob, 4, 4, eyeW); R(38, 17 + bob, 2, 3, eye); R(36, 16 + bob, 1, 1, '#ffffff');
+      R(26, 16 + bob, 4, 4, eyeW); R(28, 17 + bob, 2, 3, eye); R(26, 16 + bob, 1, 1, '#ffffff');
       R(16, 12 + bob, 6, 6, hair);
       R(33, my, 3, 1, skinD);
     }
   }
 
+  // contorno violáceo oscuro alrededor de toda la silueta
+  outlineSprite(hi, '#241a2e');
   return scaleSmooth(hi, 28, 40);
 }
 
@@ -476,8 +529,8 @@ function buildVegetation() {
     '........ttTTt',
     '.......ttTTTTt',
   ];
-  const treeA = scaleSprite(gridSprite(treeRows(false), tp), CFG.SPR);
-  const treeB = scaleSprite(gridSprite(treeRows(true), tp), CFG.SPR);
+  const treeA = scaleSprite(outlineSprite(gridSprite(treeRows(false), tp), '#1c2912'), CFG.SPR);
+  const treeB = scaleSprite(outlineSprite(gridSprite(treeRows(true), tp), '#1c2912'), CFG.SPR);
   Assets.obj[O.TREE] = [treeA, treeA, treeA, treeB]; // 1 de cada 4 con fruta
 
   // Pino de tres pisos con nieve en la punta
@@ -501,8 +554,8 @@ function buildVegetation() {
     '.......ttTT',
   ];
   Assets.obj[O.PINE] = [
-    scaleSprite(gridSprite(pineRows(true), pp), CFG.SPR),
-    scaleSprite(gridSprite(pineRows(false), pp), CFG.SPR),
+    scaleSprite(outlineSprite(gridSprite(pineRows(true), pp), '#13241a'), CFG.SPR),
+    scaleSprite(outlineSprite(gridSprite(pineRows(false), pp), '#13241a'), CFG.SPR),
   ];
 
   const cactusPal = { C: '#4fae5d', c: '#2e7a3a', F: '#e886a8' };
@@ -1081,8 +1134,8 @@ function buildAssets() {
   // héroe por defecto y enemigos
   Assets.player = getHeroLookSet(DEFAULT_LOOK);
   Assets.mobs.slime = [0, 1, 2].map(makeSlimeFrame);
-  Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(gridSprite(r, SHADOW_PAL), CFG.SPR));
-  Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(gridSprite(r, BAT_PAL), CFG.SPR));
+  Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(outlineSprite(gridSprite(r, SHADOW_PAL), '#15101f'), CFG.SPR));
+  Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(outlineSprite(gridSprite(r, BAT_PAL), '#15101f'), CFG.SPR));
   Assets.boss = [0, 1, 2].map(makeBossFrame);
 
   // flecha de las torres
