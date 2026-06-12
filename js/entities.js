@@ -418,6 +418,8 @@ function respawn() {
   const sp = safeSpawn(G.spawn.x, G.spawn.y); // sin tocar G.spawn: si liberan el sitio, vuelves a tu cabaña
   player.x = sp.x;
   player.y = sp.y;
+  player.velX = 0; // sin deslizamiento fantasma de la inercia previa
+  player.velY = 0;
   mobs.length = 0;
   UI.refreshHearts();
   UI.hideDeath();

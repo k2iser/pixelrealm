@@ -119,9 +119,14 @@ const UI = {
       G.look = this._edLook;
       try { localStorage.setItem('pixelrealm.hero', JSON.stringify(G.look)); } catch (e) { /* da igual */ }
       Assets.player = getHeroLookSet(G.look);
-      clearInterval(this._edTimer);
-      this.el('hero-editor').classList.add('hidden');
+      this.closeHeroEditor();
     });
+  },
+
+  closeHeroEditor() {
+    clearInterval(this._edTimer);
+    this._edTimer = null;
+    this.el('hero-editor').classList.add('hidden');
   },
 
   refreshEditor() {
@@ -259,6 +264,7 @@ const UI = {
     this.el('panel').classList.add('hidden');
     this.el('help').classList.add('hidden');
     this.closeChatInput();
+    this.closeHeroEditor();
   },
 
   /* ---------- chat (multijugador) ---------- */
@@ -402,6 +408,7 @@ const UI = {
 
   hideTitle() {
     this.el('title-overlay').classList.add('hidden');
+    this.closeHeroEditor(); // que nunca arranque la partida con el editor encima
     this.showHUD();
   },
 

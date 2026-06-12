@@ -39,7 +39,11 @@ window.addEventListener('resize', resize);
 function setZoom(z) {
   G.zoom = clamp(z | 0, 1, 3);
   try { localStorage.setItem('pixelrealm.zoom', G.zoom); } catch (e) { /* da igual */ }
+  const oldW = canvas.width, oldH = canvas.height;
   resize();
+  // reescala el cursor a la nueva resolución interna (hasta el próximo mousemove)
+  Input.mx *= canvas.width / oldW;
+  Input.my *= canvas.height / oldH;
   UI.toast('Zoom: ' + ['lejos', 'cerca', 'muy cerca'][G.zoom - 1]);
 }
 
@@ -145,6 +149,8 @@ function startOnlineWorld(w) {
 function finishStart(msg) {
   player.dead = false;
   player.breaking = null;
+  player.velX = 0;
+  player.velY = 0;
   mobs.length = 0;
   particles.length = 0;
   floaters.length = 0;
@@ -484,7 +490,15 @@ function update(dt) {
     G.spawnTimer = 2.5;
     for (let i = 0; i < 12; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const d = randRange(9, 22);
+      // distancia mínima para nacer fuera de pantalla EN ESTA dirección:
+      // con zoom alejado la pantalla abarca más casillas que el anillo 9-22
+      const exPx = Math.abs(Math.cos(ang) - Math.sin(ang)) * CFG.HW;
+      const eyPx = Math.abs(Math.cos(ang) + Math.sin(ang)) * CFG.HH;
+      const dEdge = Math.min(
+        exPx > 1e-6 ? (canvas.width / 2 + 64) / exPx : Infinity,
+        eyPx > 1e-6 ? (canvas.height / 2 + 96) / eyPx : Infinity,
+      );
+      const d = Math.max(randRange(9, 22), dEdge + randRange(1, 5));
       const x = player.x + Math.cos(ang) * d;
       const y = player.y + Math.sin(ang) * d;
       const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;

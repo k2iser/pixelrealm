@@ -141,12 +141,12 @@ function render(g, W, H) {
   // --- entidades ---
   for (const m of mobs) {
     const sx = w2sx(m.x, m.y) + ox, sy = w2sy(m.x, m.y) + oy;
-    if (sx < -40 || sx > W + 40 || sy < -50 || sy > H + 30) continue;
+    if (sx < -80 || sx > W + 80 || sy < -100 || sy > H + 80) continue;
     drawables.push({ d: m.x + m.y, type: 'mob', m });
   }
   for (const dr of drops) {
     const sx = w2sx(dr.x, dr.y) + ox, sy = w2sy(dr.x, dr.y) + oy;
-    if (sx < -30 || sx > W + 30 || sy < -40 || sy > H + 30) continue;
+    if (sx < -60 || sx > W + 60 || sy < -80 || sy > H + 60) continue;
     drawables.push({ d: dr.x + dr.y, type: 'drop', drop: dr });
   }
   for (const p of particles) drawables.push({ d: p.x + p.y, type: 'part', p });
@@ -296,8 +296,8 @@ function drawDiamond(g, tx, ty, ox, oy, color) {
 
 function shadow(g, sx, sy, w) {
   g.fillStyle = 'rgba(0,0,0,0.28)';
-  g.fillRect(Math.round(sx - w / 2), Math.round(sy - 1), w, 3);
-  g.fillRect(Math.round(sx - w / 2) + 2, Math.round(sy - 2), w - 4, 5);
+  g.fillRect(Math.round(sx - w / 2), Math.round(sy - 2), w, 6);
+  g.fillRect(Math.round(sx - w / 2) + 4, Math.round(sy - 4), w - 8, 10);
 }
 
 // Dibuja un héroe (propio o remoto) con su herramienta al golpear.
@@ -318,7 +318,7 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
     return;
   }
   shadow(g, sx, sy, 20);
-  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 3));
+  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
     const prog = 1 - swingT / 0.18;

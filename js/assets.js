@@ -274,6 +274,7 @@ function makeHeroFrame(dir, pose, look) {
         pants = HERO_PANTS[look.pants], pantsD = shade(pants, 0.76),
         boots = '#5d4427', bootsD = shade('#5d4427', 0.74), belt = '#2a2018',
         buckle = '#e8c14d', eyeW = '#f4f4f8', eye = '#20202e';
+  g.translate(0, 2); // margen superior: la coronilla con bob=-2 no se sale del lienzo
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
 
   let lLeg = 0, rLeg = 0, lArm = 0, rArm = 0, bob = 0;
@@ -329,7 +330,7 @@ function makeHeroFrame(dir, pose, look) {
   R(18, 3 + bob, 10, 2, hairL);                   // brillo
   R(20, 6 + bob, 4, 1, hairL);                    // mechón
   R(31, 7 + bob, 3, 1, hairD);                    // mechón oscuro
-  R(16, 12 + bob, 24, 14, skin);                  // cara
+  R(16, 12 + bob - hairTop, 24, 14 + hairTop, skin); // cara (rapado: frente más alta, sin hueco)
   R(17, 13 + bob, 4, 6, skinL);                   // luz en el pómulo
   R(18, 24 + bob, 20, 2, skinD);                  // mandíbula
   R(24, 26 + bob, 8, 2, skinD);                   // cuello

@@ -178,7 +178,9 @@ const Net = {
       case 'bossMinions':
         if (G.boss && dist2(player.x, player.y, m.x, m.y) < 30 * 30) {
           for (let i = 0; i < 2; i++) {
-            spawnMob('slime', m.x + randRange(-1.5, 1.5), m.y + randRange(-1.5, 1.5));
+            if (mobs.length < CFG.MOB_CAP + 4) { // mismo tope que offline
+              spawnMob('slime', m.x + randRange(-1.5, 1.5), m.y + randRange(-1.5, 1.5));
+            }
           }
         }
         break;
