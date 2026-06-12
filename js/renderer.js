@@ -39,27 +39,45 @@ function lightLayer(W, H) {
   return _lightG;
 }
 
+// Sprite de un objeto del mundo (resuelve variantes y frames de animación)
+function objSprite(id, tx, ty) {
+  let img = Assets.obj[id];
+  if (!img) return null;
+  if (Array.isArray(img)) {
+    if (id === O.TORCH || id === O.FIRE || id === O.BRAZIER || id === O.ALTAR) {
+      img = img[(Math.floor(G.elapsed * 7) + tx + ty) & 1]; // & 1: seguro con coordenadas negativas
+    } else {
+      img = img[Math.floor(hash2(tx, ty, 99) * img.length)];
+    }
+  }
+  return img;
+}
+
 function render(g, W, H) {
   g.fillStyle = '#0b0e1a';
   g.fillRect(0, 0, W, H);
-  const ox = cam.ox, oy = cam.oy;
+  let ox = cam.ox, oy = cam.oy;
+  if (G.shake > 0) {
+    ox += (Math.random() - 0.5) * G.shake * 14;
+    oy += (Math.random() - 0.5) * G.shake * 9;
+  }
 
-  // --- rango de casillas visibles (las 4 esquinas de la pantalla a mundo) ---
+  // --- rango de casillas visibles ---
   const c0 = s2w(-ox, -oy), c1 = s2w(W - ox, -oy), c2 = s2w(-ox, H - oy), c3 = s2w(W - ox, H - oy);
   const txmin = Math.floor(Math.min(c0.x, c1.x, c2.x, c3.x)) - 1;
   const txmax = Math.ceil(Math.max(c0.x, c1.x, c2.x, c3.x)) + 1;
   const tymin = Math.floor(Math.min(c0.y, c1.y, c2.y, c3.y)) - 1;
   const tymax = Math.ceil(Math.max(c0.y, c1.y, c2.y, c3.y)) + 2;
 
-  const lights = [];
   const drawables = [];
+  const labels = [];
   const waterFrame = Math.floor(G.elapsed * 1.6);
 
   // --- pasada de suelo + recogida de objetos ---
   for (let ty = tymin; ty <= tymax; ty++) {
     for (let tx = txmin; tx <= txmax; tx++) {
       const sx = w2sx(tx, ty) + ox, sy = w2sy(tx, ty) + oy;
-      if (sx < -CFG.TW || sx > W + CFG.HW || sy < -CFG.TH * 3 || sy > H + CFG.TH) continue;
+      if (sx < -CFG.TW || sx > W + CFG.HW || sy < -CFG.TH * 5 || sy > H + CFG.TH) continue;
       const gr = world.ground(tx, ty);
       const frames = Assets.tiles[gr];
       let img;
@@ -71,40 +89,70 @@ function render(g, W, H) {
       g.drawImage(img, Math.round(sx - CFG.HW), Math.round(sy));
 
       const ob = world.object(tx, ty);
-      if (ob !== O.NONE) {
-        drawables.push({ d: tx + ty, type: 'obj', id: ob, tx, ty });
+      if (ob !== O.NONE && ob !== O.PART) {
+        const size = (OBJ[ob] && OBJ[ob].size) || 1;
+        // profundidad anclada al centro real del sprite: evita que el jugador
+        // se dibuje delante de objetos que tiene detrás
+        drawables.push({ d: tx + ty + size, type: 'obj', id: ob, tx, ty, size });
+      }
+    }
+  }
+
+  // --- luces: pasada aparte con margen amplio para que no hagan "pop" en los bordes ---
+  const lights = [];
+  if (G.darkness > 0.02) {
+    const LP = 9;
+    for (let ty = tymin - LP; ty <= tymax + LP; ty++) {
+      for (let tx = txmin - LP; tx <= txmax + LP; tx++) {
+        const ob = world.object(tx, ty);
+        if (ob === O.NONE || ob === O.PART) continue;
         const def = OBJ[ob];
-        if (def.light && G.darkness > 0.02) {
-          lights.push({
-            x: w2sx(tx + 0.5, ty + 0.5) + ox,
-            y: w2sy(tx + 0.5, ty + 0.5) + oy,
-            r: def.light * CFG.HW,
-            warm: true,
-          });
-        }
+        if (!def || !def.light) continue;
+        const size = def.size || 1;
+        const lx = w2sx(tx + size / 2, ty + size / 2) + ox;
+        const ly = w2sy(tx + size / 2, ty + size / 2) + oy;
+        const r = def.light * CFG.HW;
+        if (lx < -r * 1.2 || lx > W + r * 1.2 || ly < -r * 1.2 || ly > H + r * 1.2) continue;
+        lights.push({ x: lx, y: ly, r, warm: true, color: def.lightColor || null });
       }
     }
   }
 
   // --- entidades ---
-  for (const m of mobs) drawables.push({ d: m.x + m.y, type: 'mob', m });
-  for (const d of drops) drawables.push({ d: d.x + d.y, type: 'drop', drop: d });
+  for (const m of mobs) {
+    const sx = w2sx(m.x, m.y) + ox, sy = w2sy(m.x, m.y) + oy;
+    if (sx < -40 || sx > W + 40 || sy < -50 || sy > H + 30) continue;
+    drawables.push({ d: m.x + m.y, type: 'mob', m });
+  }
+  for (const dr of drops) {
+    const sx = w2sx(dr.x, dr.y) + ox, sy = w2sy(dr.x, dr.y) + oy;
+    if (sx < -30 || sx > W + 30 || sy < -40 || sy > H + 30) continue;
+    drawables.push({ d: dr.x + dr.y, type: 'drop', drop: dr });
+  }
   for (const p of particles) drawables.push({ d: p.x + p.y, type: 'part', p });
+  for (const pr of projectiles) drawables.push({ d: pr.x + pr.y, type: 'proj', pr });
   if (!player.dead) drawables.push({ d: player.x + player.y, type: 'player' });
+  if (typeof Net !== 'undefined' && Net.online) {
+    for (const [, rp] of Net.players) {
+      drawables.push({ d: rp.px + rp.py, type: 'rplayer', rp });
+      const lx = Math.round(w2sx(rp.px, rp.py) + ox), ly = Math.round(w2sy(rp.px, rp.py) + oy);
+      labels.push({ x: lx, y: ly - 26, text: rp.name, color: '#fff' });
+      if (rp.bubbleT > 0) labels.push({ x: lx, y: ly - 34, text: rp.bubble, color: '#ffe9a8', bubble: true });
+    }
+  }
+  if (G.boss) drawables.push({ d: G.boss.x + G.boss.y, type: 'boss' });
 
   drawables.sort((a, b) => a.d - b.d);
 
   const hov = hoveredTile();
   const inReach = dist2(player.x, player.y, hov.wx, hov.wy) <= CFG.REACH * CFG.REACH;
 
-  // --- resaltado de la casilla apuntada ---
-  if (G.running && !player.dead && !UI.panelOpen && inReach) {
+  if (G.running && !player.dead && !UI.panelOpen && !UI.chatOpen && inReach) {
     drawDiamond(g, hov.tx, hov.ty, ox, oy, Input.mdown ? 'rgba(255,220,90,0.85)' : 'rgba(255,255,255,0.55)');
   }
 
   for (const d of drawables) drawDrawable(g, d, ox, oy);
 
-  // --- fantasma de colocación ---
   ghostPreview(g, hov, inReach, ox, oy);
 
   // --- barra de progreso al romper ---
@@ -112,8 +160,9 @@ function render(g, W, H) {
     const b = player.breaking;
     const def = OBJ[b.id];
     if (def) {
-      const cx = w2sx(b.tx + 0.5, b.ty + 0.5) + ox;
-      const cy = w2sy(b.tx + 0.5, b.ty + 0.5) + oy;
+      const size = def.size || 1;
+      const cx = w2sx(b.tx + size / 2, b.ty + size / 2) + ox;
+      const cy = w2sy(b.tx + size / 2, b.ty + size / 2) + oy;
       const prog = clamp(b.dmg / def.hp, 0, 1);
       g.fillStyle = 'rgba(0,0,0,0.65)';
       g.fillRect(Math.round(cx - 11), Math.round(cy - 26), 22, 5);
@@ -122,7 +171,7 @@ function render(g, W, H) {
     }
   }
 
-  // --- luz del jugador (antorcha en mano / aura mínima) ---
+  // --- luz del jugador ---
   if (G.darkness > 0.02 && !player.dead) {
     const sel = Inv.selected();
     const holdingTorch = sel && sel.id === 'torch';
@@ -130,7 +179,7 @@ function render(g, W, H) {
       x: w2sx(player.x, player.y) + ox,
       y: w2sy(player.x, player.y) + oy,
       r: (holdingTorch ? 4.5 : 1.8) * CFG.HW,
-      warm: holdingTorch,
+      warm: holdingTorch, color: null,
     });
   }
 
@@ -159,21 +208,22 @@ function render(g, W, H) {
       lg.fillRect(l.x - r, l.y - r, r * 2, r * 2);
     }
     g.drawImage(_lightCv, 0, 0);
-    // halo cálido de las hogueras
+    // halo cálido (naranja) o místico (violeta del altar)
     g.globalCompositeOperation = 'lighter';
     for (const l of lights) {
-      if (!l.warm) continue;
+      if (!l.warm && !l.color) continue;
       const r = l.r * 0.8 * flick;
+      const rgb = l.color === '#a070ff' ? '160,112,255' : '255,140,40';
       const grad = g.createRadialGradient(l.x, l.y, 1, l.x, l.y, r);
-      grad.addColorStop(0, 'rgba(255,140,40,' + (0.13 * G.darkness).toFixed(3) + ')');
-      grad.addColorStop(1, 'rgba(255,140,40,0)');
+      grad.addColorStop(0, 'rgba(' + rgb + ',' + (0.13 * G.darkness).toFixed(3) + ')');
+      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
       g.fillStyle = grad;
       g.fillRect(l.x - r, l.y - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = 'source-over';
   }
 
-  // --- textos flotantes (encima de la iluminación) ---
+  // --- textos flotantes y nombres (encima de la iluminación) ---
   g.textAlign = 'center';
   g.font = '7px "Press Start 2P", monospace';
   for (const f of floaters) {
@@ -185,6 +235,20 @@ function render(g, W, H) {
     g.fillStyle = f.color;
     g.fillText(f.text, fx, fy);
     g.globalAlpha = 1;
+  }
+  for (const l of labels) {
+    if (l.bubble) {
+      const tw = g.measureText(l.text).width;
+      g.fillStyle = 'rgba(16,12,8,0.85)';
+      g.fillRect(l.x - tw / 2 - 4, l.y - 8, tw + 8, 12);
+      g.fillStyle = l.color;
+      g.fillText(l.text, l.x, l.y + 1);
+    } else {
+      g.fillStyle = '#000';
+      g.fillText(l.text, l.x + 1, l.y + 1);
+      g.fillStyle = l.color;
+      g.fillText(l.text, l.x, l.y);
+    }
   }
 
   // --- flash de daño ---
@@ -213,29 +277,78 @@ function shadow(g, sx, sy, w) {
   g.fillRect(Math.round(sx - w / 2) + 2, Math.round(sy - 2), w - 4, 5);
 }
 
+// Dibuja un héroe (propio o remoto) con su herramienta al golpear
+function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId) {
+  shadow(g, sx, sy, 10);
+  const img = set[dir][frameI];
+  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
+  if (swingT > 0 && toolId && Assets.items[toolId]) {
+    const t = Assets.items[toolId];
+    const prog = 1 - swingT / 0.18;
+    const offs = { down: [7, -8], up: [-7, -14], left: [-9, -11], right: [9, -11] };
+    const o = offs[dir];
+    const flip = dir === 'left' ? -1 : 1;
+    g.save();
+    g.translate(Math.round(sx + o[0]), Math.round(sy + o[1]));
+    g.rotate(flip * (prog * 1.5 - 0.75));
+    g.drawImage(t, -t.width / 2, -t.height / 2);
+    g.restore();
+  }
+}
+
 function drawDrawable(g, d, ox, oy) {
   if (d.type === 'obj') {
-    const cx = w2sx(d.tx + 0.5, d.ty + 0.5) + ox;
-    const cy = w2sy(d.tx + 0.5, d.ty + 0.5) + oy;
-    let img = Assets.obj[d.id];
-    if (d.id === O.FLOWER) {
-      img = img[Math.floor(hash2(d.tx, d.ty, 99) * img.length)];
-    } else if (d.id === O.TORCH || d.id === O.FIRE) {
-      img = img[(Math.floor(G.elapsed * 7) + d.tx + d.ty) % img.length];
+    const size = d.size;
+    const cx = w2sx(d.tx + size / 2, d.ty + size / 2) + ox;
+    const cy = w2sy(d.tx + size / 2, d.ty + size / 2) + oy;
+    const img = objSprite(d.id, d.tx, d.ty);
+    if (!img) return;
+    const def = OBJ[d.id];
+    // sombra de contacto para los objetos con volumen
+    if (def.solid && d.id !== O.WALLW && d.id !== O.WALLS) {
+      shadow(g, cx, cy + (size === 2 ? 6 : 4), Math.min(img.width - 6, 30));
     }
-    const lift = (d.id === O.WALLW || d.id === O.WALLS) ? 8 : 6;
+    let lift;
+    if (d.id === O.WALLW || d.id === O.WALLS) lift = 8;
+    else if (size === 2) lift = 14;
+    else if (def.size === 1) lift = 7;   // torre, brasero
+    else lift = 6;                       // vegetación
     g.drawImage(img, Math.round(cx - img.width / 2), Math.round(cy + lift - img.height));
+
+    // stock listo para recoger: icono flotando encima
+    if (def.prod) {
+      const b = world.buildings.get(d.tx + ',' + d.ty);
+      if (b && b.stock >= 1) {
+        const icon = Assets.items[def.prod.item];
+        const bob = Math.sin(G.elapsed * 3 + d.tx) * 2;
+        const iy = Math.round(cy + lift - img.height - 14 + bob);
+        g.drawImage(icon, Math.round(cx - icon.width / 2), iy);
+        g.font = '7px "Press Start 2P", monospace';
+        g.textAlign = 'center';
+        g.fillStyle = '#000';
+        g.fillText('×' + Math.floor(b.stock), cx + 1, iy + 19);
+        g.fillStyle = '#fff';
+        g.fillText('×' + Math.floor(b.stock), cx, iy + 18);
+      }
+    }
     return;
   }
 
   if (d.type === 'player') {
+    if (player.invuln > 0 && Math.floor(G.elapsed * 14) % 2 === 0) return;
     const sx = w2sx(player.x, player.y) + ox;
     const sy = w2sy(player.x, player.y) + oy;
-    // parpadeo durante la invulnerabilidad
-    if (player.invuln > 0 && Math.floor(G.elapsed * 14) % 2 === 0) return;
-    shadow(g, sx, sy, 10);
-    const img = Assets.player[player.dir][player.frame];
-    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
+    const sel = Inv.selected();
+    drawHero(g, Assets.player, player.dir, player.frameI, sx, sy,
+      player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null);
+    return;
+  }
+
+  if (d.type === 'rplayer') {
+    const rp = d.rp;
+    const sx = w2sx(rp.px, rp.py) + ox;
+    const sy = w2sy(rp.px, rp.py) + oy;
+    drawHero(g, getHeroSet(rp.color), rp.dir, rp.frameI, sx, sy, 0, null);
     return;
   }
 
@@ -244,10 +357,42 @@ function drawDrawable(g, d, ox, oy) {
     const sx = w2sx(m.x, m.y) + ox;
     const sy = w2sy(m.x, m.y) + oy;
     if (m.hurtT > 0 && Math.floor(G.elapsed * 18) % 2 === 0) return;
-    shadow(g, sx, sy, 9);
-    const hop = m.hopping > 0 ? Math.sin((0.34 - m.hopping) / 0.34 * Math.PI) * 5 : 0;
-    const img = Assets.slime[m.frame];
-    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2 - hop));
+    const def = MOBS[m.kind];
+    let img, yoff = 0, alpha = 1;
+    if (m.kind === 'slime') {
+      img = Assets.mobs.slime[m.frame];
+      yoff = m.hopping > 0 ? Math.sin((0.34 - m.hopping) / 0.34 * Math.PI) * 5 : 0;
+      shadow(g, sx, sy, 9);
+    } else if (m.kind === 'shadow') {
+      img = Assets.mobs.shadow[m.frame];
+      alpha = 0.88;
+      yoff = Math.sin(m.t * 2.5) * 1.5;
+      shadow(g, sx, sy, 8);
+    } else {
+      img = Assets.mobs.bat[m.frame];
+      yoff = 14 + Math.sin(m.t * 3) * 3; // vuela alto
+      shadow(g, sx, sy, 6);
+    }
+    g.globalAlpha = alpha;
+    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2 - yoff));
+    g.globalAlpha = 1;
+    return;
+  }
+
+  if (d.type === 'boss') {
+    const b = G.boss;
+    const sx = w2sx(b.x, b.y) + ox;
+    const sy = w2sy(b.x, b.y) + oy;
+    shadow(g, sx, sy, 34);
+    if (b.hurtT > 0 && Math.floor(G.elapsed * 18) % 2 === 0) return;
+    const hop = b.hopping > 0 ? Math.sin((BOSS_CFG.hopTime - b.hopping) / BOSS_CFG.hopTime * Math.PI) * 14 : 0;
+    const img = Assets.boss[b.frame];
+    if (b.enraged) {
+      g.globalAlpha = 0.55 + Math.sin(G.elapsed * 12) * 0.2;
+      g.drawImage(img, Math.round(sx - img.width / 2) - 2, Math.round(sy - img.height + 4 - hop));
+      g.globalAlpha = 1;
+    }
+    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - hop));
     return;
   }
 
@@ -264,6 +409,18 @@ function drawDrawable(g, d, ox, oy) {
     return;
   }
 
+  if (d.type === 'proj') {
+    const pr = d.pr;
+    const sx = w2sx(pr.x, pr.y) + ox;
+    const sy = w2sy(pr.x, pr.y) + oy - 8;
+    g.save();
+    g.translate(Math.round(sx), Math.round(sy));
+    g.rotate(Math.atan2(pr.vy - pr.vx, (pr.vx + pr.vy) * 0.5)); // ángulo aproximado en pantalla
+    g.drawImage(Assets.arrow, -3, -1);
+    g.restore();
+    return;
+  }
+
   if (d.type === 'part') {
     const p = d.p;
     const sx = w2sx(p.x, p.y) + ox;
@@ -275,32 +432,46 @@ function drawDrawable(g, d, ox, oy) {
   }
 }
 
-// Vista previa del objeto a colocar con el clic derecho
+// Vista previa del objeto a colocar con el clic derecho (con huella completa)
 function ghostPreview(g, hov, inReach, ox, oy) {
-  if (!G.running || player.dead || UI.panelOpen) return;
+  if (!G.running || player.dead || UI.panelOpen || UI.chatOpen) return;
   const sel = Inv.selected();
   if (!sel) return;
   const def = ITEMS[sel.id];
   if (def.place == null) return;
+  const odef = OBJ[def.place];
+  const size = odef.size || 1;
 
-  const gr = world.ground(hov.tx, hov.ty);
-  const occupied = world.object(hov.tx, hov.ty) !== O.NONE;
-  const onWater = gr === T.DEEP || gr === T.WATER;
-  const onSelf = OBJ[def.place].solid &&
-    Math.floor(player.x) === hov.tx && Math.floor(player.y) === hov.ty;
-  const valid = inReach && !occupied && !onWater && !onSelf;
+  let valid = inReach && world.canPlaceBuilding(hov.tx, hov.ty, size);
+  if (valid && odef.solid) {
+    for (let dy = 0; dy < size && valid; dy++) {
+      for (let dx = 0; dx < size && valid; dx++) {
+        if (overlapsTile(player, 0.3, hov.tx + dx, hov.ty + dy)) valid = false;
+        for (const m of mobs) {
+          if (overlapsTile(m, 0.3, hov.tx + dx, hov.ty + dy)) { valid = false; break; }
+        }
+      }
+    }
+  }
 
-  const cx = w2sx(hov.tx + 0.5, hov.ty + 0.5) + ox;
-  const cy = w2sy(hov.tx + 0.5, hov.ty + 0.5) + oy;
+  const cx = w2sx(hov.tx + size / 2, hov.ty + size / 2) + ox;
+  const cy = w2sy(hov.tx + size / 2, hov.ty + size / 2) + oy;
   let img = Assets.obj[def.place];
   if (Array.isArray(img)) img = img[0];
-  const lift = (def.place === O.WALLW || def.place === O.WALLS) ? 8 : 6;
+  if (!img) return;
+  let lift;
+  if (def.place === O.WALLW || def.place === O.WALLS) lift = 8;
+  else if (size === 2) lift = 14;
+  else if (odef.size === 1) lift = 7;
+  else lift = 6;
   g.globalAlpha = valid ? 0.55 : 0.25;
   g.drawImage(img, Math.round(cx - img.width / 2), Math.round(cy + lift - img.height));
   g.globalAlpha = 1;
-  if (!valid) {
-    g.fillStyle = 'rgba(216,52,52,0.3)';
-    fillDiamond(g, hov.tx, hov.ty, ox, oy);
+  g.fillStyle = valid ? 'rgba(111,206,78,0.22)' : 'rgba(216,52,52,0.3)';
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      fillDiamond(g, hov.tx + dx, hov.ty + dy, ox, oy);
+    }
   }
 }
 

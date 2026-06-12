@@ -5,22 +5,28 @@ let world = null;
 
 const G = {
   running: false,
+  online: false,    // espejo de Net.online para módulos que cargan antes
   time: 0.08,       // fracción del día [0,1)
   day: 1,
-  elapsed: 0,       // segundos desde el arranque (para animaciones)
-  darkness: 0,      // 0 = día, 1 = noche cerrada
-  warm: 0,          // intensidad del tinte de amanecer/atardecer
+  elapsed: 0,
+  darkness: 0,
+  warm: 0,
+  shake: 0,
+  boss: null,
+  bossWarned: false,
+  saveFailWarned: false,
   spawn: { x: 0.5, y: 0.5 },
   spawnTimer: 0,
   saveTimer: 0,
   minimapTimer: 0,
 };
 
+const _towerCd = new Map();   // "tx,ty" -> cooldown restante
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 function resize() {
-  // resolución interna baja -> CSS la escala con nitidez de píxel
   const scale = Math.max(2, Math.round(window.innerWidth / 640));
   canvas.width = Math.ceil(window.innerWidth / scale);
   canvas.height = Math.ceil(window.innerHeight / scale);
@@ -52,16 +58,23 @@ function startWorld(seed, data) {
   world = new World(seed);
   if (data) {
     world.applyModified(data.chunks || {});
+    world.applyBuildings(data.buildings || {});
     G.time = data.time;
     G.day = data.day;
     G.spawn = data.spawn || world.findSpawn();
     player.x = data.player.x;
     player.y = data.player.y;
-    player.hp = data.player.hp;
+    // guardados antiguos pueden traer hp<=0 (muerte + autosave): sanea
+    player.hp = clamp(data.player.hp | 0, 1, player.maxHp);
+    if ((data.player.hp | 0) <= 0) { player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp; }
     Inv.slots = (data.inv || []).map(s => (s && ITEMS[s.id]) ? { id: s.id, n: s.n } : null);
     while (Inv.slots.length < 36) Inv.slots.push(null);
     Inv.slots.length = 36;
     Inv.sel = data.sel || 0;
+    drops.length = 0;
+    for (const d of (data.drops || [])) {
+      if (ITEMS[d.id]) drops.push({ x: d.x, y: d.y, id: d.id, n: d.n, vx: 0, vy: 0, z: 0, vz: 0, age: 1, ttl: 0 });
+    }
   } else {
     G.time = 0.08;
     G.day = 1;
@@ -71,22 +84,68 @@ function startWorld(seed, data) {
     player.hp = player.maxHp;
     Inv.slots = new Array(36).fill(null);
     Inv.sel = 0;
-    Inv.add('berry', 3); // un pequeño tentempié de bienvenida
+    Inv.add('berry', 3);
+    drops.length = 0;
   }
   world.center = { x: player.x, y: player.y };
+  finishStart(data ? 'Partida cargada' : 'Golpea un árbol para conseguir madera (clic izq.)');
+}
+
+// Entrada en el mundo compartido: la semilla, el reloj y las ediciones vienen del servidor
+function startOnlineWorld(w) {
+  world = new World(w.seed);
+  G.time = w.time;
+  G.day = w.day;
+  for (const e of w.edits) {
+    if (OBJ[e.o] && OBJ[e.o].size === 2) world.placeBuilding(e.x, e.y, e.o, e.owner);
+    else if (e.o !== O.PART) world.setObject(e.x, e.y, e.o);
+    if (e.owner) world.owners.set(e.x + ',' + e.y, e.owner);
+  }
+  for (const k in (w.buildings || {})) {
+    const b = w.buildings[k];
+    world.buildings.set(k, { stock: b.stock || 0, owner: b.owner || 0 });
+  }
+  // posición e inventario locales por mundo de servidor
+  const data = Save.readMp(w.worldId);
+  G.spawn = (data && data.spawn) || world.findSpawn();
+  if (data) {
+    player.x = data.player.x; player.y = data.player.y;
+    player.hp = clamp(data.player.hp | 0, 1, player.maxHp);
+    Inv.slots = (data.inv || []).map(s => (s && ITEMS[s.id]) ? { id: s.id, n: s.n } : null);
+    while (Inv.slots.length < 36) Inv.slots.push(null);
+    Inv.slots.length = 36;
+    Inv.sel = data.sel || 0;
+  } else {
+    player.x = G.spawn.x; player.y = G.spawn.y;
+    player.hp = player.maxHp;
+    Inv.slots = new Array(36).fill(null);
+    Inv.sel = 0;
+    Inv.add('berry', 3);
+  }
+  drops.length = 0;
+  world.center = { x: player.x, y: player.y };
+  G.online = true;
+  if (w.boss) Net.applyBossState(w.boss);
+  finishStart('Bienvenido al mundo compartido — sé amable, construid juntos');
+}
+
+function finishStart(msg) {
   player.dead = false;
   player.breaking = null;
   mobs.length = 0;
-  drops.length = 0;
   particles.length = 0;
   floaters.length = 0;
+  projectiles.length = 0;
+  _towerCd.clear();
+  G.boss = null;
+  G.bossWarned = false;
   cam.init = false;
   G.saveTimer = 0;
   G.running = true;
   UI.hideTitle();
   UI.refreshAll();
   UI.renderMinimap();
-  UI.toast(data ? 'Partida cargada' : 'Golpea un árbol para conseguir madera (clic izq.)');
+  UI.toast(msg);
 }
 
 /* ---------- ciclo día/noche ---------- */
@@ -104,11 +163,22 @@ function computeLight() {
 
 /* ---------- interacciones ---------- */
 
+// ¿Puede este jugador romper lo que hay en (tx,ty)? (propiedad en multijugador)
+function canBreak(tx, ty) {
+  if (typeof Net === 'undefined' || !Net.online) return true;
+  const anchor = world.buildingAnchor(tx, ty);
+  const key = anchor ? (anchor.tx + ',' + anchor.ty) : (tx + ',' + ty);
+  const owner = world.owners.get(key);
+  if (!owner || owner.id === Net.id) return true;
+  UI.toast('Esto lo construyó ' + owner.name + ' — puedes usarlo, no romperlo');
+  return false;
+}
+
 function doSwing() {
   player.hitT = CFG.HIT_COOLDOWN;
+  player.swingT = 0.18;
   const h = hoveredTile();
 
-  // mirar hacia el cursor
   const pdx = Input.mx - (w2sx(player.x, player.y) + cam.ox);
   const pdy = Input.my - (w2sy(player.x, player.y) + cam.oy);
   player.dir = Math.abs(pdx) > Math.abs(pdy) ? (pdx > 0 ? 'right' : 'left') : (pdy > 0 ? 'down' : 'up');
@@ -121,7 +191,16 @@ function doSwing() {
   const sel = Inv.selected();
   const def = sel ? ITEMS[sel.id] : null;
 
-  // 1) ¿hay una baba cerca del cursor?
+  // 1) ¿el jefe está al alcance del cursor?
+  if (G.boss && dist2(G.boss.x, G.boss.y, h.wx, h.wy) < BOSS_CFG.hitbox * BOSS_CFG.hitbox &&
+      dist2(player.x, player.y, G.boss.x, G.boss.y) <= (CFG.REACH + 1) * (CFG.REACH + 1)) {
+    const dmg = def && def.tool === 'sword' ? def.dmg : (def && def.tool ? 2 : 1);
+    damageBoss(dmg);
+    player.breaking = null;
+    return;
+  }
+
+  // 2) ¿hay un enemigo cerca del cursor?
   let best = null, bd = 1.21;
   for (const m of mobs) {
     const d = dist2(m.x, m.y, h.wx, h.wy);
@@ -136,43 +215,71 @@ function doSwing() {
     return;
   }
 
-  // 2) ¿hay un objeto en la casilla apuntada?
-  const ob = world.object(h.tx, h.ty);
+  // 3) ¿hay un objeto en la casilla apuntada? (los edificios se golpean por cualquier parte)
+  let tx = h.tx, ty = h.ty;
+  let ob = world.object(tx, ty);
+  if (ob === O.PART) {
+    const anchor = world.buildingAnchor(tx, ty);
+    if (anchor) { tx = anchor.tx; ty = anchor.ty; ob = anchor.id; }
+  }
   if (ob === O.NONE) {
     player.breaking = null;
     Sfx.swing();
     return;
   }
+  if (!canBreak(tx, ty)) {
+    player.breaking = null;
+    return;
+  }
 
   const odef = OBJ[ob];
   const dmg = (def && def.tool && def.tool === odef.tool) ? 3 : 1;
-  if (!player.breaking || player.breaking.tx !== h.tx || player.breaking.ty !== h.ty || player.breaking.id !== ob) {
-    player.breaking = { tx: h.tx, ty: h.ty, id: ob, dmg: 0 };
+  if (!player.breaking || player.breaking.tx !== tx || player.breaking.ty !== ty || player.breaking.id !== ob) {
+    player.breaking = { tx, ty, id: ob, dmg: 0 };
   }
   player.breaking.dmg += dmg;
 
-  const stony = ob === O.ROCK || ob === O.WALLS;
+  const stony = ob === O.ROCK || ob === O.WALLS || ob === O.QUARRY || ob === O.BRAZIER || ob === O.ALTAR;
   if (stony) Sfx.mine(); else Sfx.chop();
-  spawnParticles(h.tx + 0.5, h.ty + 0.5, PART_COLOR[ob] || '#caa178', 5);
+  spawnParticles(tx + 0.5, ty + 0.5, PART_COLOR[ob] || '#caa178', 5);
 
   if (player.breaking.dmg >= odef.hp) {
-    world.setObject(h.tx, h.ty, O.NONE);
+    if (odef.size) {
+      world.removeBuilding(tx, ty);
+      if (typeof Net !== 'undefined' && Net.online) Net.sendBreakBuilding(tx, ty);
+    } else {
+      world.setObject(tx, ty, O.NONE);
+      if (typeof Net !== 'undefined' && Net.online) Net.sendBreak(tx, ty);
+    }
     player.breaking = null;
     Sfx.poof();
-    spawnParticles(h.tx + 0.5, h.ty + 0.5, PART_COLOR[ob] || '#caa178', 9);
+    spawnParticles(tx + 0.5, ty + 0.5, PART_COLOR[ob] || '#caa178', 9);
     for (const dr of odef.drops) {
-      if (Math.random() < dr[2]) spawnDrop(h.tx + 0.5, h.ty + 0.5, dr[0], dr[1]);
+      if (Math.random() < dr[2]) spawnDrop(tx + 0.5, ty + 0.5, dr[0], dr[1]);
     }
   }
 }
 
 function tryUseItem() {
-  if (!G.running || player.dead || UI.panelOpen) return;
+  if (!G.running || player.dead || UI.panelOpen || UI.chatOpen) return;
+  const h = hoveredTile();
+  const inReach = dist2(player.x, player.y, h.wx, h.wy) <= CFG.REACH * CFG.REACH;
+
+  // 1) recoger producción / activar altar (funciona con cualquier cosa en la mano)
+  if (inReach) {
+    const anchor = world.buildingAnchor(h.tx, h.ty);
+    if (anchor) {
+      const odef = OBJ[anchor.id];
+      if (odef.prod && collectBuilding(anchor)) return;
+      if (odef.altar && summonAtAltar(anchor)) return;
+    }
+  }
+
   const sel = Inv.selected();
   if (!sel) return;
   const def = ITEMS[sel.id];
 
-  // comer
+  // 2) comer
   if (def.food) {
     if (player.hp >= player.maxHp) { UI.toast('Vida al máximo'); return; }
     player.hp = Math.min(player.maxHp, player.hp + def.food);
@@ -184,35 +291,85 @@ function tryUseItem() {
     return;
   }
 
-  // construir
+  // 3) construir
   if (def.place != null) {
-    const h = hoveredTile();
-    if (dist2(player.x, player.y, h.wx, h.wy) > CFG.REACH * CFG.REACH) return;
-    const gr = world.ground(h.tx, h.ty);
-    if (gr === T.DEEP || gr === T.WATER) { UI.toast('No puedes construir en el agua'); return; }
-    if (world.object(h.tx, h.ty) !== O.NONE) return;
-    if (OBJ[def.place].solid) {
-      if (Math.floor(player.x) === h.tx && Math.floor(player.y) === h.ty) return;
-      for (const m of mobs) {
-        if (Math.floor(m.x) === h.tx && Math.floor(m.y) === h.ty) return;
+    if (!inReach) return;
+    const odef = OBJ[def.place];
+    const size = odef.size || 1;
+    if (!world.canPlaceBuilding(h.tx, h.ty, size)) {
+      const gr = world.ground(h.tx, h.ty);
+      if (gr === T.DEEP || gr === T.WATER) UI.toast('No puedes construir en el agua');
+      return;
+    }
+    if (odef.solid) {
+      for (let dy = 0; dy < size; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          if (overlapsTile(player, 0.3, h.tx + dx, h.ty + dy)) return;
+          for (const m of mobs) {
+            if (overlapsTile(m, 0.3, h.tx + dx, h.ty + dy)) return;
+          }
+        }
       }
     }
-    world.setObject(h.tx, h.ty, def.place);
+    if (odef.size) {
+      world.placeBuilding(h.tx, h.ty, def.place, (typeof Net !== 'undefined' && Net.online) ? Net.id : 0);
+      if (typeof Net !== 'undefined' && Net.online) Net.sendPlaceBuilding(h.tx, h.ty, def.place);
+      if (odef.home) {
+        G.spawn = { x: h.tx + size / 2, y: h.ty + size + 0.5 };
+        UI.toast('Hogar dulce hogar: reaparecerás aquí');
+      }
+    } else {
+      world.setObject(h.tx, h.ty, def.place);
+      if (typeof Net !== 'undefined' && Net.online) Net.sendPlace(h.tx, h.ty, def.place);
+    }
     Inv.consumeSelected(1);
     Sfx.place();
     UI.refreshHotbar();
   }
 }
 
+function collectBuilding(anchor) {
+  const key = anchor.tx + ',' + anchor.ty;
+  const b = world.buildings.get(key);
+  if (!b || b.stock < 1) return false;
+  if (typeof Net !== 'undefined' && Net.online) {
+    Net.requestCollect(anchor.tx, anchor.ty);   // el servidor adjudica (evita recogidas dobles)
+    return true;
+  }
+  const n = Math.floor(b.stock);
+  b.stock -= n;
+  const item = OBJ[anchor.id].prod.item;
+  const size = OBJ[anchor.id].size || 1;
+  for (let i = 0; i < n; i++) {
+    spawnDrop(anchor.tx + size / 2 + randRange(-0.4, 0.4), anchor.ty + size + 0.2, item, 1);
+  }
+  Sfx.pickup();
+  return true;
+}
+
+function summonAtAltar(anchor) {
+  if (G.boss) { UI.toast('El Coloso ya camina sobre el mundo'); return true; }
+  if (typeof Net !== 'undefined' && Net.online) {
+    Net.requestSummon(anchor.tx, anchor.ty);
+    return true;
+  }
+  const size = OBJ[anchor.id].size || 1;
+  spawnBoss(anchor.tx + size / 2, anchor.ty + size + 3, BOSS_CFG.hp);
+  return true;
+}
+
 /* ---------- actualización por frame ---------- */
 
 function update(dt) {
   G.elapsed += dt;
-  G.time += dt / CFG.DAY_LENGTH;
-  if (G.time >= 1) {
-    G.time -= 1;
-    G.day++;
-    UI.toast('Día ' + G.day);
+  G.shake = Math.max(0, G.shake - dt * 1.6);
+  if (typeof Net === 'undefined' || !Net.online) {
+    G.time += dt / CFG.DAY_LENGTH;
+    if (G.time >= 1) {
+      G.time -= 1;
+      G.day++;
+      UI.toast('Día ' + G.day);
+    }
   }
   computeLight();
   world.center.x = player.x;
@@ -221,10 +378,12 @@ function update(dt) {
   if (!player.dead) {
     // --- movimiento: WASD en ejes de PANTALLA, convertido a ejes de mundo ---
     let ix = 0, iy = 0;
-    if (Input.keys['w'] || Input.keys['arrowup']) iy -= 1;
-    if (Input.keys['s'] || Input.keys['arrowdown']) iy += 1;
-    if (Input.keys['a'] || Input.keys['arrowleft']) ix -= 1;
-    if (Input.keys['d'] || Input.keys['arrowright']) ix += 1;
+    if (!UI.chatOpen) {
+      if (Input.keys['w'] || Input.keys['arrowup']) iy -= 1;
+      if (Input.keys['s'] || Input.keys['arrowdown']) iy += 1;
+      if (Input.keys['a'] || Input.keys['arrowleft']) ix -= 1;
+      if (Input.keys['d'] || Input.keys['arrowright']) ix += 1;
+    }
     player.moving = ix !== 0 || iy !== 0;
     if (player.moving) {
       let wx = ix + 2 * iy, wy = 2 * iy - ix;
@@ -232,30 +391,40 @@ function update(dt) {
       wx /= len; wy /= len;
       const sp = CFG.PLAYER_SPEED * world.speedAt(Math.floor(player.x), Math.floor(player.y));
       moveEntity(player, wx * sp * dt, wy * sp * dt, 0.3);
-      if (ix !== 0 || iy !== 0) {
-        if (Math.abs(ix) > Math.abs(iy)) player.dir = ix > 0 ? 'right' : 'left';
-        else player.dir = iy > 0 ? 'down' : 'up';
-      }
+      if (Math.abs(ix) > Math.abs(iy)) player.dir = ix > 0 ? 'right' : 'left';
+      else if (iy !== 0) player.dir = iy > 0 ? 'down' : 'up';
       player.animT += dt;
-      player.frame = Math.floor(player.animT * 7) % 2 === 0 ? 1 : 2;
+      // polvillo en los pies
+      player.dustT -= dt;
+      if (player.dustT <= 0 && world.ground(Math.floor(player.x), Math.floor(player.y)) !== T.WATER) {
+        player.dustT = 0.22;
+        particles.push({
+          x: player.x + randRange(-0.1, 0.1), y: player.y + randRange(-0.1, 0.1),
+          vx: -wx * 0.8, vy: -wy * 0.8, z: 0.05, vz: randRange(0.4, 1),
+          life: 0.35, maxLife: 0.35, color: 'rgba(190,175,140,0.7)',
+        });
+      }
     } else {
       player.animT = 0;
-      player.frame = 0;
     }
 
-    // --- golpear manteniendo el botón ---
-    player.hitT -= dt;
-    if (Input.mdown && !UI.panelOpen && player.hitT <= 0) doSwing();
+    // pose del héroe: 0 quieto, 1-4 andar, 5 ataque
+    if (player.swingT > 0) player.frameI = 5;
+    else if (player.moving) player.frameI = 1 + Math.floor(player.animT * 9) % 4;
+    else player.frameI = 0;
 
-    // --- temporizadores ---
+    player.hitT -= dt;
+    if (Input.mdown && !UI.panelOpen && !UI.chatOpen && player.hitT <= 0) doSwing();
+
     player.invuln = Math.max(0, player.invuln - dt);
     player.hurtT = Math.max(0, player.hurtT - dt);
     player.swingT = Math.max(0, player.swingT - dt);
     player.noDmgT += dt;
 
-    // regeneración lenta si llevas un rato sin recibir daño
+    // regeneración (más rápida al calor de una hoguera compartida)
     if (player.hp < player.maxHp && player.noDmgT > 10) {
-      player.regenT += dt;
+      const k = (typeof Net !== 'undefined' && Net.online && Net.warmBonus()) ? 2 : 1;
+      player.regenT += dt * k;
       if (player.regenT >= 5) {
         player.regenT = 0;
         player.hp++;
@@ -267,37 +436,64 @@ function update(dt) {
   }
 
   updateMobs(dt);
+  updateBoss(dt);
   updateDrops(dt);
   updateParticles(dt);
   updateFloaters(dt);
+  updateProjectiles(dt);
+  updateBuildings(dt);
+  if (typeof Net !== 'undefined') Net.update(dt);
 
-  // --- aparición de babas por la noche ---
+  // --- aparición de enemigos por la noche (siempre fuera de la pantalla) ---
   G.spawnTimer -= dt;
   if (G.darkness > 0.5 && mobs.length < CFG.MOB_CAP && G.spawnTimer <= 0 && !player.dead) {
     G.spawnTimer = 2.5;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 12; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const d = randRange(9, 15);
+      const d = randRange(9, 22);
       const x = player.x + Math.cos(ang) * d;
       const y = player.y + Math.sin(ang) * d;
+      const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;
+      if (ssx > -32 && ssx < canvas.width + 32 && ssy > -48 && ssy < canvas.height + 32) continue;
       const tx = Math.floor(x), ty = Math.floor(y);
       const gr = world.ground(tx, ty);
       if (gr !== T.DEEP && gr !== T.WATER && !world.isSolid(tx, ty)) {
-        spawnSlime(x, y);
+        spawnMob(pickMobKind(), x, y);
         break;
       }
     }
   }
 
+  // --- la Noche del Coloso (solo offline; online lo decide el servidor) ---
+  if ((typeof Net === 'undefined' || !Net.online) && !G.boss) {
+    if (G.day >= CFG.BOSS_NIGHT_EVERY && G.day % CFG.BOSS_NIGHT_EVERY === 0) {
+      if (G.darkness > 0.4 && !G.bossWarned) {
+        G.bossWarned = true;
+        UI.toast('La tierra tiembla… esta es la Noche del Coloso');
+        Sfx.bossRoar();
+      }
+      if (G.darkness >= 1 && G.bossWarned && !player.dead) {
+        const ang = Math.random() * Math.PI * 2;
+        spawnBoss(player.x + Math.cos(ang) * 14, player.y + Math.sin(ang) * 14, BOSS_CFG.hp);
+      }
+    }
+  }
+  if (G.darkness < 0.3) G.bossWarned = false;
+
   // --- autoguardado ---
   G.saveTimer += dt;
   if (G.saveTimer > CFG.AUTOSAVE) {
     G.saveTimer = 0;
-    Save.write();
-    UI.toast('Partida guardada');
+    const ok = Save.write();
+    if (ok) {
+      G.saveFailWarned = false;
+      UI.toast('Partida guardada');
+    } else if (!G.saveFailWarned) {
+      G.saveFailWarned = true;
+      UI.toast('⚠ No se pudo guardar (almacenamiento lleno o bloqueado)');
+    }
   }
 
-  // --- minimapa cada medio segundo ---
   G.minimapTimer -= dt;
   if (G.minimapTimer <= 0) {
     G.minimapTimer = 0.5;
@@ -305,6 +501,48 @@ function update(dt) {
   }
 
   UI.setTime();
+}
+
+// Producción pasiva y torres
+function updateBuildings(dt) {
+  const online = typeof Net !== 'undefined' && Net.online;
+  for (const [key, b] of world.buildings) {
+    const p = key.split(',');
+    const tx = +p[0], ty = +p[1];
+    const id = world.object(tx, ty);
+    const def = OBJ[id];
+    if (!def || !def.size) continue;
+
+    // el stock lo lleva el servidor cuando estamos online
+    if (def.prod && !online) {
+      b.stock = Math.min(def.prod.cap, b.stock + dt / def.prod.per);
+    }
+
+    if (def.tower && dist2(tx, ty, player.x, player.y) < CFG.TOWER_ACTIVE_R * CFG.TOWER_ACTIVE_R) {
+      let cd = _towerCd.get(key) || 0;
+      cd -= dt;
+      if (cd <= 0) {
+        // dispara al enemigo más cercano dentro del alcance
+        let best = null, bd = def.tower.range * def.tower.range;
+        for (const m of mobs) {
+          if (m.dead) continue;
+          const d = dist2(tx + 0.5, ty + 0.5, m.x, m.y);
+          if (d < bd) { bd = d; best = { x: m.x, y: m.y }; }
+        }
+        if (!best && G.boss) {
+          const d = dist2(tx + 0.5, ty + 0.5, G.boss.x, G.boss.y);
+          if (d < bd) best = { x: G.boss.x, y: G.boss.y };
+        }
+        if (best) {
+          spawnArrow(tx + 0.5, ty + 0.5, best.x, best.y, def.tower.dmg);
+          cd = def.tower.rate;
+        } else {
+          cd = 0.2;
+        }
+      }
+      _towerCd.set(key, cd);
+    }
+  }
 }
 
 /* ---------- bucle ---------- */
@@ -329,13 +567,11 @@ function boot() {
   setupInput(canvas);
   UI.init();
 
-  // favicon: una casilla de hierba generada al vuelo
   const fav = document.createElement('link');
   fav.rel = 'icon';
   fav.href = Assets.tiles[T.GRASS][0].toDataURL();
   document.head.appendChild(fav);
 
-  // pantalla de título
   const hasSave = Save.exists();
   if (hasSave) document.getElementById('btn-continue').classList.remove('hidden');
   document.getElementById('btn-continue').addEventListener('click', () => {
@@ -344,16 +580,22 @@ function boot() {
   });
   document.getElementById('btn-new').addEventListener('click', () => {
     Sfx.init(); Sfx.resume();
-    if (Save.exists() && !confirm('Se borrará la partida guardada. ¿Continuar?')) return;
+    if (Save.exists() && !confirm('Se borrará la partida guardada local. ¿Continuar?')) return;
     newGame(document.getElementById('seed-input').value);
+  });
+  document.getElementById('btn-online').addEventListener('click', () => {
+    Sfx.init(); Sfx.resume();
+    Net.join(document.getElementById('name-input').value);
   });
   document.getElementById('btn-respawn').addEventListener('click', () => respawn());
 
-  // guardar al salir o al ocultar la pestaña
   window.addEventListener('beforeunload', () => Save.write());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) Save.write();
   });
+
+  // sondea si hay servidor multijugador (en GitHub Pages no lo hay: se oculta el botón)
+  if (typeof Net !== 'undefined') Net.probe();
 
   requestAnimationFrame(loop);
 }

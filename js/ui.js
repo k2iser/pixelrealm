@@ -1,12 +1,14 @@
 'use strict';
-/* ============ HUD e interfaz (DOM): corazones, barra, paneles, minimapa ============ */
+/* ============ HUD e interfaz (DOM): corazones, barra, paneles, minimapa, chat ============ */
 
 const UI = {
   panelOpen: false,
   helpOpen: false,
-  _swapFrom: -1,     // casilla origen del intercambio en el inventario
+  chatOpen: false,    // el campo de chat tiene el foco
+  _swapFrom: -1,
   _toastTimer: null,
   _lastClockStep: -1,
+  _chatLines: 0,
 
   el(id) { return document.getElementById(id); },
 
@@ -25,7 +27,7 @@ const UI = {
       hotbar.appendChild(s);
     }
 
-    // rejilla del inventario: 36 casillas (las 9 primeras espejan la barra)
+    // rejilla del inventario
     const grid = this.el('invgrid');
     for (let i = 0; i < 36; i++) {
       const s = document.createElement('div');
@@ -36,8 +38,7 @@ const UI = {
       grid.appendChild(s);
     }
 
-    // recetas
-    const list = this.el('craftlist');
+    // recetas en dos listas: objetos y construcciones
     for (const r of RECIPES) {
       const row = document.createElement('div');
       row.className = 'recipe';
@@ -46,6 +47,7 @@ const UI = {
       row.innerHTML =
         '<img src="' + iconURL(r.out) + '" alt="">' +
         '<div class="rname">' + ITEMS[r.out].name + (r.n > 1 ? ' ×' + r.n : '') +
+        (r.desc ? '<span class="rdesc">' + r.desc + '</span>' : '') +
         '<span class="rcost">' + costTxt + '</span></div>' +
         '<button>Crear</button>';
       row.querySelector('button').addEventListener('click', () => {
@@ -54,9 +56,12 @@ const UI = {
           this.refreshAll();
         }
       });
-      list.appendChild(row);
+      this.el(r.cat === 'build' ? 'buildlist' : 'craftlist').appendChild(row);
     }
 
+    // pestañas del panel derecho
+    this.el('tab-craft').addEventListener('click', () => this.setTab('craft'));
+    this.el('tab-build').addEventListener('click', () => this.setTab('build'));
     this.el('btn-close-panel').addEventListener('click', () => this.togglePanel());
 
     // corazones
@@ -66,6 +71,22 @@ const UI = {
       img.alt = '';
       hearts.appendChild(img);
     }
+
+    // chat
+    this.el('chat-send').addEventListener('click', () => this.submitChat());
+
+    // nombre guardado
+    try {
+      const n = localStorage.getItem('pixelrealm.name');
+      if (n) this.el('name-input').value = n;
+    } catch (e) { /* sin almacenamiento */ }
+  },
+
+  setTab(which) {
+    this.el('craftlist').classList.toggle('hidden', which !== 'craft');
+    this.el('buildlist').classList.toggle('hidden', which !== 'build');
+    this.el('tab-craft').classList.toggle('active', which === 'craft');
+    this.el('tab-build').classList.toggle('active', which === 'build');
   },
 
   /* ---------- casillas ---------- */
@@ -104,9 +125,10 @@ const UI = {
   },
 
   refreshCraft() {
-    const rows = this.el('craftlist').children;
-    for (let i = 0; i < RECIPES.length; i++) {
-      const ok = Inv.canCraft(RECIPES[i]);
+    const rows = [...this.el('craftlist').children, ...this.el('buildlist').children];
+    const ordered = RECIPES.filter(r => r.cat !== 'build').concat(RECIPES.filter(r => r.cat === 'build'));
+    for (let i = 0; i < ordered.length; i++) {
+      const ok = Inv.canCraft(ordered[i]);
       rows[i].querySelector('button').disabled = !ok;
       rows[i].querySelector('.rcost').classList.toggle('missing', !ok);
     }
@@ -171,6 +193,70 @@ const UI = {
     this.helpOpen = false;
     this.el('panel').classList.add('hidden');
     this.el('help').classList.add('hidden');
+    this.closeChatInput();
+  },
+
+  /* ---------- chat (multijugador) ---------- */
+
+  showChat() { this.el('chat').classList.remove('hidden'); },
+  hideChat() {
+    this.el('chat').classList.add('hidden');
+    this.el('chat-log').innerHTML = '';
+    this._chatLines = 0;
+    this.closeChatInput();
+  },
+
+  openChatInput() {
+    this.chatOpen = true;
+    this.el('chat-inputrow').classList.remove('hidden');
+    this.el('chat-input').focus();
+    Input.keys = {};
+    Input.mdown = false;
+  },
+
+  closeChatInput() {
+    this.chatOpen = false;
+    this.el('chat-inputrow').classList.add('hidden');
+    this.el('chat-input').value = '';
+    this.el('chat-input').blur();
+  },
+
+  submitChat() {
+    const v = this.el('chat-input').value;
+    if (v.trim() && typeof Net !== 'undefined') Net.sendChat(v);
+    this.closeChatInput();
+  },
+
+  addChatLine(name, text) {
+    const log = this.el('chat-log');
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    const b = document.createElement('b');
+    b.textContent = name + ': ';
+    line.appendChild(b);
+    line.appendChild(document.createTextNode(text)); // texto de otros: nunca como HTML
+    log.appendChild(line);
+    this._chatLines++;
+    while (this._chatLines > 9) {
+      log.removeChild(log.firstChild);
+      this._chatLines--;
+    }
+    line.style.animation = 'chat-in 0.2s';
+  },
+
+  /* ---------- barra del jefe ---------- */
+
+  showBossBar() {
+    this.el('bossbar').classList.remove('hidden');
+    this.el('bossname').textContent = BOSS_CFG.name;
+    this.updateBossBar();
+  },
+  hideBossBar() { this.el('bossbar').classList.add('hidden'); },
+  updateBossBar() {
+    if (!G.boss) return;
+    const f = clamp(G.boss.hp / G.boss.maxHp, 0, 1);
+    this.el('bossfill').style.width = (f * 100).toFixed(1) + '%';
+    this.el('bossfill').classList.toggle('enraged', !!G.boss.enraged);
   },
 
   /* ---------- reloj y minimapa ---------- */
@@ -188,10 +274,10 @@ const UI = {
   },
 
   renderMinimap() {
-    if (!G.running) return;
+    if (!G.running || !world) return;
     const c = this.el('minimap');
     const g = c.getContext('2d');
-    const size = 132, px = 2, span = size / px; // 66x66 casillas
+    const size = 132, px = 2, span = size / px;
     const x0 = Math.floor(player.x - span / 2), y0 = Math.floor(player.y - span / 2);
     for (let y = 0; y < span; y++) {
       for (let x = 0; x < span; x++) {
@@ -199,7 +285,22 @@ const UI = {
         g.fillRect(x * px, y * px, px, px);
       }
     }
-    // jugador en el centro
+    // otros jugadores
+    if (typeof Net !== 'undefined' && Net.online) {
+      g.fillStyle = '#ffd34d';
+      for (const [, p] of Net.players) {
+        const mx = (p.px - x0) * px, my = (p.py - y0) * px;
+        if (mx >= 0 && mx < size && my >= 0 && my < size) g.fillRect(mx - 1, my - 1, 3, 3);
+      }
+    }
+    // el Coloso
+    if (G.boss) {
+      const bx = (G.boss.x - x0) * px, by = (G.boss.y - y0) * px;
+      if (bx >= 0 && bx < size && by >= 0 && by < size) {
+        g.fillStyle = '#d83434';
+        g.fillRect(bx - 2, by - 2, 5, 5);
+      }
+    }
     g.fillStyle = '#fff';
     g.fillRect(size / 2 - 2, size / 2 - 2, 4, 4);
     g.fillStyle = '#d83434';
@@ -213,7 +314,19 @@ const UI = {
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+    this._toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  },
+
+  updateOnlineButton(available, count) {
+    const btn = this.el('btn-online');
+    const row = this.el('name-row');
+    btn.classList.toggle('hidden', !available);
+    row.classList.toggle('hidden', !available);
+    if (available) {
+      btn.textContent = count > 0
+        ? 'Entrar al mundo compartido (' + count + ' jugando)'
+        : 'Entrar al mundo compartido';
+    }
   },
 
   showHUD() {
@@ -225,6 +338,12 @@ const UI = {
   hideTitle() {
     this.el('title-overlay').classList.add('hidden');
     this.showHUD();
+  },
+
+  showTitleAgain(msg) {
+    this.el('title-overlay').classList.remove('hidden');
+    this.hideBossBar();
+    if (msg) this.toast(msg);
   },
 
   showDeath() { this.el('death-overlay').classList.remove('hidden'); },

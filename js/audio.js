@@ -66,4 +66,9 @@ const Sfx = {
   slimeJump() { this.tone(150, 0.1, 'sine', 0.18, 90); },
   eat()       { this.noise(0.07, 0.4, 900); setTimeout(() => this.noise(0.07, 0.4, 700), 110); },
   die()       { this.tone(330, 0.5, 'sawtooth', 0.45, -300); },
+  arrow()     { this.noise(0.04, 0.18, 4000); this.tone(900, 0.05, 'square', 0.08, -300); },
+  bossRoar()  { this.tone(80, 0.9, 'sawtooth', 0.5, -40); this.tone(55, 1.1, 'square', 0.35, -15); this.noise(0.6, 0.3, 300); },
+  bossSlam()  { this.noise(0.25, 0.6, 250); this.tone(60, 0.3, 'sine', 0.5, -30); },
+  bossDie()   { this.tone(70, 1.4, 'sawtooth', 0.5, -50); setTimeout(() => this.tone(523, 0.15, 'triangle', 0.4), 500); setTimeout(() => this.tone(659, 0.15, 'triangle', 0.4), 680); setTimeout(() => this.tone(784, 0.3, 'triangle', 0.4), 860); },
+  chatPing()  { this.tone(880, 0.05, 'sine', 0.15); },
 };

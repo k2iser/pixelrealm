@@ -1,17 +1,24 @@
 'use strict';
 /* ============ Generación procedural de TODO el pixel art ============
    No hay ni un solo asset externo: cada sprite se dibuja píxel a píxel
-   en canvas fuera de pantalla al arrancar el juego. */
+   en canvas fuera de pantalla al arrancar el juego.
+
+   El héroe se dibuja a doble densidad (28x40) y se reduce a la mitad con
+   suavizado: conserva la escala del mundo pero con un acabado mucho más
+   fino y animación de 4 pasos. El resto del mundo mantiene el píxel gordo. */
 
 const Assets = {
-  tiles: {},     // T.* -> [variantes/frames]
-  obj: {},       // O.* -> canvas | [frames] | [variantes]
-  player: {},    // dir -> [idle, paso1, paso2]
-  slime: [],     // [normal, aplastado, salto]
-  items: {},     // id de item -> canvas
+  tiles: {},      // T.* -> [variantes/frames]
+  obj: {},        // O.* -> canvas | [frames/variantes]
+  player: null,   // set del héroe por defecto: { down: [6], up: [6], left: [6], right: [6] }
+  heroSets: {},   // color de camiseta -> set (para jugadores remotos)
+  mobs: {},       // slime: [3], shadow: [2], bat: [2]
+  boss: [],       // [normal, aplastado, salto]
+  items: {},      // id de item -> canvas
+  arrow: null,
   heart: null, heartHalf: null, heartEmpty: null,
   sun: null, moon: null,
-  _icons: {},    // id -> dataURL para la UI
+  _icons: {},     // id -> dataURL para la UI
 };
 
 function cv(w, h) {
@@ -46,7 +53,34 @@ function scaleSprite(c, k) {
   return s;
 }
 
-// Rombo isométrico 32x16 con textura moteada determinista
+// Reducción con suavizado: para el héroe HD y los iconos en miniatura
+function scaleSmooth(c, w, h) {
+  const [s, g] = cv(w, h);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(c, 0, 0, w, h);
+  return s;
+}
+
+// Oscurece un color hex multiplicando sus canales
+function darken(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+// Icono 12x12 a partir de un sprite grande (para inventario)
+function spriteIcon(c) {
+  const k = Math.min(12 / c.width, 12 / c.height);
+  const w = Math.max(1, Math.round(c.width * k)), h = Math.max(1, Math.round(c.height * k));
+  const [s, g] = cv(12, 12);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(c, Math.floor((12 - w) / 2), Math.floor((12 - h) / 2), w, h);
+  return s;
+}
+
+/* ================= suelos ================= */
+
 function makeGroundTile(base, dark, light, seed) {
   const [c, g] = cv(CFG.TW, CFG.TH);
   for (let y = 0; y < CFG.TH; y++) {
@@ -57,7 +91,6 @@ function makeGroundTile(base, dark, light, seed) {
       let col = base;
       if (r < 0.13) col = dark;
       else if (r > 0.87) col = light;
-      // bordes inferiores algo más oscuros: sensación de relieve
       if (y > 7 && dx + dy > 0.88) col = dark;
       g.fillStyle = col;
       g.fillRect(x, y, 1, 1);
@@ -66,7 +99,6 @@ function makeGroundTile(base, dark, light, seed) {
   return c;
 }
 
-// Suelo de tablones (construible): vetas paralelas al borde del rombo
 function makeFloorTile(seed) {
   const base = '#a87b4f', dark = '#7a5635', light = '#c89b62';
   const [c, g] = cv(CFG.TW, CFG.TH);
@@ -85,7 +117,6 @@ function makeFloorTile(seed) {
   return c;
 }
 
-// Cubo isométrico (muros): tapa de rombo + dos caras laterales extruidas
 function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeEvery) {
   const H = CFG.CUBE_H;
   const [c, g] = cv(CFG.TW, CFG.TH + H);
@@ -114,127 +145,301 @@ function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeE
   return c;
 }
 
-// Héroe: 4 direcciones x 3 frames (quieto, paso izq., paso der.)
-function makePlayerFrame(dir, frame) {
-  const [c, g] = cv(14, 19);
-  const skin = '#eab487', skinD = '#d49a6a', hair = '#4a3120', shirt = '#2e8f83',
-        shirtD = '#20695f', pants = '#3b3b46', boots = '#5d4427', belt = '#2a2018',
-        eye = '#1b1b22';
-  const rect = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
-  const lOff = frame === 1 ? -1 : 0, rOff = frame === 2 ? -1 : 0;
-  // piernas y botas
-  rect(4, 13 + lOff, 2, 4, pants); rect(4, 17 + lOff, 2, 2, boots);
-  rect(8, 13 + rOff, 2, 4, pants); rect(8, 17 + rOff, 2, 2, boots);
-  // torso con cinturón
-  rect(3, 7, 8, 4, shirt);
-  rect(3, 11, 8, 1, shirtD);
-  rect(3, 12, 8, 1, belt);
-  // brazos (manga + piel)
-  rect(2, 7, 1, 2, shirtD); rect(2, 9, 1, 3, skin);
-  rect(11, 7, 1, 2, shirtD); rect(11, 9, 1, 3, skin);
-  // cabeza
-  rect(4, 0, 6, 3, hair);
-  rect(4, 3, 6, 4, skin);
-  rect(4, 6, 1, 1, skinD); rect(9, 6, 1, 1, skinD);
-  if (dir === 'up') {
-    rect(4, 3, 6, 2, hair); // de espaldas: solo pelo
-  } else if (dir === 'down') {
-    rect(5, 4, 1, 1, eye); rect(8, 4, 1, 1, eye);
-    rect(3, 1, 1, 2, hair); rect(10, 1, 1, 2, hair);
-  } else if (dir === 'left') {
-    rect(4, 4, 1, 1, eye); rect(6, 4, 1, 1, eye);
-    rect(9, 3, 1, 2, hair); rect(10, 0, 1, 4, hair);
+/* ================= héroe HD =================
+   Poses: 0 quieto, 1-4 ciclo de andar (contacto, paso, contacto, paso), 5 ataque. */
+
+function makeHeroFrame(dir, pose, shirt, shirtD) {
+  const [hi, g] = cv(28, 40);
+  const skin = '#eab487', skinD = '#cf9468', hair = '#4a3120', hairL = '#66492e',
+        eye = '#20202e', pants = '#3b3b46', pantsD = '#2c2c36',
+        boots = '#5d4427', bootsD = '#44321b', belt = '#2a2018', buckle = '#e8c14d';
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+
+  // desplazamientos de animación
+  let lLeg = 0, rLeg = 0, lArm = 0, rArm = 0, bob = 0;
+  if (pose === 1) { lLeg = -2; lArm = 2; rArm = -2; }
+  else if (pose === 3) { rLeg = -2; lArm = -2; rArm = 2; }
+  else if (pose === 2 || pose === 4) { bob = -1; }
+
+  // --- piernas y botas (primero, el torso las tapa por arriba) ---
+  R(9, 28 + lLeg, 4, 7, pants); R(9, 28 + lLeg, 1, 7, pantsD);
+  R(9, 34 + lLeg, 4, 4, boots); R(9, 37 + lLeg, 4, 1, bootsD);
+  R(15, 28 + rLeg, 4, 7, pants); R(18, 28 + rLeg, 1, 7, pantsD);
+  R(15, 34 + rLeg, 4, 4, boots); R(15, 37 + rLeg, 4, 1, bootsD);
+
+  // --- torso ---
+  R(7, 14 + bob, 14, 13, shirt);
+  R(18, 14 + bob, 3, 13, shirtD);            // sombreado lateral
+  R(11, 14 + bob, 6, 1, shirtD);             // cuello
+  R(7, 25 + bob, 14, 2, shirtD);             // bajo de la túnica
+  R(7, 23 + bob, 14, 1, belt);
+  R(13, 23 + bob, 2, 1, buckle);
+
+  // --- brazos ---
+  if (pose === 5) {
+    // ataque: el brazo dominante se extiende hacia donde miras
+    if (dir === 'left') {
+      R(0, 16 + bob, 8, 3, shirtD); R(0, 16 + bob, 3, 3, skin);
+      R(21, 15 + bob, 3, 9, shirtD); R(21, 21 + bob, 3, 3, skin);
+    } else if (dir === 'right') {
+      R(20, 16 + bob, 8, 3, shirtD); R(25, 16 + bob, 3, 3, skin);
+      R(4, 15 + bob, 3, 9, shirtD); R(4, 21 + bob, 3, 3, skin);
+    } else if (dir === 'down') {
+      R(4, 18 + bob, 3, 9, shirtD); R(4, 24 + bob, 3, 3, skin);
+      R(21, 18 + bob, 3, 9, shirtD); R(21, 24 + bob, 3, 3, skin);
+    } else { // up: brazo alzado
+      R(21, 8 + bob, 3, 9, shirtD); R(21, 8 + bob, 3, 3, skin);
+      R(4, 15 + bob, 3, 9, shirtD); R(4, 21 + bob, 3, 3, skin);
+    }
   } else {
-    rect(7, 4, 1, 1, eye); rect(9, 4, 1, 1, eye);
-    rect(4, 3, 1, 2, hair); rect(3, 0, 1, 4, hair);
+    R(4, 15 + bob + lArm, 3, 11, shirtD);
+    R(4, 23 + bob + lArm, 3, 3, skin);
+    R(21, 15 + bob + rArm, 3, 11, shirtD);
+    R(21, 23 + bob + rArm, 3, 3, skin);
   }
-  return c;
+
+  // --- cabeza ---
+  R(9, bob, 10, 1, hair);                    // coronilla redondeada
+  R(8, 1 + bob, 12, 5, hair);
+  R(9, 1 + bob, 5, 1, hairL);                // brillo del pelo
+  R(8, 6 + bob, 12, 7, skin);                // cara
+  R(8, 6 + bob, 1, 2, hair); R(19, 6 + bob, 1, 2, hair); // patillas
+  R(9, 12 + bob, 10, 1, skinD);              // mandíbula
+  R(12, 13 + bob, 4, 1, skinD);              // cuello
+
+  if (dir === 'up') {
+    R(8, 6 + bob, 12, 4, hair);              // de espaldas
+    R(9, 6 + bob, 4, 1, hairL);
+  } else if (dir === 'down') {
+    R(10, 8 + bob, 2, 2, eye); R(16, 8 + bob, 2, 2, eye);
+  } else if (dir === 'left') {
+    R(8, 8 + bob, 2, 2, eye); R(13, 8 + bob, 2, 2, eye);
+    R(17, 6 + bob, 3, 3, hair);              // pelo visto de lado
+  } else {
+    R(13, 8 + bob, 2, 2, eye); R(18, 8 + bob, 2, 2, eye);
+    R(8, 6 + bob, 3, 3, hair);
+  }
+
+  return scaleSmooth(hi, 14, 20);
 }
 
-// Baba: tres poses (normal, aplastada al cargar el salto, estirada en el aire)
+// Set completo del héroe para un color de camiseta (cacheado por color)
+function getHeroSet(shirt) {
+  if (Assets.heroSets[shirt]) return Assets.heroSets[shirt];
+  const shirtD = darken(shirt, 0.72);
+  const set = {};
+  for (const dir of ['down', 'up', 'left', 'right']) {
+    set[dir] = [0, 1, 2, 3, 4, 5].map(p => makeHeroFrame(dir, p, shirt, shirtD));
+  }
+  Assets.heroSets[shirt] = set;
+  return set;
+}
+
+/* ================= enemigos ================= */
+
+// Baba: contorno oscuro, brillo grande, boca; tres poses
 function makeSlimeFrame(f) {
-  const [c, g] = cv(14, 11);
-  const body = '#5fd44a', dark = '#3da32f', shine = '#c8f7b0', eye = '#16321a';
+  const [c, g] = cv(16, 13);
+  const edge = '#2e7a22', body = '#5fd44a', dark = '#3da32f', shine = '#c8f7b0', eye = '#16321a';
   let w, h;
-  if (f === 0) { w = 10; h = 8; }
-  else if (f === 1) { w = 12; h = 6; }
-  else { w = 8; h = 10; }
-  const x0 = Math.floor((14 - w) / 2), y0 = 11 - h;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const corner = (y === 0 || y === h - 1) && (x === 0 || x === w - 1);
-      const topEdge = y === 0 && (x === 1 || x === w - 2);
-      if (corner || topEdge) continue;
-      let col = body;
-      if (y >= h - 2 || x === w - 1) col = dark;
-      g.fillStyle = col;
-      g.fillRect(x0 + x, y0 + y, 1, 1);
-    }
+  if (f === 0) { w = 12; h = 9; }
+  else if (f === 1) { w = 14; h = 7; }
+  else { w = 10; h = 11; }
+  const x0 = Math.floor((16 - w) / 2), y0 = 13 - h;
+  const inside = (x, y) => {
+    const cx = (w - 1) / 2, cy2 = (h - 1) / 2;
+    return ((x - cx) * (x - cx)) / (cx * cx) + ((y - cy2) * (y - cy2)) / (cy2 * cy2 + 1) <= 1.15;
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!inside(x, y)) continue;
+    let col = body;
+    const border = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+    if (border) col = edge;
+    else if (y >= h - 3 || x >= w - 3) col = dark;
+    g.fillStyle = col;
+    g.fillRect(x0 + x, y0 + y, 1, 1);
   }
   g.fillStyle = shine;
-  g.fillRect(x0 + 1, y0 + 1, 2, 1); g.fillRect(x0 + 1, y0 + 2, 1, 1);
+  g.fillRect(x0 + 2, y0 + 1, 3, 2); g.fillRect(x0 + 2, y0 + 3, 1, 1);
   const ey = y0 + Math.floor(h / 2) - 1;
   g.fillStyle = eye;
-  g.fillRect(x0 + Math.floor(w / 2) - 2, ey, 1, 2);
-  g.fillRect(x0 + Math.floor(w / 2) + 1, ey, 1, 2);
-  return c;
+  g.fillRect(x0 + Math.floor(w / 2) - 3, ey, 2, 2);
+  g.fillRect(x0 + Math.floor(w / 2) + 2, ey, 2, 2);
+  g.fillRect(x0 + Math.floor(w / 2) - 1, ey + 3, 3, 1); // boca
+  return scaleSprite(c, 2);
 }
 
-function buildAssets() {
-  // ---------- suelos ----------
-  const tiles = Assets.tiles;
-  tiles[T.DEEP]  = [1, 2].map(s => makeGroundTile('#27408f', '#1d3a78', '#31509e', s));
-  tiles[T.WATER] = [3, 4].map(s => makeGroundTile('#3a66c4', '#2f55a8', '#4f7fdb', s));
-  tiles[T.SAND]  = [5, 6, 7].map(s => makeGroundTile('#e7d08a', '#d4ba6f', '#f2e2a4', s));
-  tiles[T.GRASS] = [8, 9, 10].map(s => makeGroundTile('#4a9e3f', '#3c8534', '#5fb84d', s));
-  tiles[T.DIRT]  = [11, 12, 13].map(s => makeGroundTile('#8a6242', '#74512f', '#9b7251', s));
-  tiles[T.STONE] = [14, 15, 16].map(s => makeGroundTile('#8d8d96', '#787882', '#a2a2ac', s));
-  tiles[T.SNOW]  = [17, 18, 19].map(s => makeGroundTile('#e8f0f5', '#d6e2ea', '#fafdff', s));
-  tiles[T.FLOOR] = [20, 21].map(s => makeFloorTile(s));
+// El Coloso de Baba: una baba gigante con corona
+function makeBossFrame(f) {
+  const [c, g] = cv(38, 32);
+  const edge = '#1f6b16', body = '#4ec23e', dark = '#2e8f25', shine = '#b8f0a0',
+        eye = '#0e2a0a', gold = '#e8c14d', goldD = '#b8901e', gem = '#d83434';
+  let w, h;
+  if (f === 0) { w = 30; h = 22; }
+  else if (f === 1) { w = 34; h = 18; }
+  else { w = 26; h = 26; }
+  const x0 = Math.floor((38 - w) / 2), y0 = 32 - h;
+  const inside = (x, y) => {
+    const cx = (w - 1) / 2, cy2 = (h - 1) / 2;
+    return ((x - cx) * (x - cx)) / (cx * cx) + ((y - cy2) * (y - cy2)) / (cy2 * cy2 + 1) <= 1.15;
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!inside(x, y)) continue;
+    let col = body;
+    const border = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+    if (border) col = edge;
+    else if (y >= h - 5 || x >= w - 5) col = dark;
+    g.fillStyle = col;
+    g.fillRect(x0 + x, y0 + y, 1, 1);
+  }
+  g.fillStyle = shine;
+  g.fillRect(x0 + 4, y0 + 2, 6, 3); g.fillRect(x0 + 4, y0 + 5, 3, 2);
+  // ojos furiosos (inclinados) y boca
+  const ey = y0 + Math.floor(h / 2) - 2, mx = x0 + Math.floor(w / 2);
+  g.fillStyle = eye;
+  g.fillRect(mx - 8, ey, 4, 2); g.fillRect(mx - 7, ey - 1, 3, 1);
+  g.fillRect(mx + 4, ey, 4, 2); g.fillRect(mx + 4, ey - 1, 3, 1);
+  g.fillRect(mx - 4, ey + 5, 8, 2);
+  g.fillRect(mx - 5, ey + 4, 1, 1); g.fillRect(mx + 4, ey + 4, 1, 1);
+  // corona (clavada en lo alto, se inclina al saltar)
+  const crx = mx - 6, cry = y0 - 4;
+  g.fillStyle = gold;
+  g.fillRect(crx, cry + 3, 12, 3);
+  g.fillRect(crx, cry, 2, 3); g.fillRect(crx + 5, cry, 2, 3); g.fillRect(crx + 10, cry, 2, 3);
+  g.fillStyle = goldD;
+  g.fillRect(crx, cry + 5, 12, 1);
+  g.fillStyle = gem;
+  g.fillRect(crx + 5, cry + 4, 2, 1);
+  return scaleSprite(c, 3);
+}
 
-  // ---------- vegetación y rocas ----------
-  const treePal = { L: '#8fd45e', G: '#4e9a3d', D: '#35702a', T: '#8a5a33', t: '#6b4226' };
-  Assets.obj[O.TREE] = scaleSprite(gridSprite([
-    '.....LLLLLL',
-    '...LLGGGGGLL',
-    '..LGGGGLGGGGL',
-    '.LGGLGGGGGGGGD',
-    '.GGGGGGGLGGGGD',
-    'GGLGGGGGGGGGGGD',
-    'GGGGGGLGGGGGDGD',
-    '.GGGGGGGGGLGGD',
-    '.DGGLGGGGGGGD',
-    '..DGGGGGGGDD',
-    '...DDGGGDDD',
-    '.....DDDD',
-    '.......tT',
-    '.......tT',
-    '.......tT',
-    '......ttTT',
-  ], treePal), 2);
+const SHADOW_PAL = { S: '#262138', M: '#332c4d', W: '#494066', E: '#cfd6ff' };
+const SHADOW_A = [
+  '....SSSSSS',
+  '...SSSSSSSS',
+  '..SSMSSSSMSS',
+  '..SSSSSSSSSS',
+  '..SEESSSSEES',
+  '..SEESSSSEES',
+  '..SSSSMSSSSS',
+  '...SSSSSSSS',
+  '...SMSSSSMS',
+  '...SSSSSSSS',
+  '..SSSSMSSSS',
+  '..SSSSSSSSS',
+  '..WSSSSSSSW',
+  '...SSSMSSS',
+  '...SS.SSSS',
+  '..SS..SS.S',
+  '..S...SS..S',
+  '..S....S..S',
+  '.......S',
+];
+const SHADOW_B = [
+  '....SSSSSS',
+  '...SSSSSSSS',
+  '..SSMSSSSMSS',
+  '..SSSSSSSSSS',
+  '..SEESSSSEES',
+  '..SEESSSSEES',
+  '..SSSSMSSSSS',
+  '...SSSSSSSS',
+  '...SMSSSSMS',
+  '...SSSSSSSS',
+  '..SSSSMSSSS',
+  '..SSSSSSSSS',
+  '..WSSSSSSSW',
+  '...SSSMSSS',
+  '...SSSS.SS',
+  '..S.SS..SS',
+  '..S..S...S',
+  '......S..S',
+  '...S...',
+];
 
-  const pinePal = { A: '#3f7d4e', B: '#2a5c38', S: '#dfeef2', T: '#8a5a33', t: '#6b4226' };
-  Assets.obj[O.PINE] = scaleSprite(gridSprite([
-    '......SS',
-    '.....ABBA',
-    '....AABBAA',
-    '...AAABBAAA',
-    '.....ABBA',
-    '....AABBAA',
-    '...AABBBBAA',
-    '..AAABBBBAAA',
-    '....AABBAA',
-    '...AABBBBAA',
-    '..AABBBBBBAA',
-    '.AAABBBBBBAAA',
-    '......tT',
-    '......tT',
-    '.....ttTT',
-  ], pinePal), 2);
+const BAT_PAL = { B: '#3a2f52', W: '#56487a', w: '#473a63', E: '#ffd34d', o: '#241c38' };
+const BAT_UP = [
+  '.W......W',
+  'WWW....WWW',
+  'WWWW..WWWW',
+  '.WWWooWWW',
+  '..WoBBoW',
+  '...oBBBBo'.replace('....', ''),
+  '..oBEBBEBo',
+  '...oBBBBo',
+  '....oBo',
+];
+const BAT_DOWN = [
+  '....oBo',
+  '...oBBBBo',
+  '..oBEBBEBo',
+  '..woBBBBow',
+  '.wwWoBBoWww',
+  'wWWW.oo.WWWw',
+  'WWW......WWW',
+  '.W........W',
+];
 
-  const cactusPal = { C: '#4fae5d', c: '#2e7a3a' };
+/* ================= vegetación ================= */
+
+function buildVegetation() {
+  // Árbol frondoso: 5 tonos + variante con frutas
+  const tp = { H: '#b8e88a', L: '#8fd45e', G: '#4e9a3d', D: '#35702a', E: '#274f1e',
+               T: '#8a5a33', t: '#6b4226', a: '#d8484f' };
+  const treeRows = (fruit) => [
+    '........HHHH',
+    '......HHLLLLH',
+    '.....HLLLGGLLG',
+    '....LLGGGG' + (fruit ? 'a' : 'G') + 'GGLL',
+    '...LGGGGLGGGGGGL',
+    '..LGGGLGGGGGLGGGD',
+    '..GG' + (fruit ? 'a' : 'L') + 'GGGGGGGGGGGD',
+    '.LGGGGGGGLGGGGGGGD',
+    '.GGLGGGGGGGGG' + (fruit ? 'a' : 'L') + 'GGDD',
+    '.GGGGGLGGGGGGGGGDD',
+    '..DGGGG' + (fruit ? 'a' : 'G') + 'GGLGGGDDE',
+    '..DDGGLGGGGGGDDE',
+    '...EDDGGGGDDDEE',
+    '....EDDDDDDEE',
+    '......EEEEE',
+    '.........tTT',
+    '.........tTT',
+    '.........tTT',
+    '........ttTTt',
+    '.......ttTTTTt',
+  ];
+  const treeA = scaleSprite(gridSprite(treeRows(false), tp), 2);
+  const treeB = scaleSprite(gridSprite(treeRows(true), tp), 2);
+  Assets.obj[O.TREE] = [treeA, treeA, treeA, treeB]; // 1 de cada 4 con fruta
+
+  // Pino de tres pisos con nieve en la punta
+  const pp = { A: '#3f7d4e', B: '#2a5c38', C: '#1e4429', S: '#e8f4f8', T: '#8a5a33', t: '#6b4226' };
+  const pineRows = (snowy) => [
+    '........' + (snowy ? 'SS' : 'AA'),
+    '.......' + (snowy ? 'SSSS' : 'ABBA'),
+    '......A' + (snowy ? 'SSS' : 'BBB') + 'BA',
+    '.....AABBBBAA',
+    '......ABBBBC',
+    '.....AABBBBCA',
+    '....AABBBBBBAC',
+    '...AAABBBBBBACC',
+    '.....ABBBBBC',
+    '....AABBBBBBC',
+    '...AABBBBBBBCC',
+    '..AABBBBBBBBACC',
+    '.AAABBBBBBBBAACC',
+    '........tT',
+    '........tT',
+    '.......ttTT',
+  ];
+  Assets.obj[O.PINE] = [
+    scaleSprite(gridSprite(pineRows(true), pp), 2),
+    scaleSprite(gridSprite(pineRows(false), pp), 2),
+  ];
+
+  const cactusPal = { C: '#4fae5d', c: '#2e7a3a', F: '#e886a8' };
   Assets.obj[O.CACTUS] = scaleSprite(gridSprite([
-    '.....cC',
+    '.....cF',
     '....cCCc',
     '....cCCc',
     '.cc.cCCc.cc',
@@ -289,7 +494,6 @@ function buildAssets() {
     ], { Y: '#e8b14d', y: '#ffe28a', g: '#3c8534' }),
   ];
 
-  const grassPal = { g: '#5fb84d', G: '#3c8534' };
   Assets.obj[O.TALLGRASS] = gridSprite([
     '.g...G...g',
     '.g..gg..G',
@@ -299,9 +503,8 @@ function buildAssets() {
     '...gggG',
     '....gg',
     '....gG',
-  ], grassPal);
+  ], { g: '#5fb84d', G: '#3c8534' });
 
-  const bushPal = { g: '#35702a', G: '#4e9a3d', R: '#c4344c' };
   Assets.obj[O.BUSH] = scaleSprite(gridSprite([
     '....gggg',
     '..ggGGGGgg',
@@ -312,75 +515,199 @@ function buildAssets() {
     '.gGGGGGGRGGg',
     '..ggGGGGgg',
     '....gggg',
-  ], bushPal), 2);
+  ], { g: '#35702a', G: '#4e9a3d', R: '#c4344c' }), 2);
+}
 
-  // ---------- construcciones ----------
-  Assets.obj[O.WALLW] = makeCube(
-    ['#a87b4f', '#7a5635', '#c89b62'], '#8a5a33', '#6b4226', '#9b6a3e', '#7a5230', 31, 4);
-  Assets.obj[O.WALLS] = makeCube(
-    ['#8c8c94', '#787882', '#a2a2ac'], '#6e6e78', '#5a5a64', '#7e7e88', '#646470', 32, 0);
+/* ================= construcciones ================= */
 
-  const firePal = { f: '#ff8c2e', F: '#ffb347', Y: '#ffe28a', B: '#8a5a33', b: '#6b4226', s: '#8c8c94' };
-  Assets.obj[O.TORCH] = [
-    gridSprite([
-      '...ff',
-      '..fFYf',
-      '..FYYF',
-      '...YY',
-      '..bBBb',
-      '...BB',
-      '...BB',
-      '...BB',
-      '...BB',
-      '...bb',
-    ], firePal),
-    gridSprite([
-      '....ff',
-      '..fYFf.',
-      '..FYYF',
-      '...YY',
-      '..bBBb',
-      '...BB',
-      '...BB',
-      '...BB',
-      '...BB',
-      '...bb',
-    ], firePal),
-  ].map(c => scaleSprite(c, 2));
-
-  Assets.obj[O.FIRE] = [
-    gridSprite([
-      '........ff',
-      '.......fFYf',
-      '......fFYYf',
-      '.....fFYYYFf',
-      '......FYYF',
-      '....bBBYYBBb',
-      '..bBBbBBBBbBBb',
-      '.sBBbBBBBBBbBBs',
-      '..ss..ssss..ss',
-    ], firePal),
-    gridSprite([
-      '.......ff',
-      '......fYFf',
-      '......fFYYff',
-      '.....fFYYYFf',
-      '......FYYF',
-      '....bBBYYBBb',
-      '..bBBbBBBBbBBb',
-      '.sBBbBBBBBBbBBs',
-      '..ss..ssss..ss',
-    ], firePal),
-  ].map(c => scaleSprite(c, 2));
-
-  // ---------- personaje y enemigos ----------
-  for (const dir of ['down', 'up', 'left', 'right']) {
-    Assets.player[dir] = [0, 1, 2].map(f => makePlayerFrame(dir, f));
+function makeHut() {
+  const [c, g] = cv(32, 27);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // paredes de troncos
+  R(4, 12, 24, 13, '#a87b4f');
+  for (let y = 14; y < 25; y += 3) R(4, y, 24, 1, '#8a5f38');
+  R(4, 12, 1, 13, '#8a5f38'); R(27, 12, 1, 13, '#7a5230');
+  // tejado a dos aguas
+  for (let y = 0; y < 11; y++) {
+    const half = 2 + Math.round(y * 1.35);
+    R(16 - half, y, half * 2, 1, y === 0 ? '#d8804e' : (y % 3 === 0 ? '#8a4a2e' : '#b06038'));
   }
-  Assets.slime = [0, 1, 2].map(f => scaleSprite(makeSlimeFrame(f), 2));
+  R(2, 11, 28, 2, '#6b3a22'); // alero
+  // puerta con pomo
+  R(13, 17, 6, 8, '#4a2f18');
+  R(13, 17, 6, 1, '#6b4226'); R(13, 17, 1, 8, '#6b4226'); R(18, 17, 1, 8, '#6b4226');
+  R(17, 21, 1, 1, '#e8c14d');
+  // ventanas cálidas con cruceta
+  for (const wx of [7, 22]) {
+    R(wx, 15, 4, 4, '#ffd98a');
+    R(wx, 15, 4, 1, '#6b4226'); R(wx, 18, 4, 1, '#6b4226');
+    R(wx + 2, 15, 1, 4, '#6b4226');
+  }
+  // zócalo de piedra
+  R(3, 25, 26, 2, '#8c8c94');
+  for (let x = 4; x < 28; x += 3) R(x, 26, 1, 1, '#62626c');
+  return scaleSprite(c, 2);
+}
 
-  // ---------- iconos de items ----------
+function makeTower() {
+  const [c, g] = cv(16, 30);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // fuste de piedra
+  R(3, 9, 10, 18, '#8c8c94');
+  R(11, 9, 2, 18, '#6e6e78');
+  for (let y = 10; y < 26; y += 2) {
+    for (let x = 4; x < 12; x += 3) R(x + (y % 4 === 0 ? 1 : 0), y, 1, 1, '#787882');
+  }
+  // base ensanchada
+  R(2, 26, 12, 3, '#787882'); R(2, 28, 12, 1, '#5e5e66');
+  // plataforma de madera con almenas
+  R(1, 6, 14, 3, '#a87b4f'); R(1, 8, 14, 1, '#7a5635');
+  R(1, 4, 3, 2, '#8c8c94'); R(6, 4, 4, 2, '#8c8c94'); R(12, 4, 3, 2, '#8c8c94');
+  // tronera
+  R(7, 14, 2, 5, '#1d1812');
+  // estandarte
+  R(7, 0, 1, 4, '#6b4226');
+  R(8, 0, 4, 2, '#c4344c'); R(8, 2, 2, 1, '#c4344c');
+  return scaleSprite(c, 2);
+}
+
+function makeSawmill() {
+  const [c, g] = cv(32, 23);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // tejado inclinado
+  for (let i = 0; i < 7; i++) R(2 + i * 2, 6 - i, 26 - i * 2, 1, i % 2 ? '#8a4a2e' : '#b06038');
+  R(2, 7, 26, 1, '#6b3a22');
+  // postes
+  R(3, 8, 2, 14, '#6b4226'); R(26, 8, 2, 14, '#6b4226'); R(15, 8, 2, 14, '#7a5230');
+  // sierra circular
+  const sx = 21, sy = 16;
+  for (let y = -5; y <= 5; y++) for (let x = -5; x <= 5; x++) {
+    const d = x * x + y * y;
+    if (d > 30) continue;
+    let col = '#9fa6ad';
+    if (d > 22) col = (x + y) % 2 ? '#7c838a' : '#c2c9d0'; // dientes
+    else if (d < 3) col = '#4e545a';
+    g.fillStyle = col;
+    g.fillRect(sx + x, sy + y, 1, 1);
+  }
+  // pila de troncos
+  for (const [lx, ly] of [[6, 18], [10, 18], [8, 15]]) {
+    for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) {
+      if (x * x + y * y > 6) continue;
+      g.fillStyle = (x === 0 && y === 0) ? '#d2a767' : (x * x + y * y > 3 ? '#6b4226' : '#8a5a33');
+      g.fillRect(lx + x, ly + y, 1, 1);
+    }
+  }
+  // suelo
+  R(2, 21, 28, 2, '#74512f');
+  return scaleSprite(c, 2);
+}
+
+function makeQuarry() {
+  const [c, g] = cv(32, 21);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // foso
+  R(4, 12, 24, 8, '#5e5e66');
+  R(6, 14, 20, 5, '#494950');
+  // bloques de piedra apilados
+  for (const [bx, by] of [[2, 9], [7, 8], [25, 9], [21, 7]]) {
+    R(bx, by, 5, 4, '#8c8c94'); R(bx, by + 3, 5, 1, '#62626c'); R(bx, by, 5, 1, '#a2a2ac');
+  }
+  // pórtico de madera con polea
+  R(10, 0, 2, 14, '#6b4226'); R(20, 0, 2, 14, '#6b4226');
+  R(9, 0, 14, 2, '#8a5a33');
+  R(15, 2, 1, 6, '#3a3a42'); // cuerda
+  R(14, 8, 3, 2, '#e8c14d'); // gancho
+  // pico apoyado
+  R(27, 13, 1, 6, '#8a5a33');
+  R(25, 12, 5, 1, '#9a9aa4');
+  return scaleSprite(c, 2);
+}
+
+function makeFarm() {
+  const [c, g] = cv(32, 19);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // tierra labrada
+  R(2, 6, 28, 12, '#74512f');
+  for (let y = 7; y < 17; y += 3) R(2, y, 28, 1, '#5e3f22');
+  // brotes con bayas
+  for (let i = 0; i < 9; i++) {
+    const px = 4 + (i % 3) * 9 + ((i / 3) | 0) * 2, py = 7 + ((i / 3) | 0) * 3;
+    g.fillStyle = '#4e9a3d'; g.fillRect(px, py, 2, 2); g.fillRect(px + 1, py - 1, 1, 1);
+    if (i % 2 === 0) { g.fillStyle = '#c4344c'; g.fillRect(px + 2, py, 1, 1); }
+  }
+  // valla
+  for (let x = 1; x < 31; x += 4) R(x, 2, 1, 5, '#8a5a33');
+  R(1, 3, 30, 1, '#a87b4f'); R(1, 5, 30, 1, '#a87b4f');
+  return scaleSprite(c, 2);
+}
+
+function makeBrazier(frame) {
+  const [c, g] = cv(12, 17);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // llama (dos poses)
+  const fp = { f: '#ff8c2e', F: '#ffb347', Y: '#ffe28a' };
+  const flame = frame === 0 ? [
+    '....ff',
+    '...fFYf',
+    '..fFYYf',
+    '..FYYYF',
+    '...FYF',
+  ] : [
+    '.....ff',
+    '..ffYFf',
+    '..fFYYF',
+    '..FYYYf',
+    '...FYF',
+  ];
+  const fc = gridSprite(flame, fp);
+  g.drawImage(fc, 1, 0);
+  // copa de piedra
+  R(2, 5, 8, 2, '#a2a2ac');
+  R(3, 7, 6, 2, '#8c8c94');
+  R(4, 9, 4, 4, '#787882');
+  R(3, 13, 6, 1, '#8c8c94');
+  R(2, 14, 8, 2, '#787882');
+  R(2, 15, 8, 1, '#5e5e66');
+  return scaleSprite(c, 2);
+}
+
+function makeAltar(frame) {
+  const [c, g] = cv(32, 25);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // gradas de piedra oscura
+  R(2, 21, 28, 4, '#3a3a46'); R(2, 21, 28, 1, '#4e4e5c');
+  R(5, 18, 22, 3, '#444452'); R(5, 18, 22, 1, '#585866');
+  // monolito
+  R(12, 2, 8, 16, '#2e2e3a');
+  R(12, 2, 8, 1, '#444452');
+  R(12, 2, 1, 16, '#444452'); R(19, 2, 1, 16, '#1e1e28');
+  // runas brillantes
+  const runa = frame === 0 ? '#a070ff' : '#d0b0ff';
+  g.fillStyle = runa;
+  g.fillRect(14, 4, 1, 2); g.fillRect(16, 4, 2, 1);
+  g.fillRect(15, 7, 2, 1); g.fillRect(14, 9, 1, 2); g.fillRect(17, 9, 1, 1);
+  g.fillRect(15, 12, 2, 2); g.fillRect(14, 15, 3, 1);
+  // chispas flotando
+  if (frame === 1) {
+    g.fillRect(9, 6, 1, 1); g.fillRect(22, 9, 1, 1); g.fillRect(10, 14, 1, 1);
+  } else {
+    g.fillRect(23, 5, 1, 1); g.fillRect(8, 10, 1, 1); g.fillRect(21, 15, 1, 1);
+  }
+  // velas a los lados
+  for (const vx of [6, 24]) {
+    R(vx, 15, 2, 3, '#d8d0b8');
+    g.fillStyle = '#ffb347'; g.fillRect(vx, 14, 1, 1);
+  }
+  return scaleSprite(c, 2);
+}
+
+/* ================= items ================= */
+
+function buildItems() {
   const it = Assets.items;
+  const firePal = { f: '#ff8c2e', F: '#ffb347', Y: '#ffe28a', B: '#8a5a33', b: '#6b4226', s: '#8c8c94' };
+
   it.wood = gridSprite([
     '....bbbb',
     '..bbBBBBbb',
@@ -437,6 +764,29 @@ function buildAssets() {
     '....ssss',
   ], { s: '#3da32f', S: '#5fd44a', W: '#c8f7b0' });
 
+  it.essence = gridSprite([
+    '.....pp',
+    '....pPPp',
+    '...pPWPPp',
+    '...pPPWPp',
+    '...pPPPPp',
+    '....pPPp',
+    '....pPp',
+    '.....pp',
+    '....pp',
+    '.....p',
+  ], { p: '#6a4fa0', P: '#9a7fd0', W: '#e0d4ff' });
+
+  it.crown = gridSprite([
+    '.G...G...G',
+    '.GG..GG..GG',
+    '.GGG.GGG.GG',
+    '.GGGGGGGGGG',
+    '.GgGGrGGgGG',
+    '.GGGGGGGGGG',
+    '.dddddddddd',
+  ], { G: '#e8c14d', g: '#7be37b', r: '#d83434', d: '#b8901e' });
+
   it.plank = gridSprite([
     '.pppppppppp',
     '.pPPPPPPPPd',
@@ -460,40 +810,50 @@ function buildAssets() {
     '.bb',
   ], { B: '#a87b4f', b: '#6b4226' });
 
+  // herramientas v2: cabezas más grandes, contorno y brillo
+  const toolPal = { o: '#1d1812', S: '#9fa8b0', W: '#d8e0e8', s: '#6e767e',
+                    B: '#a87b4f', b: '#6b4226', g: '#e8c14d', G: '#b8901e' };
   it.axe = gridSprite([
-    '.......sss',
-    '......sSSSs',
-    '.....bSWSSs',
-    '....bBbSSs',
-    '...bBb.ss',
-    '..bBb',
-    '.bBb',
-    '.bb',
-  ], { s: '#55555e', S: '#9a9aa4', W: '#c8c8d2', b: '#6b4226', B: '#a87b4f' });
+    '.....ooo',
+    '....oSWWo',
+    '...oSSWWWo',
+    '...oSSSWWo',
+    '...obSSSWo',
+    '..obBboSo',
+    '.obBbo.o',
+    'obBbo',
+    'oBbo',
+    'obo',
+  ], toolPal);
 
   it.pick = gridSprite([
-    '....ssssss',
-    '...sS....Ss',
-    '..sS..bb..s',
-    '..s..bBb',
-    '.....bBb',
-    '....bBb',
-    '...bBb',
-    '..bBb',
-    '..bb',
-  ], { s: '#55555e', S: '#9a9aa4', b: '#6b4226', B: '#a87b4f' });
+    '...ooooo',
+    '..oSWWWSo',
+    '.oWo...oWo',
+    '.oSo.oo.oSo',
+    '.oo.obBo.oo',
+    '....obBbo',
+    '...obBbo',
+    '..obBbo',
+    '.obBbo',
+    '.oBbo',
+    '.obo',
+  ], toolPal);
 
   it.sword = gridSprite([
-    '.........WW',
-    '........WWS',
-    '.......WWS',
-    '......WWS',
-    '.....WWS',
-    '..g.WWS',
-    '...gWS',
-    '..bgg',
-    '.bb.g',
-  ], { W: '#dfe7ee', S: '#9fb0bf', g: '#e8c14d', b: '#6b4226' });
+    '.........oo',
+    '........oWWo',
+    '.......oWWSo',
+    '......oWWSo',
+    '.....oWWSo',
+    '..o.oWWSo',
+    '.ogooWSo',
+    '..oggSo',
+    '..oGgo',
+    '.oboGgo',
+    '.obo..o',
+    '..o',
+  ], toolPal);
 
   it.torch = gridSprite([
     '.....ff',
@@ -541,7 +901,119 @@ function buildAssets() {
     '.dddddddddd',
   ], { s: '#a2a2ac', S: '#8c8c94', d: '#646470' });
 
-  // ---------- HUD ----------
+  // iconos de edificios: miniatura del propio sprite
+  it.hut = spriteIcon(Assets.obj[O.HUT]);
+  it.tower = spriteIcon(Assets.obj[O.TOWER]);
+  it.sawmill = spriteIcon(Assets.obj[O.SAWMILL]);
+  it.quarry = spriteIcon(Assets.obj[O.QUARRY]);
+  it.farm = spriteIcon(Assets.obj[O.FARM]);
+  it.brazier = spriteIcon(Assets.obj[O.BRAZIER][0]);
+  it.altar = spriteIcon(Assets.obj[O.ALTAR][0]);
+}
+
+/* ================= construcción de todo ================= */
+
+function buildAssets() {
+  // suelos
+  const tiles = Assets.tiles;
+  tiles[T.DEEP]  = [1, 2].map(s => makeGroundTile('#27408f', '#1d3a78', '#31509e', s));
+  tiles[T.WATER] = [3, 4].map(s => makeGroundTile('#3a66c4', '#2f55a8', '#4f7fdb', s));
+  tiles[T.SAND]  = [5, 6, 7].map(s => makeGroundTile('#e7d08a', '#d4ba6f', '#f2e2a4', s));
+  tiles[T.GRASS] = [8, 9, 10].map(s => makeGroundTile('#4a9e3f', '#3c8534', '#5fb84d', s));
+  tiles[T.DIRT]  = [11, 12, 13].map(s => makeGroundTile('#8a6242', '#74512f', '#9b7251', s));
+  tiles[T.STONE] = [14, 15, 16].map(s => makeGroundTile('#8d8d96', '#787882', '#a2a2ac', s));
+  tiles[T.SNOW]  = [17, 18, 19].map(s => makeGroundTile('#e8f0f5', '#d6e2ea', '#fafdff', s));
+  tiles[T.FLOOR] = [20, 21].map(s => makeFloorTile(s));
+
+  buildVegetation();
+
+  // muros
+  Assets.obj[O.WALLW] = makeCube(
+    ['#a87b4f', '#7a5635', '#c89b62'], '#8a5a33', '#6b4226', '#9b6a3e', '#7a5230', 31, 4);
+  Assets.obj[O.WALLS] = makeCube(
+    ['#8c8c94', '#787882', '#a2a2ac'], '#6e6e78', '#5a5a64', '#7e7e88', '#646470', 32, 0);
+
+  // antorcha y fogata
+  const firePal = { f: '#ff8c2e', F: '#ffb347', Y: '#ffe28a', B: '#8a5a33', b: '#6b4226', s: '#8c8c94' };
+  Assets.obj[O.TORCH] = [
+    gridSprite([
+      '...ff',
+      '..fFYf',
+      '..FYYF',
+      '...YY',
+      '..bBBb',
+      '...BB',
+      '...BB',
+      '...BB',
+      '...BB',
+      '...bb',
+    ], firePal),
+    gridSprite([
+      '....ff',
+      '..fYFf',
+      '..FYYF',
+      '...YY',
+      '..bBBb',
+      '...BB',
+      '...BB',
+      '...BB',
+      '...BB',
+      '...bb',
+    ], firePal),
+  ].map(c => scaleSprite(c, 2));
+
+  Assets.obj[O.FIRE] = [
+    gridSprite([
+      '........ff',
+      '.......fFYf',
+      '......fFYYf',
+      '.....fFYYYFf',
+      '......FYYF',
+      '....bBBYYBBb',
+      '..bBBbBBBBbBBb',
+      '.sBBbBBBBBBbBBs',
+      '..ss..ssss..ss',
+    ], firePal),
+    gridSprite([
+      '.......ff',
+      '......fYFf',
+      '......fFYYff',
+      '.....fFYYYFf',
+      '......FYYF',
+      '....bBBYYBBb',
+      '..bBBbBBBBbBBb',
+      '.sBBbBBBBBBbBBs',
+      '..ss..ssss..ss',
+    ], firePal),
+  ].map(c => scaleSprite(c, 2));
+
+  // construcciones
+  Assets.obj[O.HUT] = makeHut();
+  Assets.obj[O.TOWER] = makeTower();
+  Assets.obj[O.SAWMILL] = makeSawmill();
+  Assets.obj[O.QUARRY] = makeQuarry();
+  Assets.obj[O.FARM] = makeFarm();
+  Assets.obj[O.BRAZIER] = [makeBrazier(0), makeBrazier(1)];
+  Assets.obj[O.ALTAR] = [makeAltar(0), makeAltar(1)];
+  Assets.obj[O.PART] = null; // invisible: lo dibuja su ancla
+
+  // héroe por defecto y enemigos
+  Assets.player = getHeroSet('#2e8f83');
+  Assets.mobs.slime = [0, 1, 2].map(makeSlimeFrame);
+  Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(gridSprite(r, SHADOW_PAL), 2));
+  Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(gridSprite(r, BAT_PAL), 2));
+  Assets.boss = [0, 1, 2].map(makeBossFrame);
+
+  // flecha de las torres
+  Assets.arrow = gridSprite([
+    '.bBBWW',
+    'fbBBWWW',
+    '.bBBWW',
+  ], { f: '#c4344c', b: '#6b4226', B: '#a87b4f', W: '#dfe7ee' });
+
+  buildItems();
+
+  // HUD
   const heartPal = { R: '#d83434', r: '#f08a8a', E: '#3a2b2b', e: '#52403c' };
   Assets.heart = gridSprite([
     '.RR.RR',

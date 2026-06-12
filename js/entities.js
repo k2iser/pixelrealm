@@ -1,9 +1,9 @@
 'use strict';
-/* ============ Entidades: jugador, babas, drops, partículas ============ */
+/* ============ Entidades: jugador, enemigos, jefe, drops, partículas ============ */
 
 const player = {
   x: 0, y: 0,
-  dir: 'down', frame: 0, animT: 0, moving: false,
+  dir: 'down', frameI: 0, animT: 0, moving: false,
   hp: CFG.PLAYER_MAXHP, maxHp: CFG.PLAYER_MAXHP,
   hitT: 0,        // tiempo hasta el próximo golpe
   swingT: 0,      // animación de golpe
@@ -11,6 +11,7 @@ const player = {
   hurtT: 0,       // flash rojo en pantalla
   noDmgT: 99,     // tiempo sin recibir daño (para regenerar)
   regenT: 0,
+  dustT: 0,       // polvillo al caminar
   dead: false,
   breaking: null, // { tx, ty, id, dmg } objeto que se está rompiendo
 };
@@ -19,6 +20,7 @@ const mobs = [];
 const drops = [];
 const particles = [];
 const floaters = [];
+const projectiles = [];
 
 /* ---------- colisión ---------- */
 
@@ -33,6 +35,14 @@ function blockedAt(x, y, r) {
   return false;
 }
 
+// ¿El cuerpo de la entidad (radio r) solapa la casilla (tx,ty)?
+// Usa la misma cobertura floor(x±r) que blockedAt: si esto da false,
+// colocar un sólido ahí nunca puede emparedar a la entidad.
+function overlapsTile(e, r, tx, ty) {
+  return tx >= Math.floor(e.x - r) && tx <= Math.floor(e.x + r) &&
+         ty >= Math.floor(e.y - r) && ty <= Math.floor(e.y + r);
+}
+
 // Mueve por ejes separados: permite deslizarse a lo largo de los muros
 function moveEntity(e, dx, dy, r) {
   if (dx !== 0 && !blockedAt(e.x + dx, e.y, r)) e.x += dx;
@@ -45,7 +55,7 @@ function spawnDrop(x, y, id, n) {
   drops.push({
     x, y, id, n,
     vx: randRange(-1.4, 1.4), vy: randRange(-1.4, 1.4),
-    z: 0.5, vz: randRange(2, 4), age: 0,
+    z: 0.5, vz: randRange(2, 4), age: 0, ttl: 0,
   });
 }
 
@@ -65,16 +75,29 @@ function addFloater(x, y, text, color) {
   floaters.push({ x, y, text, color, life: 1.1 });
 }
 
-/* ---------- babas (enemigos nocturnos) ---------- */
+/* ---------- enemigos ---------- */
 
-function spawnSlime(x, y) {
+function spawnMob(kind, x, y) {
+  const def = MOBS[kind];
+  if (!def) return;
   mobs.push({
-    kind: 'slime', x, y, hp: 4, maxHp: 4,
+    kind, x, y, hp: def.hp, maxHp: def.hp,
     vx: 0, vy: 0,
-    hopT: randRange(0.5, 1.5),  // tiempo hasta el próximo salto
-    hopping: 0,                 // tiempo restante del salto en curso
+    hopT: randRange(0.5, 1.5), hopping: 0,
+    wanderT: 0, wAng: randRange(0, Math.PI * 2),
+    t: Math.random() * 10,
     hurtT: 0, frame: 0, dead: false,
   });
+}
+
+// Elige un tipo de enemigo según los pesos de MOBS
+function pickMobKind() {
+  let r = Math.random(), acc = 0;
+  for (const k in MOBS) {
+    acc += MOBS[k].weight;
+    if (r <= acc) return k;
+  }
+  return 'slime';
 }
 
 function damageMob(m, dmg) {
@@ -82,16 +105,23 @@ function damageMob(m, dmg) {
   m.hurtT = 0.25;
   Sfx.mobHurt();
   addFloater(m.x, m.y - 0.4, '-' + dmg, '#ffd34d');
-  spawnParticles(m.x, m.y, '#6cd44a', 5);
-  // retroceso
+  spawnParticles(m.x, m.y, m.kind === 'shadow' ? '#6a5f96' : (m.kind === 'bat' ? '#56487a' : '#6cd44a'), 5);
   const ang = Math.atan2(m.y - player.y, m.x - player.x);
   m.vx = Math.cos(ang) * 5; m.vy = Math.sin(ang) * 5;
   m.hopping = 0.12;
   if (m.hp <= 0) {
     m.dead = true;
     Sfx.poof();
-    spawnParticles(m.x, m.y, '#6cd44a', 12);
-    spawnDrop(m.x, m.y, 'slime', Math.random() < 0.4 ? 2 : 1);
+    spawnParticles(m.x, m.y, m.kind === 'shadow' ? '#6a5f96' : '#6cd44a', 12);
+    for (const dr of MOBS[m.kind].drops) {
+      if (Math.random() < dr[2]) spawnDrop(m.x, m.y, dr[0], dr[1]);
+    }
+  }
+}
+
+function mobContact(m, def) {
+  if (!player.dead && player.invuln <= 0 && dist2(m.x, m.y, player.x, player.y) < 0.55) {
+    damagePlayer(def.dmg, m);
   }
 }
 
@@ -99,42 +129,238 @@ function updateMobs(dt) {
   for (let i = mobs.length - 1; i >= 0; i--) {
     const m = mobs[i];
     if (m.dead) { mobs.splice(i, 1); continue; }
+    const def = MOBS[m.kind];
     m.hurtT = Math.max(0, m.hurtT - dt);
+    m.t += dt;
 
-    if (m.hopping > 0) {
-      m.hopping -= dt;
-      moveEntity(m, m.vx * dt, m.vy * dt, 0.3);
-      m.frame = 2;
-    } else {
-      m.frame = m.hopT < 0.18 ? 1 : 0; // se aplasta justo antes de saltar
-      m.hopT -= dt;
-      if (m.hopT <= 0) {
-        const d2p = dist2(m.x, m.y, player.x, player.y);
-        let ang;
-        if (d2p < 64 && !player.dead) {
-          ang = Math.atan2(player.y - m.y, player.x - m.x) + randRange(-0.3, 0.3);
-        } else {
-          ang = randRange(0, Math.PI * 2);
+    if (def.ai === 'hop') {
+      // --- baba: salta hacia el jugador ---
+      if (m.hopping > 0) {
+        m.hopping -= dt;
+        moveEntity(m, m.vx * dt, m.vy * dt, 0.3);
+        m.frame = 2;
+      } else {
+        m.frame = m.hopT < 0.18 ? 1 : 0;
+        m.hopT -= dt;
+        if (m.hopT <= 0) {
+          const d2p = dist2(m.x, m.y, player.x, player.y);
+          let ang;
+          if (d2p < 64 && !player.dead) {
+            ang = Math.atan2(player.y - m.y, player.x - m.x) + randRange(-0.3, 0.3);
+          } else {
+            ang = randRange(0, Math.PI * 2);
+          }
+          const sp = d2p < 64 ? def.speed : def.speed * 0.65;
+          m.vx = Math.cos(ang) * sp; m.vy = Math.sin(ang) * sp;
+          m.hopping = 0.34;
+          m.hopT = randRange(0.7, 1.6);
+          if (d2p < 220) Sfx.slimeJump();
         }
-        const sp = d2p < 64 ? 3.4 : 2.2;
-        m.vx = Math.cos(ang) * sp; m.vy = Math.sin(ang) * sp;
-        m.hopping = 0.34;
-        m.hopT = randRange(0.7, 1.6);
-        if (d2p < 220) Sfx.slimeJump();
       }
+    } else if (def.ai === 'walk') {
+      // --- sombra: camina sin pausa, con un vaivén inquietante ---
+      const d2p = dist2(m.x, m.y, player.x, player.y);
+      let ang;
+      if (d2p < 110 && !player.dead) {
+        ang = Math.atan2(player.y - m.y, player.x - m.x) + Math.sin(m.t * 2.2) * 0.35;
+      } else {
+        m.wanderT -= dt;
+        if (m.wanderT <= 0) { m.wanderT = randRange(1.5, 3); m.wAng = randRange(0, Math.PI * 2); }
+        ang = m.wAng;
+      }
+      moveEntity(m, Math.cos(ang) * def.speed * dt, Math.sin(ang) * def.speed * dt, 0.3);
+      m.frame = Math.floor(m.t * 4) % 2;
+      // arde de día
+      if (G.darkness < 0.3 && Math.random() < dt * 0.5) {
+        spawnParticles(m.x, m.y, '#6a5f96', 10);
+        Sfx.poof();
+        mobs.splice(i, 1);
+        continue;
+      }
+    } else if (def.ai === 'fly') {
+      // --- murciélago: vuela en oleadas, ignora los obstáculos ---
+      const d2p = dist2(m.x, m.y, player.x, player.y);
+      if (d2p < 140 && !player.dead) {
+        const ang = Math.atan2(player.y - m.y, player.x - m.x);
+        const weave = Math.sin(m.t * 5) * 1.6;
+        m.x += (Math.cos(ang) * def.speed + Math.cos(ang + Math.PI / 2) * weave) * dt;
+        m.y += (Math.sin(ang) * def.speed + Math.sin(ang + Math.PI / 2) * weave) * dt;
+      } else {
+        m.x += Math.cos(m.t * 1.3) * def.speed * 0.5 * dt;
+        m.y += Math.sin(m.t * 0.9) * def.speed * 0.5 * dt;
+      }
+      m.frame = Math.floor(m.t * 9) % 2;
     }
 
-    // daño por contacto
-    if (!player.dead && player.invuln <= 0 && dist2(m.x, m.y, player.x, player.y) < 0.55) {
-      damagePlayer(1, m);
-    }
+    mobContact(m, def);
 
-    // de día se evaporan poco a poco
-    if (G.darkness < 0.3 && Math.random() < dt * 0.12) {
+    // los nocturnos se evaporan de día (las sombras ya arden antes)
+    if (def.ai !== 'walk' && G.darkness < 0.3 && Math.random() < dt * 0.12) {
       spawnParticles(m.x, m.y, '#8be07a', 8);
       Sfx.poof();
       mobs.splice(i, 1);
     }
+  }
+}
+
+/* ---------- El Coloso de Baba ---------- */
+
+function spawnBoss(x, y, maxHp) {
+  G.boss = {
+    x, y,
+    hp: maxHp || BOSS_CFG.hp, maxHp: maxHp || BOSS_CFG.hp,
+    vx: 0, vy: 0,
+    hopT: 1.2, hopping: 0,
+    minionT: BOSS_CFG.minionEvery,
+    hurtT: 0, frame: 0, enraged: false,
+    remote: false,   // en multijugador lo simula el servidor
+    rx: x, ry: y,    // posición objetivo para interpolar en MP
+  };
+  G.shake = 0.5;
+  Sfx.bossRoar();
+  UI.toast('¡' + BOSS_CFG.name + ' ha despertado!');
+  UI.showBossBar();
+}
+
+function bossLand(b) {
+  G.shake = Math.max(G.shake, 0.35);
+  Sfx.bossSlam();
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    particles.push({
+      x: b.x + Math.cos(a) * 0.8, y: b.y + Math.sin(a) * 0.8,
+      vx: Math.cos(a) * 4, vy: Math.sin(a) * 4,
+      z: 0.1, vz: randRange(0.5, 1.5),
+      life: 0.5, maxLife: 0.5, color: '#bdb39a',
+    });
+  }
+  if (!player.dead && dist2(b.x, b.y, player.x, player.y) < BOSS_CFG.slamRadius * BOSS_CFG.slamRadius) {
+    damagePlayer(BOSS_CFG.dmg, b);
+  }
+}
+
+function updateBoss(dt) {
+  const b = G.boss;
+  if (!b) return;
+  b.hurtT = Math.max(0, b.hurtT - dt);
+
+  if (b.remote) {
+    // multijugador: interpola hacia el estado del servidor
+    b.x += (b.rx - b.x) * Math.min(1, dt * 8);
+    b.y += (b.ry - b.y) * Math.min(1, dt * 8);
+    b.frame = b.hopping > 0 ? 2 : 0;
+    b.hopping = Math.max(0, b.hopping - dt);
+    return;
+  }
+
+  b.enraged = b.hp < b.maxHp * BOSS_CFG.enrageAt;
+  const speedK = b.enraged ? 1.5 : 1;
+
+  if (b.hopping > 0) {
+    b.hopping -= dt;
+    b.x += b.vx * dt; b.y += b.vy * dt;   // el Coloso no respeta los muros: es un coloso
+    b.frame = 2;
+    if (b.hopping <= 0) bossLand(b);
+  } else {
+    b.frame = b.hopT < 0.25 ? 1 : 0;
+    b.hopT -= dt * speedK;
+    if (b.hopT <= 0) {
+      const ang = Math.atan2(player.y - b.y, player.x - b.x) + randRange(-0.15, 0.15);
+      b.vx = Math.cos(ang) * BOSS_CFG.hopSpeed * speedK;
+      b.vy = Math.sin(ang) * BOSS_CFG.hopSpeed * speedK;
+      b.hopping = BOSS_CFG.hopTime;
+    }
+  }
+
+  // oleadas de esbirros
+  b.minionT -= dt;
+  if (b.minionT <= 0) {
+    b.minionT = BOSS_CFG.minionEvery;
+    for (let i = 0; i < 2; i++) {
+      if (mobs.length < CFG.MOB_CAP + 4) {
+        spawnMob('slime', b.x + randRange(-1.5, 1.5), b.y + randRange(-1.5, 1.5));
+      }
+    }
+    spawnParticles(b.x, b.y, '#6cd44a', 10);
+  }
+
+  // contacto directo con el cuerpo
+  if (!player.dead && player.invuln <= 0 && dist2(b.x, b.y, player.x, player.y) < 1.2) {
+    damagePlayer(1, b);
+  }
+}
+
+function damageBoss(dmg) {
+  const b = G.boss;
+  if (!b) return;
+  if (typeof Net !== 'undefined' && Net.online) {
+    Net.sendBossHit(dmg);                 // el servidor lleva la cuenta
+    b.hurtT = 0.2;
+    addFloater(b.x, b.y - 1.2, '-' + dmg, '#ffd34d');
+    spawnParticles(b.x, b.y, '#6cd44a', 6);
+    Sfx.mobHurt();
+    return;
+  }
+  b.hp -= dmg;
+  b.hurtT = 0.2;
+  addFloater(b.x, b.y - 1.2, '-' + dmg, '#ffd34d');
+  spawnParticles(b.x, b.y, '#6cd44a', 6);
+  Sfx.mobHurt();
+  UI.updateBossBar();
+  if (b.hp <= 0) killBoss();
+}
+
+function killBoss() {
+  const b = G.boss;
+  if (!b) return;
+  for (const [id, n, p] of BOSS_CFG.loot) {
+    if (Math.random() < p) {
+      for (let i = 0; i < n; i++) {
+        spawnDrop(b.x + randRange(-1.5, 1.5), b.y + randRange(-1.5, 1.5), id, 1);
+      }
+    }
+  }
+  spawnParticles(b.x, b.y, '#6cd44a', 40);
+  spawnParticles(b.x, b.y, '#e8c14d', 20);
+  G.shake = 0.6;
+  Sfx.bossDie();
+  G.boss = null;
+  UI.hideBossBar();
+  UI.toast('¡' + BOSS_CFG.name + ' ha caído! La noche respira aliviada.');
+}
+
+/* ---------- torres: proyectiles ---------- */
+
+function spawnArrow(x, y, txx, tyy, dmg) {
+  const ang = Math.atan2(tyy - y, txx - x);
+  projectiles.push({
+    x, y, ang,
+    vx: Math.cos(ang) * 10, vy: Math.sin(ang) * 10,
+    life: 1.2, dmg,
+  });
+  Sfx.arrow();
+}
+
+function updateProjectiles(dt) {
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    p.life -= dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    let hit = p.life <= 0;
+    if (!hit) {
+      for (const m of mobs) {
+        if (!m.dead && dist2(m.x, m.y, p.x, p.y) < 0.22) {
+          damageMob(m, p.dmg);
+          hit = true;
+          break;
+        }
+      }
+      if (!hit && G.boss && dist2(G.boss.x, G.boss.y, p.x, p.y) < 1.2) {
+        damageBoss(p.dmg);
+        hit = true;
+      }
+    }
+    if (hit) projectiles.splice(i, 1);
   }
 }
 
@@ -180,7 +406,11 @@ function updateDrops(dt) {
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
     d.age += dt;
-    // física vertical con rebote
+    d.ttl += dt;
+    if (d.ttl > CFG.DROP_TTL || dist2(d.x, d.y, player.x, player.y) > 48 * 48) {
+      drops.splice(i, 1);
+      continue;
+    }
     d.vz -= 12 * dt;
     d.z += d.vz * dt;
     if (d.z <= 0) {
@@ -192,7 +422,7 @@ function updateDrops(dt) {
 
     if (player.dead || d.age < 0.4) continue;
     const pd = dist2(d.x, d.y, player.x, player.y);
-    if (pd < 2.6) { // imán hacia el jugador
+    if (pd < 2.6) {
       const ang = Math.atan2(player.y - d.y, player.x - d.x);
       d.x += Math.cos(ang) * 6 * dt;
       d.y += Math.sin(ang) * 6 * dt;
@@ -207,7 +437,7 @@ function updateDrops(dt) {
         if (UI.panelOpen) { UI.refreshInv(); UI.refreshCraft(); }
       }
       if (left === 0) drops.splice(i, 1);
-      else { d.n = left; d.age = -3; } // inventario lleno: reintenta más tarde
+      else { d.n = left; d.age = -3; }
     }
   }
 }

@@ -1,33 +1,43 @@
 # ⛏ PixelRealm
 
-**Mundo abierto infinito estilo Minecraft · Vista isométrica tipo Diablo/Warcraft · Pixel art 100 % procedural**
+**Mundo abierto infinito estilo Minecraft · Vista isométrica tipo Diablo/Warcraft · Pixel art 100 % procedural · Cooperativo online**
 
-Un juego de supervivencia y construcción para navegador hecho **solo con JavaScript vanilla y Canvas**: cero dependencias, cero assets externos. Cada sprite — tiles, árboles, el héroe, las babas, los iconos — se dibuja píxel a píxel por código al arrancar. El sonido también es sintetizado en tiempo real con WebAudio.
+Un juego de supervivencia, construcción y cooperación para navegador hecho **solo con JavaScript vanilla**: cero dependencias, cero assets externos. Cada sprite — tiles, árboles, el héroe, los monstruos, los edificios — se dibuja píxel a píxel por código al arrancar. El sonido se sintetiza con WebAudio. Y el multijugador corre sobre un **WebSocket implementado a mano** (handshake SHA-1 y frames RFC 6455 sobre `net`/`http` de Node).
 
 ## 🎮 Jugar
 
-**Opción 1 — directamente:** abre `index.html` en el navegador. Ya está.
+**Un jugador:** abre `index.html` en el navegador, o juega en GitHub Pages. Ya está.
 
-**Opción 2 — servidor local:**
+**Multijugador cooperativo:**
 
 ```bash
-npm start          # o: node server.js
-# → http://localhost:5173
+node server.js
+# → http://localhost:5173  (cada visitante entra al MISMO mundo)
 ```
+
+Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. Para jugar con gente fuera de tu red, despliega `server.js` en cualquier hosting de Node (Render, Fly.io, Railway, un VPS…) o comparte tu puerto con un túnel (Tailscale, ngrok). El mundo se guarda en `world-server.json` y sobrevive a los reinicios.
 
 ## ✨ Características
 
-- **Mundo infinito por chunks** con biomas generados por ruido fractal determinista: océanos, playas, praderas, bosques densos, desiertos con cactus, tundras nevadas con pinos y montañas rocosas. La misma semilla genera siempre el mismo mundo.
-- **Vista isométrica 2:1** con orden de profundidad correcto, cámara suave y renderizado a baja resolución reescalado para un look pixel genuino.
-- **Recolección con herramientas**: tala árboles, pica rocas, recoge fibra y bayas. Cada herramienta es eficaz contra su material (hacha → madera, pico → piedra, espada → combate).
-- **Crafteo**: tablones, palos, hacha, pico, espada, antorchas, fogatas y muros de madera y piedra.
-- **Construcción**: levanta muros con volumen isométrico real, ilumina con antorchas y fogatas.
-- **Ciclo día/noche** con atardeceres cálidos y noches oscuras donde las luces (antorchas, fogatas, la antorcha en tu mano) abren agujeros de luz reales en la oscuridad.
-- **Babas nocturnas** que te persiguen a saltos. Combate con retroceso, números de daño flotantes y botín.
-- **Vida, comida y regeneración**: come bayas, evita el agua profunda, sobrevive.
-- **Inventario de 36 casillas + barra rápida**, minimapa en vivo, mensajes de ayuda, todo en español.
-- **Guardado automático** en localStorage: solo se persisten los chunks que has modificado; el resto se regenera de la semilla.
-- **Sonido procedural** con WebAudio: talar, picar, craftear, recoger, daño… ni un solo archivo de audio.
+- **Mundo infinito por chunks** con biomas de ruido fractal determinista: océanos, praderas, bosques (con árboles frutales), desiertos, tundras y montañas. La misma semilla genera siempre el mismo mundo.
+- **Vista isométrica 2:1** con orden de profundidad, cámara suave, iluminación nocturna real (las luces abren agujeros en la oscuridad) y render a baja resolución reescalado.
+- **Héroe en alta definición**: dibujado a doble densidad de píxel con suavizado, ciclo de andar de 4 pasos, pose de ataque con la herramienta en la mano y polvillo en los pies.
+- **Recolección y crafteo**: hacha, pico y espada; tablones, antorchas, fogatas, muros.
+- **Construcciones prefab estilo SimCity** (pestaña «Construcciones» del panel):
+  - 🏠 **Cabaña** — fija tu punto de reaparición
+  - 🏹 **Torre arquera** — dispara flechas sola a los monstruos
+  - 🪚 **Aserradero** / ⛏ **Cantera** / 🫐 **Huerto** — producen recursos con el tiempo; recógelos con clic derecho
+  - 🔥 **Brasero** — un gran círculo de luz nocturna
+  - 🗿 **Altar antiguo** — invoca al jefe… si te atreves
+- **Tres enemigos nocturnos**: babas saltarinas, sombras que caminan sin descanso (sueltan esencia oscura) y murciélagos que vuelan sobre tus muros.
+- **El Coloso de Baba**: jefe con barra de vida, salto con onda expansiva, oleadas de esbirros y enfado al 30 % de vida. Viene solo cada 3ª noche o cuando alguien activa un altar. Suelta una corona.
+- **Multijugador cooperativo sin PvP**:
+  - Chat integrado (tecla `T`) con bocadillos sobre los jugadores.
+  - **Lo que construyes es tuyo**: cualquiera puede *usar* tu huerto, tus torres o calentarse en tu fogata, pero solo tú puedes destruirlo.
+  - El Coloso escala su vida con los jugadores conectados: es el enemigo de todos, y al caer llueve botín para todos.
+  - Bonus «calor de hogar»: regeneras el doble junto a una hoguera con compañía.
+  - Reloj y mundo compartidos y persistentes en el servidor.
+- **Guardado automático** en localStorage (un jugador) y en `world-server.json` (servidor).
 
 ## ⌨ Controles
 
@@ -35,9 +45,10 @@ npm start          # o: node server.js
 |---|---|
 | `WASD` / flechas | Moverse |
 | Clic izquierdo (mantener) | Golpear / talar / picar / atacar |
-| Clic derecho | Colocar objeto / comer |
-| `1–9` / rueda del ratón | Seleccionar en la barra rápida |
-| `E` | Inventario y fabricación |
+| Clic derecho | Colocar · comer · recoger producción · activar altar |
+| `1–9` / rueda | Seleccionar en la barra rápida |
+| `E` | Inventario, fabricación y construcciones |
+| `T` | Chat (online) |
 | `H` | Ayuda |
 | `M` | Silenciar |
 
@@ -48,27 +59,33 @@ index.html
 css/style.css        UI retro (Press Start 2P, marcos pixelados)
 js/
   utils.js           hash determinista, ruido de valor, fBm
-  config.js          datos: tiles, objetos, items, recetas
+  config.js          datos: tiles, objetos, items, recetas, enemigos, jefe
   assets.js          TODO el pixel art, generado en canvas al vuelo
   audio.js           sintetizador WebAudio
-  world.js           chunks infinitos + biomas (elevación/humedad/temperatura)
+  world.js           chunks infinitos + biomas + edificios 2x2
   inventory.js       inventario y crafteo
-  entities.js        jugador, babas, drops, partículas
-  input.js           teclado y ratón
-  renderer.js        proyección isométrica, culling, iluminación nocturna
-  ui.js              HUD, paneles, minimapa
-  save.js            persistencia en localStorage
-  main.js            bucle del juego, día/noche, interacciones
+  entities.js        jugador, enemigos (3 IAs), jefe, flechas, drops
+  input.js           teclado, ratón y chat
+  renderer.js        proyección isométrica, culling, luces, jugadores remotos
+  ui.js              HUD, paneles, minimapa, chat, barra del jefe
+  save.js            persistencia local (un jugador y por-mundo online)
+  net.js             cliente multijugador
+  main.js            bucle, día/noche, producción, torres, Noche del Coloso
+server.js            estáticos + WebSocket artesanal + autoridad del mundo
+tools/bot.js         bot de pruebas del multijugador
 ```
 
-Sin build, sin framework, sin npm install. ~3000 líneas de JS clásico cargado con `<script>`.
+Sin build, sin framework, sin `npm install`. Nada de dependencias: ni en el cliente ni en el servidor.
 
 ## 🗺 Hoja de ruta
 
-- [ ] Multijugador con WebSockets (ver a otros jugadores en tu mundo)
+- [x] Construcciones con función (producción, defensa, luz, respawn)
+- [x] Jefe cooperativo y nuevos enemigos
+- [x] Multijugador con chat y propiedad de construcciones
+- [ ] Intercambio de objetos entre jugadores
 - [ ] Minerales (carbón, hierro) y segundo nivel de herramientas
-- [ ] Animales pasivos y agricultura
-- [ ] Cuevas / interiores
+- [ ] Animales pasivos y agricultura plantable
+- [ ] Más jefes (uno por bioma)
 - [ ] Soporte táctil para móvil
 
 ## Licencia

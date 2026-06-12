@@ -107,6 +107,86 @@ html, body {
 .slot.selected { box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 2px var(--accent-dark); background: #2e2516; }
 .slot.swap-src { box-shadow: inset 0 0 0 2px #e8c14d; }
 
+/* ---------- barra del jefe ---------- */
+#bossbar {
+  position: absolute; top: 16px; left: 50%;
+  transform: translateX(-50%);
+  width: min(440px, 60vw);
+  text-align: center;
+  pointer-events: none !important;
+}
+#bossname {
+  font-size: 10px; color: #ffb8b8;
+  text-shadow: 2px 2px 0 #000;
+  display: block; margin-bottom: 6px;
+}
+#bosstrack {
+  height: 12px;
+  background: #1c0f0f;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #5e2020;
+}
+#bossfill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(180deg, #6fce4e, #3f8f2c);
+  transition: width 0.25s;
+}
+#bossfill.enraged { background: linear-gradient(180deg, #e85a3a, #b03020); }
+
+/* ---------- chat ---------- */
+#chat {
+  position: absolute; bottom: 90px; left: 14px;
+  width: min(380px, 44vw);
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 8px;
+}
+#chat-log { display: flex; flex-direction: column; gap: 3px; }
+.chat-line {
+  background: rgba(10, 8, 5, 0.72);
+  color: var(--parchment);
+  padding: 5px 8px;
+  line-height: 1.5;
+  word-break: break-word;
+  max-width: 100%;
+  width: fit-content;
+}
+.chat-line b { color: #8fd45e; font-weight: normal; }
+@keyframes chat-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; } }
+#chat-inputrow { display: flex; gap: 4px; }
+#chat-input {
+  flex: 1;
+  font-family: var(--pixel-font); font-size: 9px;
+  background: #1c150c; color: var(--parchment);
+  border: none; padding: 8px;
+  box-shadow: 0 0 0 2px var(--wood-dark);
+  outline: none;
+}
+#chat-input:focus { box-shadow: 0 0 0 2px var(--accent-dark); }
+#chat-send {
+  font-family: var(--pixel-font); font-size: 10px;
+  background: var(--accent-dark); color: #fff;
+  border: none; padding: 0 12px; cursor: pointer;
+}
+#chat-hint { color: #5d6b55; font-size: 7px; }
+
+/* ---------- pestañas del panel ---------- */
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button {
+  font-family: var(--pixel-font); font-size: 9px;
+  background: #241b10; color: #8d7c5c;
+  border: none; padding: 8px 12px; cursor: pointer;
+  box-shadow: inset 0 0 0 2px var(--wood-dark);
+}
+.tabs button.active { color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent-dark); }
+.rdesc { font-size: 7px; color: #7fa86b; display: block; margin-top: 3px; line-height: 1.5; }
+
+.bigbtn.online {
+  background: #2a5d8f;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #1d4368, 0 6px 0 4px #122a42;
+}
+.bigbtn.online:hover { background: #3a7ac0; }
+.bigbtn.online:active { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #1d4368, 0 2px 0 4px #122a42; }
+
 /* ---------- panel inventario / crafteo ---------- */
 #panel {
   position: absolute; top: 50%; left: 50%;
@@ -130,14 +210,14 @@ html, body {
 #invgrid .slot:nth-child(-n+9) { background: #2a2113; }
 .hint { font-size: 7px; color: #8d7c5c; margin-top: 10px; line-height: 1.6; }
 
-#craftlist {
+#craftlist, #buildlist {
   display: flex; flex-direction: column; gap: 6px;
-  max-height: 60vh; overflow-y: auto;
+  max-height: 56vh; overflow-y: auto;
   padding-right: 6px;
-  min-width: 320px;
+  min-width: 340px;
 }
-#craftlist::-webkit-scrollbar { width: 8px; }
-#craftlist::-webkit-scrollbar-thumb { background: var(--wood); }
+#craftlist::-webkit-scrollbar, #buildlist::-webkit-scrollbar { width: 8px; }
+#craftlist::-webkit-scrollbar-thumb, #buildlist::-webkit-scrollbar-thumb { background: var(--wood); }
 .recipe {
   display: flex; align-items: center; gap: 10px;
   background: #241b10;

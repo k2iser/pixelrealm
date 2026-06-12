@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PixelRealm — Mundo abierto isométrico</title>
-<meta name="description" content="Un mundo abierto infinito estilo Minecraft con vista isométrica tipo Diablo, hecho en pixel art procedural. JS vanilla, cero dependencias.">
+<meta name="description" content="Un mundo abierto infinito estilo Minecraft con vista isométrica tipo Diablo, hecho en pixel art procedural. JS vanilla, cero dependencias. Cooperativo online.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -23,13 +23,29 @@
     </div>
   </div>
 
+  <!-- Barra del jefe -->
+  <div id="bossbar" class="hidden">
+    <span id="bossname">El Coloso de Baba</span>
+    <div id="bosstrack"><div id="bossfill"></div></div>
+  </div>
+
   <!-- Minimapa -->
   <canvas id="minimap" width="132" height="132" class="hidden"></canvas>
+
+  <!-- Chat (multijugador) -->
+  <div id="chat" class="hidden">
+    <div id="chat-log"></div>
+    <div id="chat-inputrow" class="hidden">
+      <input id="chat-input" type="text" maxlength="120" placeholder="Escribe y pulsa Enter…" autocomplete="off">
+      <button id="chat-send">➤</button>
+    </div>
+    <div id="chat-hint">T para hablar</div>
+  </div>
 
   <!-- Barra rápida -->
   <div id="hotbar" class="hidden"></div>
 
-  <!-- Panel inventario + fabricación -->
+  <!-- Panel inventario + fabricación/construcción -->
   <div id="panel" class="hidden">
     <div class="panel-col">
       <h3>Inventario</h3>
@@ -37,8 +53,12 @@
       <p class="hint">Clic en dos casillas para intercambiarlas</p>
     </div>
     <div class="panel-col">
-      <h3>Fabricación</h3>
+      <div class="tabs">
+        <button id="tab-craft" class="active">Fabricación</button>
+        <button id="tab-build">Construcciones</button>
+      </div>
       <div id="craftlist"></div>
+      <div id="buildlist" class="hidden"></div>
     </div>
     <button id="btn-close-panel" title="Cerrar (E)">✕</button>
   </div>
@@ -49,13 +69,16 @@
     <table>
       <tr><td>WASD / Flechas</td><td>Moverse</td></tr>
       <tr><td>Clic izq. (mantener)</td><td>Golpear / talar / picar</td></tr>
-      <tr><td>Clic derecho</td><td>Colocar objeto / comer</td></tr>
+      <tr><td>Clic derecho</td><td>Colocar · comer · recoger producción · activar altar</td></tr>
       <tr><td>1–9 / Rueda</td><td>Elegir de la barra</td></tr>
-      <tr><td>E</td><td>Inventario y fabricación</td></tr>
+      <tr><td>E</td><td>Inventario, fabricación y construcciones</td></tr>
+      <tr><td>T</td><td>Chat (online)</td></tr>
       <tr><td>H</td><td>Esta ayuda</td></tr>
       <tr><td>M</td><td>Silenciar sonido</td></tr>
     </table>
-    <p class="hint">Tala árboles, fabrica herramientas, construye un refugio…<br>y sobrevive a la noche.</p>
+    <p class="hint">Construye aserraderos y canteras para generar recursos,<br>
+    torres para defenderte… y un altar si te atreves a despertar al Coloso.<br>
+    Cada 3ª noche vendrá él solito. Online nadie puede romper lo tuyo: cooperad.</p>
   </div>
 
   <div id="toast"></div>
@@ -63,7 +86,7 @@
   <!-- Pantalla de muerte -->
   <div id="death-overlay" class="overlay hidden">
     <h1 class="death-title">HAS MUERTO</h1>
-    <p>Las babas de la noche te han alcanzado…</p>
+    <p>La noche ha podido contigo… esta vez.</p>
     <button id="btn-respawn" class="bigbtn">Reaparecer</button>
   </div>
 
@@ -71,20 +94,25 @@
   <div id="title-overlay" class="overlay">
     <div class="title-box">
       <h1 class="logo">PIXEL<span>REALM</span></h1>
-      <p class="tagline">Mundo abierto infinito · Vista isométrica · Pixel art procedural</p>
+      <p class="tagline">Mundo abierto infinito · Vista isométrica · Pixel art procedural · Cooperativo</p>
       <div class="menu">
+        <div id="name-row" class="seedrow hidden">
+          <label for="name-input">Tu nombre:</label>
+          <input id="name-input" type="text" placeholder="Aventurera" maxlength="14" autocomplete="off">
+        </div>
+        <button id="btn-online" class="bigbtn online hidden">Entrar al mundo compartido</button>
         <button id="btn-continue" class="bigbtn hidden">Continuar partida</button>
-        <button id="btn-new" class="bigbtn">Nuevo mundo</button>
+        <button id="btn-new" class="bigbtn">Nuevo mundo (un jugador)</button>
         <div class="seedrow">
           <label for="seed-input">Semilla:</label>
           <input id="seed-input" type="text" placeholder="aleatoria" maxlength="24" autocomplete="off">
         </div>
       </div>
       <div class="title-controls">
-        <span>WASD moverse</span><span>Clic izq. golpear</span><span>Clic der. colocar</span>
-        <span>E inventario</span><span>H ayuda</span>
+        <span>WASD moverse</span><span>Clic izq. golpear</span><span>Clic der. colocar/usar</span>
+        <span>E inventario</span><span>T chat</span><span>H ayuda</span>
       </div>
-      <p class="credits">Hecho con JS vanilla + Canvas · Sin dependencias · Todo el arte se genera por código</p>
+      <p class="credits">Hecho con JS vanilla + Canvas + WebSocket artesanal · Sin dependencias · Todo el arte se genera por código</p>
     </div>
   </div>
 </div>
@@ -100,6 +128,7 @@
 <script src="js/renderer.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/save.js"></script>
+<script src="js/net.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
