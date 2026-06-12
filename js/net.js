@@ -24,6 +24,8 @@ const Net = {
   _warm: false,
   _warmT: 0,
   _joining: false,
+  _retryMs: 0,
+  _everUp: false,
 
   pid() {
     try {
@@ -45,7 +47,7 @@ const Net = {
     let ws;
     try { ws = new WebSocket(url); } catch (e) { return; }
     this.ws = ws;
-    ws.onopen = () => { this.available = true; };
+    ws.onopen = () => { this.available = true; this._everUp = true; this._retryMs = 0; };
     ws.onmessage = e => this.onMessage(e);
     ws.onclose = () => this.onClose();
     ws.onerror = () => { /* sin servidor WS: modo un jugador */ };
@@ -215,7 +217,8 @@ const Net = {
 
   addPlayer(p) {
     this.players.set(p.id, {
-      name: p.name, color: p.color || HERO_COLORS[0],
+      // color acotado a la paleta: evita llenar la caché de sets del héroe
+      name: p.name, color: HERO_COLORS.includes(p.color) ? p.color : HERO_COLORS[0],
       x: p.x || 0, y: p.y || 0, px: p.x || 0, py: p.y || 0,
       dir: p.dir || 'down', frameI: p.frameI || 0, hp: p.hp || 10,
       bubble: '', bubbleT: 0,
@@ -290,10 +293,22 @@ const Net = {
     this.players.clear();
     UI.updateOnlineButton(false, 0);
     if (wasOnline) {
-      Save.write();
+      // writeMp directamente: Save.write() ya enruta por Net.online (false aquí)
+      // y machacaría la partida local de un jugador con el mundo del servidor
+      Save.writeMp();
       G.running = false;
       UI.hideChat();
       UI.showTitleAgain('Se perdió la conexión con el mundo compartido');
     }
+    this.scheduleReprobe();
+  },
+
+  // Reintenta encontrar el servidor con espera creciente: tras una caída
+  // se puede volver a entrar sin recargar la página.
+  scheduleReprobe() {
+    if (!location.host || !location.protocol.startsWith('http')) return;
+    if (!this._everUp && this._retryMs >= 8000) return; // sin servidor (p.ej. GitHub Pages): deja de insistir
+    this._retryMs = Math.min(this._retryMs ? this._retryMs * 2 : 2000, 30000);
+    setTimeout(() => { if (!this.available) this.probe(); }, this._retryMs);
   },
 };

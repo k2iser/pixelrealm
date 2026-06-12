@@ -28,6 +28,10 @@ const PROD = {                       // id de objeto -> producción
   16: { item: 'berry', per: 45, cap: 8 },   // huerto
 };
 const BUILDING_IDS = [12, 13, 14, 15, 16, 17, 18];
+const PLACE_IDS = [8, 9, 10, 11];              // muros, antorcha, fogata: lo único colocable suelto
+const SOLID_PLACE = new Set([8, 9, 11]);       // sólidos que podrían emparedar (la antorcha no)
+const SIZE = { 12: 2, 13: 1, 14: 2, 15: 2, 16: 2, 17: 1, 18: 2 };  // huella de cada edificio
+const HERO_COLORS = ['#2e8f83', '#c0563a', '#7a5fc0', '#3a7ac0', '#c09a3a', '#58a04a', '#c05a8a', '#36b3c9'];
 const BOSS = { hp: 80, hpPerExtra: 50, hopTime: 0.55, hopSpeed: 4.2, minionEvery: 11, enrageAt: 0.3 };
 
 /* ================= estado persistente ================= */
@@ -35,10 +39,17 @@ const BOSS = { hp: 80, hpPerExtra: 50, hopTime: 0.55, hopSpeed: 4.2, minionEvery
 function rndHex(n) { return crypto.randomBytes(n).toString('hex'); }
 
 function loadState() {
-  try {
-    const s = JSON.parse(fs.readFileSync(WORLD_FILE, 'utf8'));
-    if (s && typeof s.seed === 'number' && s.worldId) return s;
-  } catch (e) { /* primera ejecución */ }
+  // intenta el fichero principal y después la copia de seguridad
+  for (const f of [WORLD_FILE, WORLD_FILE + '.bak']) {
+    try {
+      const s = JSON.parse(fs.readFileSync(f, 'utf8'));
+      if (s && typeof s.seed === 'number' && s.worldId) return s;
+    } catch (e) { /* probar el siguiente */ }
+  }
+  if (fs.existsSync(WORLD_FILE)) {
+    console.error('AVISO: world-server.json corrupto y sin .bak válido; se conserva como .corrupt');
+    try { fs.renameSync(WORLD_FILE, WORLD_FILE + '.corrupt'); } catch (e) { /* mala suerte */ }
+  }
   return null;
 }
 
@@ -51,11 +62,16 @@ let state = loadState() || {
   buildings: {},  // "x,y" -> { id, stock, lastT, owner: {id,name} }
 };
 let dirty = false;
+let editCount = Object.keys(state.edits).length;  // tope de memoria/disco para clientes hostiles
 
 function saveState() {
   refreshAllStocks();
   try {
-    fs.writeFileSync(WORLD_FILE, JSON.stringify(state));
+    // escritura atómica: o queda el JSON viejo o el nuevo, nunca uno a medias
+    const tmp = WORLD_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state));
+    try { fs.copyFileSync(WORLD_FILE, WORLD_FILE + '.bak'); } catch (e) { /* aún no existe */ }
+    fs.renameSync(tmp, WORLD_FILE);
     dirty = false;
   } catch (e) {
     console.error('No se pudo guardar el mundo:', e.message);
@@ -279,10 +295,83 @@ function bossForClient() {
   };
 }
 
+/* ---- validación y resolución de propiedad ---- */
+
+function buildingRect(k, b) {
+  const i = k.indexOf(',');
+  return { x: +k.slice(0, i), y: +k.slice(i + 1), s: SIZE[b.id] || 1 };
+}
+
+// ¿Qué edificio cubre la casilla (x,y)? Devuelve su clave de ancla o null.
+function buildingCovering(x, y) {
+  for (const [dx, dy] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) {
+    const k = (x + dx) + ',' + (y + dy);
+    const b = state.buildings[k];
+    if (b && (SIZE[b.id] || 1) > Math.max(-dx, -dy)) return k;
+  }
+  return null;
+}
+
+// Dueño de lo que ocupa la casilla: ancla o PART de edificio, o edición con objeto
+function occupantOwner(x, y) {
+  const bk = buildingCovering(x, y);
+  if (bk) return state.buildings[bk].owner || 0;
+  const e = state.edits[x + ',' + y];
+  return (e && e.o !== O_NONE && e.owner) ? e.owner : 0;
+}
+
+// Coordenadas creíbles: dentro del mundo y al alcance del jugador que las envía
+function validXY(p, m) {
+  const x = m.x | 0, y = m.y | 0;
+  if (Math.abs(x) >= 1e6 || Math.abs(y) >= 1e6) return null;
+  if (Math.abs(x - p.x) > 16 || Math.abs(y - p.y) > 16) return null;
+  return { x, y };
+}
+
+// Cubo de fichas: máx. ~8 ediciones/s por conexión (ráfaga inicial de 20)
+function takeEdit(p) {
+  const now = Date.now();
+  p.editTokens = Math.min(20, (p.editTokens == null ? 20 : p.editTokens) + (now - (p.editRefill || now)) / 125);
+  p.editRefill = now;
+  if (p.editTokens < 1) return false;
+  p.editTokens -= 1;
+  return true;
+}
+
+// ¿La huella (size x size) pisa el cuerpo de algún otro jugador?
+function footprintHitsPlayer(tx, ty, size, exceptId) {
+  const R = 0.45; // margen por la latencia de las posiciones
+  for (const [id, pl] of players) {
+    if (id === exceptId) continue;
+    if (tx + size - 1 >= Math.floor(pl.x - R) && tx <= Math.floor(pl.x + R) &&
+        ty + size - 1 >= Math.floor(pl.y - R) && ty <= Math.floor(pl.y + R)) return true;
+  }
+  return false;
+}
+
+// Reenvía a UN cliente el estado real de un área (tras denegar su edición optimista)
+function resyncTiles(conn, x0, y0, sz) {
+  for (let dy = 0; dy < sz; dy++) {
+    for (let dx = 0; dx < sz; dx++) {
+      const x = x0 + dx, y = y0 + dy;
+      const e = state.edits[x + ',' + y];
+      wsSendObj(conn, { t: 'edit', x, y, o: e ? e.o : O_NONE, owner: (e && e.owner) || 0 });
+    }
+  }
+  for (const k in state.buildings) {
+    const b = state.buildings[k];
+    const r = buildingRect(k, b);
+    if (x0 < r.x + r.s && x0 + sz > r.x && y0 < r.y + r.s && y0 + sz > r.y) {
+      wsSendObj(conn, { t: 'bedit', action: 'add', x: r.x, y: r.y, o: b.id, owner: b.owner });
+    }
+  }
+}
+
 function handleMessage(conn, m) {
   const p = conn.player;
 
   if (m.t === 'hello') {
+    if (conn.player) return; // una conexión registra UN jugador; hellos extra se ignoran
     const pid = sanitizeText(m.pid, 32) || rndHex(8);
     if (players.has(pid)) {
       wsSendObj(conn, { t: 'denied', m: 'Ya hay una sesión abierta con esta identidad' });
@@ -292,7 +381,7 @@ function handleMessage(conn, m) {
     const player = {
       conn, id: pid,
       name: sanitizeText(m.name, 14) || 'Anónima',
-      color: /^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '#2e8f83',
+      color: HERO_COLORS.includes((m.color || '').toLowerCase()) ? m.color : HERO_COLORS[0],
       x: 0, y: 0, dir: 'down', f: 0, hp: 10, chatT: 0,
     };
     conn.player = player;
@@ -320,8 +409,8 @@ function handleMessage(conn, m) {
     case 'st':
       if (typeof m.x === 'number' && Math.abs(m.x) < 1e6) p.x = m.x;
       if (typeof m.y === 'number' && Math.abs(m.y) < 1e6) p.y = m.y;
-      if (typeof m.dir === 'string') p.dir = m.dir;
-      p.f = m.f | 0;
+      if (m.dir === 'down' || m.dir === 'up' || m.dir === 'left' || m.dir === 'right') p.dir = m.dir;
+      p.f = Math.min(5, Math.max(0, m.f | 0));   // valores fuera de rango romperían el render ajeno
       p.hp = m.hp | 0;
       break;
 
@@ -336,56 +425,107 @@ function handleMessage(conn, m) {
     }
 
     case 'place': {
-      const key = (m.x | 0) + ',' + (m.y | 0);
+      const c = validXY(p, m);
+      if (!c || !PLACE_IDS.includes(m.o | 0) || !takeEdit(p)) return;
+      const key = c.x + ',' + c.y;
+      const own = occupantOwner(c.x, c.y);
+      if (own && own.id !== p.id) {
+        wsSendObj(conn, { t: 'denied', m: 'Esto lo construyó ' + own.name });
+        resyncTiles(conn, c.x, c.y, 1);
+        return;
+      }
+      if (buildingCovering(c.x, c.y)) { resyncTiles(conn, c.x, c.y, 1); return; }
+      if (SOLID_PLACE.has(m.o | 0) && footprintHitsPlayer(c.x, c.y, 1, p.id)) {
+        wsSendObj(conn, { t: 'denied', m: 'Hay alguien ahí' });
+        resyncTiles(conn, c.x, c.y, 1);
+        return;
+      }
+      if (!(key in state.edits)) {
+        if (editCount > 200000) return;
+        editCount++;
+      }
       state.edits[key] = { o: m.o | 0, owner: { id: p.id, name: p.name } };
       dirty = true;
-      broadcast({ t: 'edit', x: m.x | 0, y: m.y | 0, o: m.o | 0, owner: { id: p.id, name: p.name } }, p.id);
+      broadcast({ t: 'edit', x: c.x, y: c.y, o: m.o | 0, owner: { id: p.id, name: p.name } }, p.id);
       break;
     }
 
     case 'break': {
-      const key = (m.x | 0) + ',' + (m.y | 0);
-      const e = state.edits[key];
-      if (e && e.owner && e.owner.id !== p.id) {
-        wsSendObj(conn, { t: 'denied', m: 'Esto lo construyó ' + e.owner.name });
-        // re-sincroniza al cliente optimista
-        wsSendObj(conn, { t: 'edit', x: m.x | 0, y: m.y | 0, o: e.o, owner: e.owner });
+      const c = validXY(p, m);
+      if (!c || !takeEdit(p)) return;
+      const key = c.x + ',' + c.y;
+      const own = occupantOwner(c.x, c.y);   // cubre también las casillas PART de edificios ajenos
+      if (own && own.id !== p.id) {
+        wsSendObj(conn, { t: 'denied', m: 'Esto lo construyó ' + own.name });
+        resyncTiles(conn, c.x, c.y, 1);
         return;
+      }
+      if (buildingCovering(c.x, c.y)) return; // los edificios se demuelen con 'bbreak'
+      if (!(key in state.edits)) {
+        if (editCount > 200000) return;
+        editCount++;
       }
       state.edits[key] = { o: O_NONE, owner: 0 };
       dirty = true;
-      broadcast({ t: 'edit', x: m.x | 0, y: m.y | 0, o: O_NONE, owner: 0 }, p.id);
+      broadcast({ t: 'edit', x: c.x, y: c.y, o: O_NONE, owner: 0 }, p.id);
       break;
     }
 
     case 'bplace': {
-      if (!BUILDING_IDS.includes(m.o | 0)) return;
-      const key = (m.x | 0) + ',' + (m.y | 0);
+      const c = validXY(p, m);
+      if (!c || !BUILDING_IDS.includes(m.o | 0) || !takeEdit(p)) return;
+      const sz = SIZE[m.o | 0] || 1;
+      let conflict = footprintHitsPlayer(c.x, c.y, sz, p.id) ? 'Hay alguien ahí' : null;
+      for (let dy = 0; dy < sz && !conflict; dy++) {
+        for (let dx = 0; dx < sz && !conflict; dx++) {
+          const e = state.edits[(c.x + dx) + ',' + (c.y + dy)];
+          if ((e && e.o !== O_NONE) || buildingCovering(c.x + dx, c.y + dy)) {
+            conflict = 'Ahí ya hay algo construido';
+          }
+        }
+      }
+      if (conflict) {
+        // revierte la colocación optimista del cliente y restaura lo legítimo
+        wsSendObj(conn, { t: 'denied', m: conflict });
+        wsSendObj(conn, { t: 'bedit', action: 'remove', x: c.x, y: c.y });
+        resyncTiles(conn, c.x, c.y, sz);
+        return;
+      }
+      const key = c.x + ',' + c.y;
       const owner = { id: p.id, name: p.name };
+      if (!(key in state.edits)) {
+        if (editCount > 200000) return;
+        editCount++;
+      }
       state.edits[key] = { o: m.o | 0, owner };
       state.buildings[key] = { id: m.o | 0, stock: 0, lastT: Date.now(), owner };
       dirty = true;
-      broadcast({ t: 'bedit', action: 'add', x: m.x | 0, y: m.y | 0, o: m.o | 0, owner }, p.id);
+      broadcast({ t: 'bedit', action: 'add', x: c.x, y: c.y, o: m.o | 0, owner }, p.id);
       break;
     }
 
     case 'bbreak': {
-      const key = (m.x | 0) + ',' + (m.y | 0);
+      const c = validXY(p, m);
+      if (!c || !takeEdit(p)) return;
+      const key = c.x + ',' + c.y;
       const b = state.buildings[key];
-      if (b && b.owner && b.owner.id !== p.id) {
+      if (!b) return; // no es un edificio: nada que demoler (ni que griefear)
+      if (b.owner && b.owner.id !== p.id) {
         wsSendObj(conn, { t: 'denied', m: 'Esto lo construyó ' + b.owner.name });
-        wsSendObj(conn, { t: 'bedit', action: 'add', x: m.x | 0, y: m.y | 0, o: b.id, owner: b.owner });
+        wsSendObj(conn, { t: 'bedit', action: 'add', x: c.x, y: c.y, o: b.id, owner: b.owner });
         return;
       }
       delete state.buildings[key];
       state.edits[key] = { o: O_NONE, owner: 0 };
       dirty = true;
-      broadcast({ t: 'bedit', action: 'remove', x: m.x | 0, y: m.y | 0 }, p.id);
+      broadcast({ t: 'bedit', action: 'remove', x: c.x, y: c.y }, p.id);
       break;
     }
 
     case 'collect': {
-      const key = (m.x | 0) + ',' + (m.y | 0);
+      const c = validXY(p, m);
+      if (!c || !takeEdit(p)) return;
+      const key = c.x + ',' + c.y;
       const b = state.buildings[key];
       if (!b || !PROD[b.id]) return;
       refreshStock(b);
@@ -393,23 +533,31 @@ function handleMessage(conn, m) {
       if (n < 1) return;
       b.stock -= n;
       dirty = true;
-      wsSendObj(conn, { t: 'collected', x: m.x | 0, y: m.y | 0, n, item: PROD[b.id].item });
+      wsSendObj(conn, { t: 'collected', x: c.x, y: c.y, n, item: PROD[b.id].item });
       broadcast({ t: 'bstocks', s: { [key]: +b.stock.toFixed(2) } });
       break;
     }
 
     case 'summon': {
-      const key = (m.x | 0) + ',' + (m.y | 0);
-      const e = state.edits[key];
+      const c = validXY(p, m);
+      if (!c || !takeEdit(p)) return;
+      const e = state.edits[c.x + ',' + c.y];
       if (!e || e.o !== O_ALTAR) return;
       if (boss) { wsSendObj(conn, { t: 'denied', m: 'El Coloso ya camina sobre el mundo' }); return; }
-      spawnBoss((m.x | 0) + 1, (m.y | 0) + 5);
+      spawnBoss(c.x + 1, c.y + 5);
       broadcast({ t: 'chat', id: 0, name: '✦', m: p.name + ' ha despertado al Coloso. ¡Todos a una!' });
       break;
     }
 
     case 'bhit': {
       if (!boss) return;
+      // solo golpes creíbles: con ritmo de ataque real y a distancia plausible
+      // (34 casillas: jugador a 26 de su torre + alcance 6.5 de la torre + margen)
+      const now = Date.now();
+      if (now - (p.bhitT || 0) < 250) return;
+      const dx = p.x - boss.x, dy = p.y - boss.y;
+      if (dx * dx + dy * dy > 34 * 34) return;
+      p.bhitT = now;
       const d = Math.min(5, Math.max(1, m.d | 0));
       boss.hp -= d;
       if (boss.hp <= 0) {

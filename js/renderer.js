@@ -77,7 +77,9 @@ function render(g, W, H) {
   for (let ty = tymin; ty <= tymax; ty++) {
     for (let tx = txmin; tx <= txmax; tx++) {
       const sx = w2sx(tx, ty) + ox, sy = w2sy(tx, ty) + oy;
-      if (sx < -CFG.TW || sx > W + CFG.HW || sy < -CFG.TH * 5 || sy > H + CFG.TH) continue;
+      // margen inferior amplio: los sprites altos (torre 60px) se anclan abajo
+      // y se extienden hacia ARRIBA en pantalla
+      if (sx < -CFG.TW || sx > W + CFG.TW || sy < -CFG.TH * 2 || sy > H + CFG.TH * 3) continue;
       const gr = world.ground(tx, ty);
       const frames = Assets.tiles[gr];
       let img;
@@ -280,7 +282,9 @@ function shadow(g, sx, sy, w) {
 // Dibuja un héroe (propio o remoto) con su herramienta al golpear
 function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId) {
   shadow(g, sx, sy, 10);
-  const img = set[dir][frameI];
+  // a prueba de estados remotos corruptos: dir/frame inválidos caen al defecto
+  const frames = set[dir] || set.down;
+  const img = frames[frameI] || frames[0];
   g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
@@ -415,7 +419,7 @@ function drawDrawable(g, d, ox, oy) {
     const sy = w2sy(pr.x, pr.y) + oy - 8;
     g.save();
     g.translate(Math.round(sx), Math.round(sy));
-    g.rotate(Math.atan2(pr.vy - pr.vx, (pr.vx + pr.vy) * 0.5)); // ángulo aproximado en pantalla
+    g.rotate(Math.atan2((pr.vx + pr.vy) * 0.5, pr.vx - pr.vy)); // ángulo de la velocidad proyectada a pantalla
     g.drawImage(Assets.arrow, -3, -1);
     g.restore();
     return;
@@ -449,6 +453,15 @@ function ghostPreview(g, hov, inReach, ox, oy) {
         if (overlapsTile(player, 0.3, hov.tx + dx, hov.ty + dy)) valid = false;
         for (const m of mobs) {
           if (overlapsTile(m, 0.3, hov.tx + dx, hov.ty + dy)) { valid = false; break; }
+        }
+        if (valid && typeof Net !== 'undefined' && Net.online) {
+          for (const [, rp] of Net.players) {
+            if (overlapsTile(rp, 0.45, hov.tx + dx, hov.ty + dy) ||
+                overlapsTile({ x: rp.px, y: rp.py }, 0.45, hov.tx + dx, hov.ty + dy)) {
+              valid = false;
+              break;
+            }
+          }
         }
       }
     }

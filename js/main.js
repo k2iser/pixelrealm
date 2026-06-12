@@ -14,6 +14,7 @@ const G = {
   shake: 0,
   boss: null,
   bossWarned: false,
+  bossNightDone: false,   // ya vino esta noche: que no reaparezca en bucle al matarlo
   saveFailWarned: false,
   spawn: { x: 0.5, y: 0.5 },
   spawnTimer: 0,
@@ -67,6 +68,8 @@ function startWorld(seed, data) {
     // guardados antiguos pueden traer hp<=0 (muerte + autosave): sanea
     player.hp = clamp(data.player.hp | 0, 1, player.maxHp);
     if ((data.player.hp | 0) <= 0) { player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp; }
+    const sp = safeSpawn(player.x, player.y); // por si la posición guardada quedó dentro de un sólido
+    player.x = sp.x; player.y = sp.y;
     Inv.slots = (data.inv || []).map(s => (s && ITEMS[s.id]) ? { id: s.id, n: s.n } : null);
     while (Inv.slots.length < 36) Inv.slots.push(null);
     Inv.slots.length = 36;
@@ -124,6 +127,8 @@ function startOnlineWorld(w) {
   }
   drops.length = 0;
   world.center = { x: player.x, y: player.y };
+  const osp = safeSpawn(player.x, player.y); // pudieron construir sobre tu posición mientras no estabas
+  player.x = osp.x; player.y = osp.y;
   G.online = true;
   if (w.boss) Net.applyBossState(w.boss);
   finishStart('Bienvenido al mundo compartido — sé amable, construid juntos');
@@ -139,6 +144,7 @@ function finishStart(msg) {
   _towerCd.clear();
   G.boss = null;
   G.bossWarned = false;
+  G.bossNightDone = false;
   cam.init = false;
   G.saveTimer = 0;
   G.running = true;
@@ -308,6 +314,16 @@ function tryUseItem() {
           for (const m of mobs) {
             if (overlapsTile(m, 0.3, h.tx + dx, h.ty + dy)) return;
           }
+          // nunca emparedes a otra persona (radio extra por la latencia)
+          if (typeof Net !== 'undefined' && Net.online) {
+            for (const [, rp] of Net.players) {
+              if (overlapsTile(rp, 0.45, h.tx + dx, h.ty + dy) ||
+                  overlapsTile({ x: rp.px, y: rp.py }, 0.45, h.tx + dx, h.ty + dy)) {
+                UI.toast('Hay alguien ahí');
+                return;
+              }
+            }
+          }
         }
       }
     }
@@ -363,10 +379,12 @@ function summonAtAltar(anchor) {
 function update(dt) {
   G.elapsed += dt;
   G.shake = Math.max(0, G.shake - dt * 1.6);
-  if (typeof Net === 'undefined' || !Net.online) {
-    G.time += dt / CFG.DAY_LENGTH;
-    if (G.time >= 1) {
-      G.time -= 1;
+  // el reloj avanza siempre en local (online el mensaje 'time' del servidor
+  // lo corrige cada 10 s; sin esto la luz saltaría a escalones)
+  G.time += dt / CFG.DAY_LENGTH;
+  if (G.time >= 1) {
+    G.time -= 1;
+    if (typeof Net === 'undefined' || !Net.online) {
       G.day++;
       UI.toast('Día ' + G.day);
     }
@@ -472,13 +490,14 @@ function update(dt) {
         UI.toast('La tierra tiembla… esta es la Noche del Coloso');
         Sfx.bossRoar();
       }
-      if (G.darkness >= 1 && G.bossWarned && !player.dead) {
+      if (G.darkness >= 1 && G.bossWarned && !G.bossNightDone && !player.dead) {
+        G.bossNightDone = true;
         const ang = Math.random() * Math.PI * 2;
         spawnBoss(player.x + Math.cos(ang) * 14, player.y + Math.sin(ang) * 14, BOSS_CFG.hp);
       }
     }
   }
-  if (G.darkness < 0.3) G.bossWarned = false;
+  if (G.darkness < 0.3) { G.bossWarned = false; G.bossNightDone = false; }
 
   // --- autoguardado ---
   G.saveTimer += dt;
@@ -534,7 +553,18 @@ function updateBuildings(dt) {
           if (d < bd) best = { x: G.boss.x, y: G.boss.y };
         }
         if (best) {
-          spawnArrow(tx + 0.5, ty + 0.5, best.x, best.y, def.tower.dmg);
+          // en multijugador, el cliente con menor id cercano a la torre es quien
+          // informa del daño al jefe (los demás solo ven el impacto)
+          let auth = true;
+          if (online) {
+            for (const [rid, rp] of Net.players) {
+              if (rid < Net.id && dist2(tx, ty, rp.px, rp.py) < CFG.TOWER_ACTIVE_R * CFG.TOWER_ACTIVE_R) {
+                auth = false;
+                break;
+              }
+            }
+          }
+          spawnArrow(tx + 0.5, ty + 0.5, best.x, best.y, def.tower.dmg, auth);
           cd = def.tower.rate;
         } else {
           cd = 0.2;

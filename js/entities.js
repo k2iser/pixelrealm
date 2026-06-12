@@ -49,6 +49,22 @@ function moveEntity(e, dx, dy, r) {
   if (dy !== 0 && !blockedAt(e.x, e.y + dy, r)) e.y += dy;
 }
 
+// Punto de aparición garantizado: si el destino quedó bloqueado (un muro,
+// el edificio de otro jugador…), busca en espiral la casilla libre más cercana.
+function safeSpawn(sx, sy) {
+  if (!blockedAt(sx, sy, 0.3)) return { x: sx, y: sy };
+  for (let rad = 1; rad < 48; rad++) {
+    const steps = rad * 8;
+    for (let a = 0; a < steps; a++) {
+      const ang = a / steps * Math.PI * 2;
+      const x = Math.floor(sx + Math.cos(ang) * rad) + 0.5;
+      const y = Math.floor(sy + Math.sin(ang) * rad) + 0.5;
+      if (!blockedAt(x, y, 0.3)) return { x, y };
+    }
+  }
+  return world.findSpawn();
+}
+
 /* ---------- efectos ---------- */
 
 function spawnDrop(x, y, id, n) {
@@ -250,6 +266,10 @@ function updateBoss(dt) {
     b.y += (b.ry - b.y) * Math.min(1, dt * 8);
     b.frame = b.hopping > 0 ? 2 : 0;
     b.hopping = Math.max(0, b.hopping - dt);
+    // el contacto con su cuerpo duele igual que offline
+    if (!player.dead && player.invuln <= 0 && dist2(b.x, b.y, player.x, player.y) < 1.2) {
+      damagePlayer(1, b);
+    }
     return;
   }
 
@@ -331,12 +351,14 @@ function killBoss() {
 
 /* ---------- torres: proyectiles ---------- */
 
-function spawnArrow(x, y, txx, tyy, dmg) {
+// auth: en multijugador solo un cliente por torre informa del daño al jefe
+// (cada cliente simula sus propias flechas; sin esto el daño se multiplicaría)
+function spawnArrow(x, y, txx, tyy, dmg, auth) {
   const ang = Math.atan2(tyy - y, txx - x);
   projectiles.push({
     x, y, ang,
     vx: Math.cos(ang) * 10, vy: Math.sin(ang) * 10,
-    life: 1.2, dmg,
+    life: 1.2, dmg, auth: auth !== false,
   });
   Sfx.arrow();
 }
@@ -356,7 +378,8 @@ function updateProjectiles(dt) {
         }
       }
       if (!hit && G.boss && dist2(G.boss.x, G.boss.y, p.x, p.y) < 1.2) {
-        damageBoss(p.dmg);
+        if (p.auth) damageBoss(p.dmg);
+        else { spawnParticles(p.x, p.y, '#6cd44a', 4); } // impacto visual; el daño lo informa otro cliente
         hit = true;
       }
     }
@@ -392,8 +415,9 @@ function respawn() {
   player.dead = false;
   player.invuln = 2;
   player.noDmgT = 99;
-  player.x = G.spawn.x;
-  player.y = G.spawn.y;
+  const sp = safeSpawn(G.spawn.x, G.spawn.y); // sin tocar G.spawn: si liberan el sitio, vuelves a tu cabaña
+  player.x = sp.x;
+  player.y = sp.y;
   mobs.length = 0;
   UI.refreshHearts();
   UI.hideDeath();
