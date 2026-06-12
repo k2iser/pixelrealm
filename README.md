@@ -4,6 +4,8 @@
 
 Un juego de supervivencia, construcción y cooperación para navegador hecho **solo con JavaScript vanilla**: cero dependencias, cero assets externos. Cada sprite — tiles, árboles, el héroe, los monstruos, los edificios — se dibuja píxel a píxel por código al arrancar. El sonido se sintetiza con WebAudio. Y el multijugador corre sobre un **WebSocket implementado a mano** (handshake SHA-1 y frames RFC 6455 sobre `net`/`http` de Node).
 
+**📖 [Guía del mundo (wiki autogenerada)](wiki.html) · 🚀 [Plan de despliegue VPS + cuentas](DEPLOY.md)**
+
 ## 🎮 Jugar
 
 **Un jugador:** abre `index.html` en el navegador, o juega en GitHub Pages. Ya está.
@@ -21,7 +23,10 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 
 - **Mundo infinito por chunks** con biomas de ruido fractal determinista: océanos, praderas, bosques (con árboles frutales), desiertos, tundras y montañas. La misma semilla genera siempre el mismo mundo.
 - **Vista isométrica 2:1** con orden de profundidad, cámara suave, iluminación nocturna real (las luces abren agujeros en la oscuridad) y render a baja resolución reescalado.
-- **Héroe en alta definición**: dibujado a doble densidad de píxel con suavizado, ciclo de andar de 4 pasos, pose de ataque con la herramienta en la mano y polvillo en los pies.
+- **Cámara cercana estilo Stardew** con tres niveles de zoom (`+`/`−`) y suelos a doble resolución de píxel.
+- **Editor de personaje**: piel, peinado, color de pelo, camiseta y pantalón — tu héroe te representa también online.
+- **Héroe en alta definición**: cuádruple densidad de píxel, ciclo de andar de 4 pasos con aceleración real, pose de ataque con la herramienta en la mano, medio cuerpo sumergido al vadear y polvillo en los pies.
+- **Ruinas antiguas**: anillos de muros derruidos con una antorcha eterna, esperando a quien explore lejos.
 - **Recolección y crafteo**: hacha, pico y espada; tablones, antorchas, fogatas, muros.
 - **Construcciones prefab estilo SimCity** (pestaña «Construcciones» del panel):
   - 🏠 **Cabaña** — fija tu punto de reaparición

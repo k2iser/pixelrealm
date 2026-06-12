@@ -8,8 +8,6 @@
    USAR (recoger su huerto, refugiarse tras sus muros, calentarse en su fogata)
    pero solo su dueño puede destruirlo. El Coloso es el enemigo de todos. */
 
-const HERO_COLORS = ['#2e8f83', '#c0563a', '#7a5fc0', '#3a7ac0', '#c09a3a', '#58a04a', '#c05a8a', '#36b3c9'];
-
 const Net = {
   available: false,   // hay servidor al otro lado
   online: false,      // estamos jugando en el mundo compartido
@@ -57,10 +55,9 @@ const Net = {
     if (!this.available || !this.ws || this.ws.readyState !== 1) return;
     this.myName = (name || '').trim().slice(0, 14) || 'Aventurera' + ((Math.random() * 99) | 0);
     try { localStorage.setItem('pixelrealm.name', this.myName); } catch (e) { /* da igual */ }
-    const pid = this.pid();
-    this.myColor = HERO_COLORS[hashStr(pid) % HERO_COLORS.length];
+    this.myColor = HERO_COLORS[clampLook(G.look).shirt];
     this._joining = true;
-    this.send({ t: 'hello', pid, name: this.myName, color: this.myColor });
+    this.send({ t: 'hello', pid: this.pid(), name: this.myName, look: clampLook(G.look) });
   },
 
   send(obj) {
@@ -86,7 +83,7 @@ const Net = {
         for (const p of m.players) {
           if (p.id !== this.id) this.addPlayer(p);
         }
-        Assets.player = getHeroSet(this.myColor);
+        Assets.player = getHeroLookSet(G.look);
         startOnlineWorld(m);
         UI.showChat();
         UI.addChatLine('✦', m.players.length === 1 ? 'Estás inaugurando el mundo. ¡Construye algo bonito!' :
@@ -216,9 +213,9 @@ const Net = {
   },
 
   addPlayer(p) {
+    const look = clampLook(p.look); // saneado: acota la caché de sets del héroe
     this.players.set(p.id, {
-      // color acotado a la paleta: evita llenar la caché de sets del héroe
-      name: p.name, color: HERO_COLORS.includes(p.color) ? p.color : HERO_COLORS[0],
+      name: p.name, look, color: HERO_COLORS[look.shirt],
       x: p.x || 0, y: p.y || 0, px: p.x || 0, py: p.y || 0,
       dir: p.dir || 'down', frameI: p.frameI || 0, hp: p.hp || 10,
       bubble: '', bubbleT: 0,

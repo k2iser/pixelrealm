@@ -20,8 +20,11 @@ function hoveredTile() {
 }
 
 function updateCamera(dt, W, H) {
-  const tx = W / 2 - w2sx(player.x, player.y);
-  const ty = H / 2 - w2sy(player.x, player.y);
+  // la cámara mira ligeramente hacia el cursor (estilo Stardew)
+  const lookX = clamp((Input.mx - W / 2) * 0.1, -36, 36);
+  const lookY = clamp((Input.my - H / 2) * 0.1, -24, 24);
+  const tx = W / 2 - w2sx(player.x, player.y) - lookX;
+  const ty = H / 2 - w2sy(player.x, player.y) - lookY;
   if (!cam.init) { cam.ox = tx; cam.oy = ty; cam.init = true; return; }
   const f = 1 - Math.pow(0.001, dt);
   cam.ox += (tx - cam.ox) * f;
@@ -90,6 +93,21 @@ function render(g, W, H) {
       }
       g.drawImage(img, Math.round(sx - CFG.HW), Math.round(sy));
 
+      // transiciones suaves entre biomas: el material dominante derrama
+      // su flequillo sobre el borde del rombo vecino
+      if (gr !== T.FLOOR) {
+        const pr = FRINGE_PRIORITY[gr] || 0;
+        for (let e = 0; e < 4; e++) {
+          const ng = e === 0 ? world.ground(tx - 1, ty)
+                   : e === 1 ? world.ground(tx, ty - 1)
+                   : e === 2 ? world.ground(tx + 1, ty)
+                   : world.ground(tx, ty + 1);
+          if (ng !== gr && (FRINGE_PRIORITY[ng] || 0) > pr && Assets.fringe[ng]) {
+            g.drawImage(Assets.fringe[ng][e], Math.round(sx - CFG.HW), Math.round(sy));
+          }
+        }
+      }
+
       const ob = world.object(tx, ty);
       if (ob !== O.NONE && ob !== O.PART) {
         const size = (OBJ[ob] && OBJ[ob].size) || 1;
@@ -138,8 +156,11 @@ function render(g, W, H) {
     for (const [, rp] of Net.players) {
       drawables.push({ d: rp.px + rp.py, type: 'rplayer', rp });
       const lx = Math.round(w2sx(rp.px, rp.py) + ox), ly = Math.round(w2sy(rp.px, rp.py) + oy);
-      labels.push({ x: lx, y: ly - 26, text: rp.name, color: '#fff' });
-      if (rp.bubbleT > 0) labels.push({ x: lx, y: ly - 34, text: rp.bubble, color: '#ffe9a8', bubble: true });
+      labels.push({ x: lx, y: ly - 48, text: rp.name, color: '#fff' });
+      // bocadillo solo si quien habla está cerca de ti; lo lejano queda en el chat
+      if (rp.bubbleT > 0 && dist2(rp.px, rp.py, player.x, player.y) < 14 * 14) {
+        labels.push({ x: lx, y: ly - 58, text: rp.bubble, color: '#ffe9a8', bubble: true });
+      }
     }
   }
   if (G.boss) drawables.push({ d: G.boss.x + G.boss.y, type: 'boss' });
@@ -167,9 +188,9 @@ function render(g, W, H) {
       const cy = w2sy(b.tx + size / 2, b.ty + size / 2) + oy;
       const prog = clamp(b.dmg / def.hp, 0, 1);
       g.fillStyle = 'rgba(0,0,0,0.65)';
-      g.fillRect(Math.round(cx - 11), Math.round(cy - 26), 22, 5);
+      g.fillRect(Math.round(cx - 22), Math.round(cy - 52), 44, 10);
       g.fillStyle = '#ffd34d';
-      g.fillRect(Math.round(cx - 10), Math.round(cy - 25), Math.round(20 * prog), 3);
+      g.fillRect(Math.round(cx - 20), Math.round(cy - 50), Math.round(40 * prog), 6);
     }
   }
 
@@ -227,10 +248,10 @@ function render(g, W, H) {
 
   // --- textos flotantes y nombres (encima de la iluminación) ---
   g.textAlign = 'center';
-  g.font = '7px "Press Start 2P", monospace';
+  g.font = '10px "Press Start 2P", monospace';
   for (const f of floaters) {
     const fx = Math.round(w2sx(f.x, f.y) + ox);
-    const fy = Math.round(w2sy(f.x, f.y) + oy - 18);
+    const fy = Math.round(w2sy(f.x, f.y) + oy - 36);
     g.globalAlpha = clamp(f.life, 0, 1);
     g.fillStyle = '#000';
     g.fillText(f.text, fx + 1, fy + 1);
@@ -242,7 +263,7 @@ function render(g, W, H) {
     if (l.bubble) {
       const tw = g.measureText(l.text).width;
       g.fillStyle = 'rgba(16,12,8,0.85)';
-      g.fillRect(l.x - tw / 2 - 4, l.y - 8, tw + 8, 12);
+      g.fillRect(l.x - tw / 2 - 6, l.y - 11, tw + 12, 16);
       g.fillStyle = l.color;
       g.fillText(l.text, l.x, l.y + 1);
     } else {
@@ -279,23 +300,35 @@ function shadow(g, sx, sy, w) {
   g.fillRect(Math.round(sx - w / 2) + 2, Math.round(sy - 2), w - 4, 5);
 }
 
-// Dibuja un héroe (propio o remoto) con su herramienta al golpear
-function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId) {
-  shadow(g, sx, sy, 10);
+// Dibuja un héroe (propio o remoto) con su herramienta al golpear.
+// En el agua se dibuja medio sumergido, con ondas en la superficie.
+function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
   // a prueba de estados remotos corruptos: dir/frame inválidos caen al defecto
   const frames = set[dir] || set.down;
   const img = frames[frameI] || frames[0];
-  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
+  if (inWater) {
+    const cut = Math.floor(img.height * 0.35);
+    const bobw = Math.sin(G.elapsed * 3 + sx * 0.05) * 1.5;
+    g.drawImage(img, 0, 0, img.width, img.height - cut,
+      Math.round(sx - img.width / 2), Math.round(sy + 2 - (img.height - cut) + bobw),
+      img.width, img.height - cut);
+    g.fillStyle = 'rgba(214,234,255,0.45)';
+    g.fillRect(Math.round(sx - 12), Math.round(sy - 1), 24, 3);
+    g.fillRect(Math.round(sx - 8 + Math.sin(G.elapsed * 4) * 4), Math.round(sy + 3), 16, 2);
+    return;
+  }
+  shadow(g, sx, sy, 20);
+  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 3));
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
     const prog = 1 - swingT / 0.18;
-    const offs = { down: [7, -8], up: [-7, -14], left: [-9, -11], right: [9, -11] };
+    const offs = { down: [14, -16], up: [-14, -28], left: [-18, -22], right: [18, -22] };
     const o = offs[dir];
     const flip = dir === 'left' ? -1 : 1;
     g.save();
     g.translate(Math.round(sx + o[0]), Math.round(sy + o[1]));
     g.rotate(flip * (prog * 1.5 - 0.75));
-    g.drawImage(t, -t.width / 2, -t.height / 2);
+    g.drawImage(t, -t.width, -t.height, t.width * 2, t.height * 2);
     g.restore();
   }
 }
@@ -308,31 +341,35 @@ function drawDrawable(g, d, ox, oy) {
     const img = objSprite(d.id, d.tx, d.ty);
     if (!img) return;
     const def = OBJ[d.id];
-    // sombra de contacto para los objetos con volumen
     if (def.solid && d.id !== O.WALLW && d.id !== O.WALLS) {
-      shadow(g, cx, cy + (size === 2 ? 6 : 4), Math.min(img.width - 6, 30));
+      shadow(g, cx, cy + (size === 2 ? 12 : 8), Math.min(img.width - 12, 60));
     }
     let lift;
-    if (d.id === O.WALLW || d.id === O.WALLS) lift = 8;
-    else if (size === 2) lift = 14;
-    else if (def.size === 1) lift = 7;   // torre, brasero
-    else lift = 6;                       // vegetación
-    g.drawImage(img, Math.round(cx - img.width / 2), Math.round(cy + lift - img.height));
+    if (d.id === O.WALLW || d.id === O.WALLS) lift = 16;
+    else if (size === 2) lift = 28;
+    else if (def.size === 1) lift = 14;  // torre, brasero
+    else lift = 12;                      // vegetación
+    // tiembla mientras lo estás talando/picando
+    let shakeX = 0;
+    if (player.breaking && player.breaking.tx === d.tx && player.breaking.ty === d.ty) {
+      shakeX = Math.round(Math.sin(G.elapsed * 42) * 2);
+    }
+    g.drawImage(img, Math.round(cx - img.width / 2) + shakeX, Math.round(cy + lift - img.height));
 
     // stock listo para recoger: icono flotando encima
     if (def.prod) {
       const b = world.buildings.get(d.tx + ',' + d.ty);
       if (b && b.stock >= 1) {
         const icon = Assets.items[def.prod.item];
-        const bob = Math.sin(G.elapsed * 3 + d.tx) * 2;
-        const iy = Math.round(cy + lift - img.height - 14 + bob);
-        g.drawImage(icon, Math.round(cx - icon.width / 2), iy);
-        g.font = '7px "Press Start 2P", monospace';
+        const bob = Math.sin(G.elapsed * 3 + d.tx) * 4;
+        const iy = Math.round(cy + lift - img.height - 30 + bob);
+        g.drawImage(icon, Math.round(cx - icon.width), iy, icon.width * 2, icon.height * 2);
+        g.font = '10px "Press Start 2P", monospace';
         g.textAlign = 'center';
         g.fillStyle = '#000';
-        g.fillText('×' + Math.floor(b.stock), cx + 1, iy + 19);
+        g.fillText('×' + Math.floor(b.stock), cx + 1, iy + 38);
         g.fillStyle = '#fff';
-        g.fillText('×' + Math.floor(b.stock), cx, iy + 18);
+        g.fillText('×' + Math.floor(b.stock), cx, iy + 37);
       }
     }
     return;
@@ -343,8 +380,9 @@ function drawDrawable(g, d, ox, oy) {
     const sx = w2sx(player.x, player.y) + ox;
     const sy = w2sy(player.x, player.y) + oy;
     const sel = Inv.selected();
+    const inWater = world.ground(Math.floor(player.x), Math.floor(player.y)) === T.WATER;
     drawHero(g, Assets.player, player.dir, player.frameI, sx, sy,
-      player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null);
+      player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null, inWater);
     return;
   }
 
@@ -352,7 +390,8 @@ function drawDrawable(g, d, ox, oy) {
     const rp = d.rp;
     const sx = w2sx(rp.px, rp.py) + ox;
     const sy = w2sy(rp.px, rp.py) + oy;
-    drawHero(g, getHeroSet(rp.color), rp.dir, rp.frameI, sx, sy, 0, null);
+    const inWater = world.ground(Math.floor(rp.px), Math.floor(rp.py)) === T.WATER;
+    drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, 0, null, inWater);
     return;
   }
 
@@ -361,24 +400,23 @@ function drawDrawable(g, d, ox, oy) {
     const sx = w2sx(m.x, m.y) + ox;
     const sy = w2sy(m.x, m.y) + oy;
     if (m.hurtT > 0 && Math.floor(G.elapsed * 18) % 2 === 0) return;
-    const def = MOBS[m.kind];
     let img, yoff = 0, alpha = 1;
     if (m.kind === 'slime') {
       img = Assets.mobs.slime[m.frame];
-      yoff = m.hopping > 0 ? Math.sin((0.34 - m.hopping) / 0.34 * Math.PI) * 5 : 0;
-      shadow(g, sx, sy, 9);
+      yoff = m.hopping > 0 ? Math.sin((0.34 - m.hopping) / 0.34 * Math.PI) * 10 : 0;
+      shadow(g, sx, sy, 18);
     } else if (m.kind === 'shadow') {
       img = Assets.mobs.shadow[m.frame];
       alpha = 0.88;
-      yoff = Math.sin(m.t * 2.5) * 1.5;
-      shadow(g, sx, sy, 8);
+      yoff = Math.sin(m.t * 2.5) * 3;
+      shadow(g, sx, sy, 16);
     } else {
       img = Assets.mobs.bat[m.frame];
-      yoff = 14 + Math.sin(m.t * 3) * 3; // vuela alto
-      shadow(g, sx, sy, 6);
+      yoff = 28 + Math.sin(m.t * 3) * 6; // vuela alto
+      shadow(g, sx, sy, 12);
     }
     g.globalAlpha = alpha;
-    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2 - yoff));
+    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - yoff));
     g.globalAlpha = 1;
     return;
   }
@@ -387,16 +425,16 @@ function drawDrawable(g, d, ox, oy) {
     const b = G.boss;
     const sx = w2sx(b.x, b.y) + ox;
     const sy = w2sy(b.x, b.y) + oy;
-    shadow(g, sx, sy, 34);
+    shadow(g, sx, sy, 68);
     if (b.hurtT > 0 && Math.floor(G.elapsed * 18) % 2 === 0) return;
-    const hop = b.hopping > 0 ? Math.sin((BOSS_CFG.hopTime - b.hopping) / BOSS_CFG.hopTime * Math.PI) * 14 : 0;
+    const hop = b.hopping > 0 ? Math.sin((BOSS_CFG.hopTime - b.hopping) / BOSS_CFG.hopTime * Math.PI) * 28 : 0;
     const img = Assets.boss[b.frame];
     if (b.enraged) {
       g.globalAlpha = 0.55 + Math.sin(G.elapsed * 12) * 0.2;
-      g.drawImage(img, Math.round(sx - img.width / 2) - 2, Math.round(sy - img.height + 4 - hop));
+      g.drawImage(img, Math.round(sx - img.width / 2) - 4, Math.round(sy - img.height + 8 - hop));
       g.globalAlpha = 1;
     }
-    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - hop));
+    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 8 - hop));
     return;
   }
 
@@ -404,11 +442,12 @@ function drawDrawable(g, d, ox, oy) {
     const dr = d.drop;
     const sx = w2sx(dr.x, dr.y) + ox;
     const sy = w2sy(dr.x, dr.y) + oy;
-    const bob = Math.sin(dr.age * 4) * 1.2;
-    shadow(g, sx, sy, 6);
+    const bob = Math.sin(dr.age * 4) * 2.4;
+    shadow(g, sx, sy, 12);
     const img = Assets.items[dr.id];
     if (img) {
-      g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height - 2 - dr.z * 10 - bob));
+      g.drawImage(img, Math.round(sx - img.width), Math.round(sy - img.height * 2 - 4 - dr.z * 20 - bob),
+        img.width * 2, img.height * 2);
     }
     return;
   }
@@ -416,11 +455,11 @@ function drawDrawable(g, d, ox, oy) {
   if (d.type === 'proj') {
     const pr = d.pr;
     const sx = w2sx(pr.x, pr.y) + ox;
-    const sy = w2sy(pr.x, pr.y) + oy - 8;
+    const sy = w2sy(pr.x, pr.y) + oy - 16;
     g.save();
     g.translate(Math.round(sx), Math.round(sy));
     g.rotate(Math.atan2((pr.vx + pr.vy) * 0.5, pr.vx - pr.vy)); // ángulo de la velocidad proyectada a pantalla
-    g.drawImage(Assets.arrow, -3, -1);
+    g.drawImage(Assets.arrow, -7, -3);
     g.restore();
     return;
   }
@@ -428,10 +467,10 @@ function drawDrawable(g, d, ox, oy) {
   if (d.type === 'part') {
     const p = d.p;
     const sx = w2sx(p.x, p.y) + ox;
-    const sy = w2sy(p.x, p.y) + oy - p.z * 10;
+    const sy = w2sy(p.x, p.y) + oy - p.z * 20;
     g.globalAlpha = clamp(p.life / p.maxLife, 0, 1);
     g.fillStyle = p.color;
-    g.fillRect(Math.round(sx), Math.round(sy), 1, 1);
+    g.fillRect(Math.round(sx), Math.round(sy), 2, 2);
     g.globalAlpha = 1;
   }
 }
@@ -473,10 +512,10 @@ function ghostPreview(g, hov, inReach, ox, oy) {
   if (Array.isArray(img)) img = img[0];
   if (!img) return;
   let lift;
-  if (def.place === O.WALLW || def.place === O.WALLS) lift = 8;
-  else if (size === 2) lift = 14;
-  else if (odef.size === 1) lift = 7;
-  else lift = 6;
+  if (def.place === O.WALLW || def.place === O.WALLS) lift = 16;
+  else if (size === 2) lift = 28;
+  else if (odef.size === 1) lift = 14;
+  else lift = 12;
   g.globalAlpha = valid ? 0.55 : 0.25;
   g.drawImage(img, Math.round(cx - img.width / 2), Math.round(cy + lift - img.height));
   g.globalAlpha = 1;

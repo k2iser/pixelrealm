@@ -331,6 +331,45 @@ html, body {
 #btn-new:hover { background: var(--wood-light); }
 #btn-new:active { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #54422a, 0 2px 0 4px #2e2415; }
 
+.title-links { display: flex; gap: 18px; justify-content: center; }
+.linkbtn {
+  font-family: var(--pixel-font); font-size: 9px;
+  background: none; border: none; cursor: pointer;
+  color: #8fb37a; text-decoration: none; padding: 6px 4px;
+}
+.linkbtn:hover { color: var(--accent); }
+
+/* ---------- editor de personaje ---------- */
+#hero-editor { background: rgba(10, 12, 20, 0.88); z-index: 20; }
+.editor-box {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  background: var(--panel-bg);
+  padding: 26px 34px;
+  color: var(--parchment);
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--wood), 0 0 0 6px var(--ink);
+}
+.editor-box h2 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+#hero-preview {
+  width: 112px; height: 160px;
+  image-rendering: pixelated;
+  background: radial-gradient(circle at 50% 80%, rgba(111,206,78,0.18), transparent 70%), #18222e;
+  box-shadow: inset 0 0 0 2px var(--wood-dark);
+}
+.opt-rows { display: flex; flex-direction: column; gap: 8px; width: 250px; }
+.opt-row {
+  display: grid; grid-template-columns: 1fr 30px 60px 30px;
+  align-items: center; gap: 6px; font-size: 9px;
+}
+.opt-row button {
+  font-family: var(--pixel-font); font-size: 10px;
+  background: var(--wood-dark); color: var(--parchment);
+  border: none; padding: 7px 0; cursor: pointer;
+}
+.opt-row button:hover { background: var(--wood); }
+.opt-row .swatch { display: block; height: 18px; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.4); }
+.opt-row em { font-style: normal; font-size: 8px; text-align: center; }
+.editor-btns { display: flex; gap: 16px; align-items: center; }
+
 .seedrow { display: flex; align-items: center; gap: 10px; font-size: 9px; color: #9b8a6a; }
 .seedrow input {
   font-family: var(--pixel-font); font-size: 9px;

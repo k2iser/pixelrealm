@@ -39,7 +39,50 @@ class World {
         obj[ly * N + lx] = r[1];
       }
     }
+    this.stampRuin(cx, cy, ground, obj);
     return { cx, cy, ground, obj, modified: false, _b64: null };
+  }
+
+  // Ruinas antiguas: ~1 de cada 80 chunks esconde un anillo de muros caídos
+  // con losas agrietadas y una antorcha que nadie recuerda haber encendido.
+  stampRuin(cx, cy, ground, obj) {
+    const s = this.seed;
+    if (hash2(cx, cy, s ^ 0x9e37) >= 0.012) return;
+    const N = CFG.CHUNK;
+    const rx = 7 + Math.floor(hash2(cx, cy, s + 51) * (N - 14));
+    const ry = 7 + Math.floor(hash2(cx, cy, s + 52) * (N - 14));
+    const rad = 3 + Math.floor(hash2(cx, cy, s + 53) * 3); // 3-5
+    // solo se alzan ruinas en tierra firme
+    if (ground[ry * N + rx] !== T.GRASS && ground[ry * N + rx] !== T.SAND) return;
+    // losas interiores agrietadas
+    for (let dy = -rad + 1; dy <= rad - 1; dy++) {
+      for (let dx = -rad + 1; dx <= rad - 1; dx++) {
+        const px = rx + dx, py = ry + dy;
+        if (px < 0 || py < 0 || px >= N || py >= N) continue;
+        const gi = py * N + px;
+        if (ground[gi] === T.DEEP || ground[gi] === T.WATER) continue;
+        if (hash2(cx * N + px, cy * N + py, s ^ 0x44d1) < 0.65) {
+          ground[gi] = T.STONE;
+          obj[gi] = O.NONE;
+        }
+      }
+    }
+    // anillo de muros, unos en pie y otros derrumbados
+    const steps = Math.round(rad * 7);
+    for (let a = 0; a < steps; a++) {
+      const ang = (a / steps) * Math.PI * 2;
+      const px = Math.round(rx + Math.cos(ang) * rad);
+      const py = Math.round(ry + Math.sin(ang) * rad * 0.8);
+      if (px < 0 || py < 0 || px >= N || py >= N) continue;
+      const gi = py * N + px;
+      if (ground[gi] === T.DEEP || ground[gi] === T.WATER) continue;
+      const h = hash2(cx * N + px, cy * N + py, s ^ 0x71f3);
+      if (h < 0.5) { obj[gi] = O.WALLS; ground[gi] = T.STONE; }
+      else if (h < 0.68) { obj[gi] = O.ROCK; ground[gi] = T.STONE; }
+      else if (h < 0.8) { obj[gi] = O.NONE; ground[gi] = T.STONE; }
+    }
+    // la llama eterna del centro
+    obj[ry * N + rx] = O.TORCH;
   }
 
   // Altura + humedad + temperatura -> bioma y vegetación

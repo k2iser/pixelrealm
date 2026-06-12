@@ -9,6 +9,7 @@
 
 const Assets = {
   tiles: {},      // T.* -> [variantes/frames]
+  fringe: {},     // T.* -> [4 bordes] para transiciones suaves entre biomas
   obj: {},        // O.* -> canvas | [frames/variantes]
   player: null,   // set del héroe por defecto: { down: [6], up: [6], left: [6], right: [6] }
   heroSets: {},   // color de camiseta -> set (para jugadores remotos)
@@ -82,16 +83,18 @@ function spriteIcon(c) {
 /* ================= suelos ================= */
 
 function makeGroundTile(base, dark, light, seed) {
-  const [c, g] = cv(CFG.TW, CFG.TH);
-  for (let y = 0; y < CFG.TH; y++) {
-    for (let x = 0; x < CFG.TW; x++) {
-      const dx = Math.abs(x - 15.5) / 16, dy = Math.abs(y - 7.5) / 8;
+  const W = CFG.TW, H = CFG.TH, cx = W / 2 - 0.5, cy = H / 2 - 0.5;
+  const [c, g] = cv(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = Math.abs(x - cx) / (W / 2), dy = Math.abs(y - cy) / (H / 2);
       if (dx + dy > 1.04) continue;
       const r = hash2(x * 7 + 13, y * 13 + 5, seed);
       let col = base;
-      if (r < 0.13) col = dark;
-      else if (r > 0.87) col = light;
-      if (y > 7 && dx + dy > 0.88) col = dark;
+      if (r < 0.11) col = dark;
+      else if (r > 0.89) col = light;
+      // borde inferior con dithering muy sutil: relieve sin marcar rejilla
+      if (y > H / 2 - 1 && dx + dy > 0.96 && r < 0.5) col = dark;
       g.fillStyle = col;
       g.fillRect(x, y, 1, 1);
     }
@@ -99,17 +102,54 @@ function makeGroundTile(base, dark, light, seed) {
   return c;
 }
 
+/* Transiciones entre biomas (auto-tiling estilo Stardew):
+   cuando un material "domina" al vecino, su flequillo se derrama con
+   dithering sobre el borde correspondiente del rombo vecino.
+   Bordes: 0=NO (vecino tx-1), 1=NE (ty-1), 2=SE (tx+1), 3=SO (ty+1). */
+function makeFringe(base, dark, edge, seed) {
+  const W = CFG.TW, H = CFG.TH;
+  const [c, g] = cv(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const cx = Math.abs(x - (W / 2 - 0.5)) / (W / 2), cyv = Math.abs(y - (H / 2 - 0.5)) / (H / 2);
+      if (cx + cyv > 1.04) continue;
+      // coordenadas u,v dentro de la casilla (0..1 en ejes de mundo)
+      const sxc = x - W / 2 + 0.5, syc = y + 0.5;
+      const u = sxc / W + syc / H;
+      const v = syc / H - sxc / W;
+      let m; // distancia al borde invadido
+      if (edge === 0) m = u;            // viene del oeste del mundo (arriba-izda en pantalla)
+      else if (edge === 1) m = v;       // norte del mundo (arriba-dcha)
+      else if (edge === 2) m = 1 - u;   // este (abajo-dcha)
+      else m = 1 - v;                   // sur (abajo-izda)
+      const r = hash2(x * 5 + 3, y * 11 + 7, seed + edge * 131);
+      if (m < 0.10 + r * 0.16) {
+        g.fillStyle = r < 0.25 ? dark : base;
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  return c;
+}
+
+// Prioridad de derrame: el mayor se come visualmente el borde del menor
+const FRINGE_PRIORITY = {
+  [T.GRASS]: 7, [T.SNOW]: 6, [T.DIRT]: 5, [T.SAND]: 4,
+  [T.STONE]: 3, [T.WATER]: 2, [T.DEEP]: 1, [T.FLOOR]: 0, // lo construido no se mezcla
+};
+
 function makeFloorTile(seed) {
   const base = '#a87b4f', dark = '#7a5635', light = '#c89b62';
-  const [c, g] = cv(CFG.TW, CFG.TH);
-  for (let y = 0; y < CFG.TH; y++) {
-    for (let x = 0; x < CFG.TW; x++) {
-      const dx = Math.abs(x - 15.5) / 16, dy = Math.abs(y - 7.5) / 8;
+  const W = CFG.TW, H = CFG.TH, cx = W / 2 - 0.5, cy = H / 2 - 0.5;
+  const [c, g] = cv(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = Math.abs(x - cx) / (W / 2), dy = Math.abs(y - cy) / (H / 2);
       if (dx + dy > 1.04) continue;
       let col = base;
-      if (((x + 2 * y) % 8) === 0) col = dark;
-      else if (hash2(x, y, seed) > 0.92) col = light;
-      if (y > 7 && dx + dy > 0.88) col = dark;
+      if (((x + 2 * y) % 16) < 2) col = dark;
+      else if (hash2(x, y, seed) > 0.93) col = light;
+      if (y > H / 2 - 1 && dx + dy > 0.9) col = dark;
       g.fillStyle = col;
       g.fillRect(x, y, 1, 1);
     }
@@ -118,26 +158,29 @@ function makeFloorTile(seed) {
 }
 
 function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeEvery) {
-  const H = CFG.CUBE_H;
-  const [c, g] = cv(CFG.TW, CFG.TH + H);
-  const bottom = new Array(CFG.TW).fill(-1);
-  for (let y = 0; y < CFG.TH; y++) {
-    for (let x = 0; x < CFG.TW; x++) {
-      const dx = Math.abs(x - 15.5) / 16, dy = Math.abs(y - 7.5) / 8;
+  const W = CFG.TW, TH = CFG.TH, H = CFG.CUBE_H;
+  const cx = W / 2 - 0.5, cy = TH / 2 - 0.5;
+  const [c, g] = cv(W, TH + H);
+  const bottom = new Array(W).fill(-1);
+  for (let y = 0; y < TH; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = Math.abs(x - cx) / (W / 2), dy = Math.abs(y - cy) / (TH / 2);
       if (dx + dy > 1.04) continue;
       const r = hash2(x, y, seed);
-      g.fillStyle = r < 0.15 ? topCols[1] : (r > 0.88 ? topCols[2] : topCols[0]);
+      g.fillStyle = r < 0.13 ? topCols[1] : (r > 0.9 ? topCols[2] : topCols[0]);
       g.fillRect(x, y, 1, 1);
       if (y > bottom[x]) bottom[x] = y;
     }
   }
-  for (let x = 0; x < CFG.TW; x++) {
+  for (let x = 0; x < W; x++) {
     if (bottom[x] < 0) continue;
-    const left = x < CFG.TW / 2;
+    const left = x < W / 2;
     for (let k = 1; k <= H; k++) {
       let col = left ? leftCol : rightCol;
-      if (stripeEvery && x % stripeEvery === (left ? 0 : 2)) col = left ? leftDark : rightDark;
-      if (k === H || hash2(x, k, seed + 9) < 0.07) col = left ? leftDark : rightDark;
+      if (stripeEvery && x % stripeEvery <= 1 && (left ? x % stripeEvery === 0 : x % stripeEvery === 1)) {
+        col = left ? leftDark : rightDark;
+      }
+      if (k >= H - 1 || hash2(x, k, seed + 9) < 0.06) col = left ? leftDark : rightDark;
       g.fillStyle = col;
       g.fillRect(x, bottom[x] + k, 1, 1);
     }
@@ -145,93 +188,118 @@ function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeE
   return c;
 }
 
-/* ================= héroe HD =================
+/* ================= héroe v3 =================
+   Dibujado a 56x80 y reducido con suavizado a 28x40 (cuádruple densidad de
+   píxel respecto al mundo). Parametrizado por el "look" del editor:
+   { skin, hair (color), style (peinado), shirt, pants }.
    Poses: 0 quieto, 1-4 ciclo de andar (contacto, paso, contacto, paso), 5 ataque. */
 
-function makeHeroFrame(dir, pose, shirt, shirtD) {
-  const [hi, g] = cv(28, 40);
-  const skin = '#eab487', skinD = '#cf9468', hair = '#4a3120', hairL = '#66492e',
-        eye = '#20202e', pants = '#3b3b46', pantsD = '#2c2c36',
-        boots = '#5d4427', bootsD = '#44321b', belt = '#2a2018', buckle = '#e8c14d';
+function makeHeroFrame(dir, pose, look) {
+  const [hi, g] = cv(56, 80);
+  const skin = HERO_SKINS[look.skin], skinD = darken(skin, 0.82),
+        hair = HERO_HAIRC[look.hair], hairL = darken(hair, 1.35),
+        shirt = HERO_COLORS[look.shirt], shirtD = darken(shirt, 0.72),
+        pants = HERO_PANTS[look.pants], pantsD = darken(pants, 0.75),
+        boots = '#5d4427', bootsD = '#44321b', belt = '#2a2018',
+        buckle = '#e8c14d', eyeW = '#f4f4f8', eye = '#20202e';
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
 
-  // desplazamientos de animación
   let lLeg = 0, rLeg = 0, lArm = 0, rArm = 0, bob = 0;
-  if (pose === 1) { lLeg = -2; lArm = 2; rArm = -2; }
-  else if (pose === 3) { rLeg = -2; lArm = -2; rArm = 2; }
-  else if (pose === 2 || pose === 4) { bob = -1; }
+  if (pose === 1) { lLeg = -4; lArm = 4; rArm = -4; }
+  else if (pose === 3) { rLeg = -4; lArm = -4; rArm = 4; }
+  else if (pose === 2 || pose === 4) { bob = -2; }
 
-  // --- piernas y botas (primero, el torso las tapa por arriba) ---
-  R(9, 28 + lLeg, 4, 7, pants); R(9, 28 + lLeg, 1, 7, pantsD);
-  R(9, 34 + lLeg, 4, 4, boots); R(9, 37 + lLeg, 4, 1, bootsD);
-  R(15, 28 + rLeg, 4, 7, pants); R(18, 28 + rLeg, 1, 7, pantsD);
-  R(15, 34 + rLeg, 4, 4, boots); R(15, 37 + rLeg, 4, 1, bootsD);
+  // --- piernas y botas ---
+  R(18, 56 + lLeg, 8, 14, pants); R(18, 56 + lLeg, 2, 14, pantsD);
+  R(18, 68 + lLeg, 8, 8, boots); R(18, 74 + lLeg, 8, 2, bootsD); R(19, 69 + lLeg, 3, 1, '#7a5e3a');
+  R(30, 56 + rLeg, 8, 14, pants); R(36, 56 + rLeg, 2, 14, pantsD);
+  R(30, 68 + rLeg, 8, 8, boots); R(30, 74 + rLeg, 8, 2, bootsD); R(31, 69 + rLeg, 3, 1, '#7a5e3a');
 
   // --- torso ---
-  R(7, 14 + bob, 14, 13, shirt);
-  R(18, 14 + bob, 3, 13, shirtD);            // sombreado lateral
-  R(11, 14 + bob, 6, 1, shirtD);             // cuello
-  R(7, 25 + bob, 14, 2, shirtD);             // bajo de la túnica
-  R(7, 23 + bob, 14, 1, belt);
-  R(13, 23 + bob, 2, 1, buckle);
+  R(14, 28 + bob, 28, 26, shirt);
+  R(36, 28 + bob, 6, 26, shirtD);                 // sombreado lateral
+  R(24, 28 + bob, 8, 3, shirtD);                  // cuello en V
+  R(26, 31 + bob, 4, 2, skin);                    // escote
+  R(14, 50 + bob, 28, 4, shirtD);                 // bajo de la túnica
+  R(14, 46 + bob, 28, 2, belt);
+  R(26, 46 + bob, 4, 2, buckle); R(26, 46 + bob, 1, 1, '#fff2b8');
 
   // --- brazos ---
   if (pose === 5) {
-    // ataque: el brazo dominante se extiende hacia donde miras
     if (dir === 'left') {
-      R(0, 16 + bob, 8, 3, shirtD); R(0, 16 + bob, 3, 3, skin);
-      R(21, 15 + bob, 3, 9, shirtD); R(21, 21 + bob, 3, 3, skin);
+      R(0, 32 + bob, 16, 6, shirtD); R(0, 32 + bob, 6, 6, skin);
+      R(42, 30 + bob, 6, 18, shirtD); R(42, 42 + bob, 6, 6, skin);
     } else if (dir === 'right') {
-      R(20, 16 + bob, 8, 3, shirtD); R(25, 16 + bob, 3, 3, skin);
-      R(4, 15 + bob, 3, 9, shirtD); R(4, 21 + bob, 3, 3, skin);
+      R(40, 32 + bob, 16, 6, shirtD); R(50, 32 + bob, 6, 6, skin);
+      R(8, 30 + bob, 6, 18, shirtD); R(8, 42 + bob, 6, 6, skin);
     } else if (dir === 'down') {
-      R(4, 18 + bob, 3, 9, shirtD); R(4, 24 + bob, 3, 3, skin);
-      R(21, 18 + bob, 3, 9, shirtD); R(21, 24 + bob, 3, 3, skin);
-    } else { // up: brazo alzado
-      R(21, 8 + bob, 3, 9, shirtD); R(21, 8 + bob, 3, 3, skin);
-      R(4, 15 + bob, 3, 9, shirtD); R(4, 21 + bob, 3, 3, skin);
+      R(8, 36 + bob, 6, 18, shirtD); R(8, 48 + bob, 6, 6, skin);
+      R(42, 36 + bob, 6, 18, shirtD); R(42, 48 + bob, 6, 6, skin);
+    } else {
+      R(42, 16 + bob, 6, 18, shirtD); R(42, 16 + bob, 6, 6, skin);
+      R(8, 30 + bob, 6, 18, shirtD); R(8, 42 + bob, 6, 6, skin);
     }
   } else {
-    R(4, 15 + bob + lArm, 3, 11, shirtD);
-    R(4, 23 + bob + lArm, 3, 3, skin);
-    R(21, 15 + bob + rArm, 3, 11, shirtD);
-    R(21, 23 + bob + rArm, 3, 3, skin);
+    R(8, 30 + bob + lArm, 6, 22, shirtD);
+    R(8, 46 + bob + lArm, 6, 6, skin);
+    R(8, 44 + bob + lArm, 6, 1, darken(shirt, 0.6));   // puño de la manga
+    R(42, 30 + bob + rArm, 6, 22, shirtD);
+    R(42, 46 + bob + rArm, 6, 6, skin);
+    R(42, 44 + bob + rArm, 6, 1, darken(shirt, 0.6));
   }
 
   // --- cabeza ---
-  R(9, bob, 10, 1, hair);                    // coronilla redondeada
-  R(8, 1 + bob, 12, 5, hair);
-  R(9, 1 + bob, 5, 1, hairL);                // brillo del pelo
-  R(8, 6 + bob, 12, 7, skin);                // cara
-  R(8, 6 + bob, 1, 2, hair); R(19, 6 + bob, 1, 2, hair); // patillas
-  R(9, 12 + bob, 10, 1, skinD);              // mandíbula
-  R(12, 13 + bob, 4, 1, skinD);              // cuello
+  const hairTop = look.style === 2 ? 4 : 0;       // rapado: nacimiento más alto
+  R(18, bob, 20, 2, hair);
+  R(16, 2 + bob, 24, 10 - hairTop, hair);
+  R(18, 2 + bob, 10, 2, hairL);                   // brillo
+  R(20, 5 + bob, 4, 1, hairL);                    // mechón
+  R(16, 12 + bob, 24, 14, skin);                  // cara
+  R(18, 24 + bob, 20, 2, skinD);                  // mandíbula
+  R(24, 26 + bob, 8, 2, skinD);                   // cuello
+  if (look.style === 0) {                          // corto: patillas
+    R(16, 12 + bob, 2, 4, hair); R(38, 12 + bob, 2, 4, hair);
+  } else if (look.style === 1) {                   // melena hasta los hombros
+    R(14, 8 + bob, 4, 24, hair); R(38, 8 + bob, 4, 24, hair);
+    R(14, 30 + bob, 4, 2, darken(hair, 0.7)); R(38, 30 + bob, 4, 2, darken(hair, 0.7));
+  }
 
   if (dir === 'up') {
-    R(8, 6 + bob, 12, 4, hair);              // de espaldas
-    R(9, 6 + bob, 4, 1, hairL);
-  } else if (dir === 'down') {
-    R(10, 8 + bob, 2, 2, eye); R(16, 8 + bob, 2, 2, eye);
-  } else if (dir === 'left') {
-    R(8, 8 + bob, 2, 2, eye); R(13, 8 + bob, 2, 2, eye);
-    R(17, 6 + bob, 3, 3, hair);              // pelo visto de lado
+    R(16, 12 + bob, 24, 8, hair);                  // nuca
+    R(18, 12 + bob, 8, 2, hairL);
+    if (look.style === 1) R(16, 20 + bob, 24, 14, hair); // melena por la espalda
   } else {
-    R(13, 8 + bob, 2, 2, eye); R(18, 8 + bob, 2, 2, eye);
-    R(8, 6 + bob, 3, 3, hair);
+    const my = 22 + bob;
+    if (dir === 'down') {
+      R(20, 16 + bob, 4, 4, eyeW); R(21, 17 + bob, 2, 3, eye);
+      R(32, 16 + bob, 4, 4, eyeW); R(33, 17 + bob, 2, 3, eye);
+      R(26, my, 4, 1, skinD);                      // boca
+    } else if (dir === 'left') {
+      R(16, 16 + bob, 4, 4, eyeW); R(16, 17 + bob, 2, 3, eye);
+      R(26, 16 + bob, 4, 4, eyeW); R(26, 17 + bob, 2, 3, eye);
+      R(34, 12 + bob, 6, 6, hair);                 // pelo de perfil
+      R(20, my, 3, 1, skinD);
+    } else {
+      R(36, 16 + bob, 4, 4, eyeW); R(38, 17 + bob, 2, 3, eye);
+      R(26, 16 + bob, 4, 4, eyeW); R(28, 17 + bob, 2, 3, eye);
+      R(16, 12 + bob, 6, 6, hair);
+      R(33, my, 3, 1, skinD);
+    }
   }
 
-  return scaleSmooth(hi, 14, 20);
+  return scaleSmooth(hi, 28, 40);
 }
 
-// Set completo del héroe para un color de camiseta (cacheado por color)
-function getHeroSet(shirt) {
-  if (Assets.heroSets[shirt]) return Assets.heroSets[shirt];
-  const shirtD = darken(shirt, 0.72);
+// Set completo del héroe para un look (cacheado; los looks vienen saneados)
+function getHeroLookSet(rawLook) {
+  const look = clampLook(rawLook);
+  const key = 's' + look.skin + 'h' + look.hair + 'y' + look.style + 'c' + look.shirt + 'p' + look.pants;
+  if (Assets.heroSets[key]) return Assets.heroSets[key];
   const set = {};
   for (const dir of ['down', 'up', 'left', 'right']) {
-    set[dir] = [0, 1, 2, 3, 4, 5].map(p => makeHeroFrame(dir, p, shirt, shirtD));
+    set[dir] = [0, 1, 2, 3, 4, 5].map(p => makeHeroFrame(dir, p, look));
   }
-  Assets.heroSets[shirt] = set;
+  Assets.heroSets[key] = set;
   return set;
 }
 
@@ -266,7 +334,7 @@ function makeSlimeFrame(f) {
   g.fillRect(x0 + Math.floor(w / 2) - 3, ey, 2, 2);
   g.fillRect(x0 + Math.floor(w / 2) + 2, ey, 2, 2);
   g.fillRect(x0 + Math.floor(w / 2) - 1, ey + 3, 3, 1); // boca
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 // El Coloso de Baba: una baba gigante con corona
@@ -310,7 +378,7 @@ function makeBossFrame(f) {
   g.fillRect(crx, cry + 5, 12, 1);
   g.fillStyle = gem;
   g.fillRect(crx + 5, cry + 4, 2, 1);
-  return scaleSprite(c, 3);
+  return scaleSprite(c, 6); // el Coloso conserva su escala imponente con el zoom nuevo
 }
 
 const SHADOW_PAL = { S: '#262138', M: '#332c4d', W: '#494066', E: '#cfd6ff' };
@@ -408,8 +476,8 @@ function buildVegetation() {
     '........ttTTt',
     '.......ttTTTTt',
   ];
-  const treeA = scaleSprite(gridSprite(treeRows(false), tp), 2);
-  const treeB = scaleSprite(gridSprite(treeRows(true), tp), 2);
+  const treeA = scaleSprite(gridSprite(treeRows(false), tp), CFG.SPR);
+  const treeB = scaleSprite(gridSprite(treeRows(true), tp), CFG.SPR);
   Assets.obj[O.TREE] = [treeA, treeA, treeA, treeB]; // 1 de cada 4 con fruta
 
   // Pino de tres pisos con nieve en la punta
@@ -433,8 +501,8 @@ function buildVegetation() {
     '.......ttTT',
   ];
   Assets.obj[O.PINE] = [
-    scaleSprite(gridSprite(pineRows(true), pp), 2),
-    scaleSprite(gridSprite(pineRows(false), pp), 2),
+    scaleSprite(gridSprite(pineRows(true), pp), CFG.SPR),
+    scaleSprite(gridSprite(pineRows(false), pp), CFG.SPR),
   ];
 
   const cactusPal = { C: '#4fae5d', c: '#2e7a3a', F: '#e886a8' };
@@ -453,7 +521,7 @@ function buildVegetation() {
     '....cCCc',
     '....cCCc',
     '...ccCCcc',
-  ], cactusPal), 2);
+  ], cactusPal), CFG.SPR);
 
   const rockPal = { s: '#55555e', S: '#8c8c94', W: '#b4b4be', d: '#62626c' };
   Assets.obj[O.ROCK] = scaleSprite(gridSprite([
@@ -467,10 +535,10 @@ function buildVegetation() {
     'sSSSSSSSdddds',
     '.sddSSSdddds',
     '..ssddddddss',
-  ], rockPal), 2);
+  ], rockPal), CFG.SPR);
 
   Assets.obj[O.FLOWER] = [
-    gridSprite([
+    scaleSprite(gridSprite([
       '...RR',
       '..RrrR',
       '..RrrR',
@@ -480,8 +548,8 @@ function buildVegetation() {
       '..g.g',
       '...gg',
       '....g',
-    ], { R: '#c4344c', r: '#f08a9a', g: '#3c8534' }),
-    gridSprite([
+    ], { R: '#c4344c', r: '#f08a9a', g: '#3c8534' }), 2),
+    scaleSprite(gridSprite([
       '...YY',
       '..YyyY',
       '..YyyY',
@@ -491,10 +559,10 @@ function buildVegetation() {
       '..g.g',
       '...gg',
       '....g',
-    ], { Y: '#e8b14d', y: '#ffe28a', g: '#3c8534' }),
+    ], { Y: '#e8b14d', y: '#ffe28a', g: '#3c8534' }), 2),
   ];
 
-  Assets.obj[O.TALLGRASS] = gridSprite([
+  Assets.obj[O.TALLGRASS] = scaleSprite(gridSprite([
     '.g...G...g',
     '.g..gg..G',
     '..G.g..gg',
@@ -503,7 +571,7 @@ function buildVegetation() {
     '...gggG',
     '....gg',
     '....gG',
-  ], { g: '#5fb84d', G: '#3c8534' });
+  ], { g: '#5fb84d', G: '#3c8534' }), 2);
 
   Assets.obj[O.BUSH] = scaleSprite(gridSprite([
     '....gggg',
@@ -515,7 +583,7 @@ function buildVegetation() {
     '.gGGGGGGRGGg',
     '..ggGGGGgg',
     '....gggg',
-  ], { g: '#35702a', G: '#4e9a3d', R: '#c4344c' }), 2);
+  ], { g: '#35702a', G: '#4e9a3d', R: '#c4344c' }), CFG.SPR);
 }
 
 /* ================= construcciones ================= */
@@ -546,7 +614,7 @@ function makeHut() {
   // zócalo de piedra
   R(3, 25, 26, 2, '#8c8c94');
   for (let x = 4; x < 28; x += 3) R(x, 26, 1, 1, '#62626c');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeTower() {
@@ -568,7 +636,7 @@ function makeTower() {
   // estandarte
   R(7, 0, 1, 4, '#6b4226');
   R(8, 0, 4, 2, '#c4344c'); R(8, 2, 2, 1, '#c4344c');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeSawmill() {
@@ -600,7 +668,7 @@ function makeSawmill() {
   }
   // suelo
   R(2, 21, 28, 2, '#74512f');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeQuarry() {
@@ -621,7 +689,7 @@ function makeQuarry() {
   // pico apoyado
   R(27, 13, 1, 6, '#8a5a33');
   R(25, 12, 5, 1, '#9a9aa4');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeFarm() {
@@ -639,7 +707,7 @@ function makeFarm() {
   // valla
   for (let x = 1; x < 31; x += 4) R(x, 2, 1, 5, '#8a5a33');
   R(1, 3, 30, 1, '#a87b4f'); R(1, 5, 30, 1, '#a87b4f');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeBrazier(frame) {
@@ -669,7 +737,7 @@ function makeBrazier(frame) {
   R(3, 13, 6, 1, '#8c8c94');
   R(2, 14, 8, 2, '#787882');
   R(2, 15, 8, 1, '#5e5e66');
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 function makeAltar(frame) {
@@ -699,7 +767,7 @@ function makeAltar(frame) {
     R(vx, 15, 2, 3, '#d8d0b8');
     g.fillStyle = '#ffb347'; g.fillRect(vx, 14, 1, 1);
   }
-  return scaleSprite(c, 2);
+  return scaleSprite(c, CFG.SPR);
 }
 
 /* ================= items ================= */
@@ -925,11 +993,24 @@ function buildAssets() {
   tiles[T.SNOW]  = [17, 18, 19].map(s => makeGroundTile('#e8f0f5', '#d6e2ea', '#fafdff', s));
   tiles[T.FLOOR] = [20, 21].map(s => makeFloorTile(s));
 
+  // flecos de transición entre biomas (auto-tiling)
+  const fringeCols = {
+    [T.GRASS]: ['#4a9e3f', '#3c8534'],
+    [T.SNOW]:  ['#e8f0f5', '#d6e2ea'],
+    [T.DIRT]:  ['#8a6242', '#74512f'],
+    [T.SAND]:  ['#e7d08a', '#d4ba6f'],
+    [T.STONE]: ['#8d8d96', '#787882'],
+    [T.WATER]: ['#3a66c4', '#2f55a8'],  // suaviza la orilla del mar profundo
+  };
+  for (const t in fringeCols) {
+    Assets.fringe[t] = [0, 1, 2, 3].map(e => makeFringe(fringeCols[t][0], fringeCols[t][1], e, 400 + (+t)));
+  }
+
   buildVegetation();
 
   // muros
   Assets.obj[O.WALLW] = makeCube(
-    ['#a87b4f', '#7a5635', '#c89b62'], '#8a5a33', '#6b4226', '#9b6a3e', '#7a5230', 31, 4);
+    ['#a87b4f', '#7a5635', '#c89b62'], '#8a5a33', '#6b4226', '#9b6a3e', '#7a5230', 31, 8);
   Assets.obj[O.WALLS] = makeCube(
     ['#8c8c94', '#787882', '#a2a2ac'], '#6e6e78', '#5a5a64', '#7e7e88', '#646470', 32, 0);
 
@@ -960,7 +1041,7 @@ function buildAssets() {
       '...BB',
       '...bb',
     ], firePal),
-  ].map(c => scaleSprite(c, 2));
+  ].map(c => scaleSprite(c, CFG.SPR));
 
   Assets.obj[O.FIRE] = [
     gridSprite([
@@ -985,7 +1066,7 @@ function buildAssets() {
       '.sBBbBBBBBBbBBs',
       '..ss..ssss..ss',
     ], firePal),
-  ].map(c => scaleSprite(c, 2));
+  ].map(c => scaleSprite(c, CFG.SPR));
 
   // construcciones
   Assets.obj[O.HUT] = makeHut();
@@ -998,18 +1079,18 @@ function buildAssets() {
   Assets.obj[O.PART] = null; // invisible: lo dibuja su ancla
 
   // héroe por defecto y enemigos
-  Assets.player = getHeroSet('#2e8f83');
+  Assets.player = getHeroLookSet(DEFAULT_LOOK);
   Assets.mobs.slime = [0, 1, 2].map(makeSlimeFrame);
-  Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(gridSprite(r, SHADOW_PAL), 2));
-  Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(gridSprite(r, BAT_PAL), 2));
+  Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(gridSprite(r, SHADOW_PAL), CFG.SPR));
+  Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(gridSprite(r, BAT_PAL), CFG.SPR));
   Assets.boss = [0, 1, 2].map(makeBossFrame);
 
   // flecha de las torres
-  Assets.arrow = gridSprite([
+  Assets.arrow = scaleSprite(gridSprite([
     '.bBBWW',
     'fbBBWWW',
     '.bBBWW',
-  ], { f: '#c4344c', b: '#6b4226', B: '#a87b4f', W: '#dfe7ee' });
+  ], { f: '#c4344c', b: '#6b4226', B: '#a87b4f', W: '#dfe7ee' }), 2);
 
   buildItems();
 
@@ -1061,6 +1142,71 @@ function buildAssets() {
     '...mMMMMm',
     '....mmmm',
   ], { M: '#dfe7f2', m: '#9fb0c8' });
+}
+
+/* ================= packs de texturas =================
+   Arte externo opcional sin tocar el código: si existe textures/pack.json
+   (+ atlas PNG), sus frames sustituyen al arte procedural. Si no, el juego
+   se dibuja solo, como siempre. Formato de clave:
+     tile.grass.0 · fringe.grass.0-3 · obj.tree.0 · item.axe · mob.slime.0 · boss.0
+   Cada frame: { "x":0, "y":0, "w":64, "h":32 } en píxeles del atlas. */
+
+const TEX_T = { deep: T.DEEP, water: T.WATER, sand: T.SAND, grass: T.GRASS, dirt: T.DIRT, stone: T.STONE, snow: T.SNOW, floor: T.FLOOR };
+const TEX_O = { tree: O.TREE, pine: O.PINE, cactus: O.CACTUS, rock: O.ROCK, flower: O.FLOWER, tallgrass: O.TALLGRASS, bush: O.BUSH,
+                wallw: O.WALLW, walls: O.WALLS, torch: O.TORCH, fire: O.FIRE,
+                hut: O.HUT, tower: O.TOWER, sawmill: O.SAWMILL, quarry: O.QUARRY, farm: O.FARM, brazier: O.BRAZIER, altar: O.ALTAR };
+
+async function loadTexturePack() {
+  if (!location.protocol.startsWith('http')) return;
+  let pack, img;
+  try {
+    const res = await fetch('textures/pack.json', { cache: 'no-cache' });
+    if (!res.ok) return;
+    pack = await res.json();
+    img = new Image();
+    img.src = 'textures/' + (pack.image || 'pack.png');
+    await img.decode();
+  } catch (e) { return; } // sin pack: arte procedural
+  try {
+    applyTexturePack(pack, img);
+    if (typeof UI !== 'undefined') UI.toast('Texturas «' + (pack.name || 'pack') + '» cargadas');
+  } catch (e) {
+    console.warn('Pack de texturas inválido:', e);
+  }
+}
+
+function applyTexturePack(pack, img) {
+  const cut = f => {
+    const [c, g] = cv(f.w, f.h);
+    g.drawImage(img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    return c;
+  };
+  const setIdx = (arr, idx, canvas) => {
+    if (!Array.isArray(arr)) return [canvas];
+    if (idx == null || idx === '') return [canvas];
+    arr[Math.min(arr.length - 1, Math.max(0, idx | 0))] = canvas;
+    return arr;
+  };
+  for (const key in pack.frames || {}) {
+    const f = pack.frames[key];
+    if (!f || !(f.w > 0) || !(f.h > 0)) continue;
+    const [kind, name, idx] = key.split('.');
+    if (kind === 'tile' && TEX_T[name] != null) {
+      Assets.tiles[TEX_T[name]] = setIdx(Assets.tiles[TEX_T[name]], idx, cut(f));
+    } else if (kind === 'fringe' && TEX_T[name] != null && Assets.fringe[TEX_T[name]]) {
+      Assets.fringe[TEX_T[name]] = setIdx(Assets.fringe[TEX_T[name]], idx, cut(f));
+    } else if (kind === 'obj' && TEX_O[name] != null) {
+      const cur = Assets.obj[TEX_O[name]];
+      Assets.obj[TEX_O[name]] = Array.isArray(cur) ? setIdx(cur, idx, cut(f)) : cut(f);
+    } else if (kind === 'item' && Assets.items[name]) {
+      Assets.items[name] = cut(f);
+      delete Assets._icons[name]; // regenerar el icono de la UI
+    } else if (kind === 'mob' && Assets.mobs[name]) {
+      Assets.mobs[name] = setIdx(Assets.mobs[name], idx, cut(f));
+    } else if (kind === 'boss') {
+      Assets.boss = setIdx(Assets.boss, name, cut(f)); // boss.0/1/2
+    }
+  }
 }
 
 // DataURL (cacheada) del icono de un item, para usar en la UI con <img>

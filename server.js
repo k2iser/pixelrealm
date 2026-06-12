@@ -378,10 +378,17 @@ function handleMessage(conn, m) {
       closeConn(conn);
       return;
     }
+    // apariencia validada (espejo de clampLook del cliente)
+    const lv = (n, max) => Math.min(max, Math.max(0, n | 0));
+    const lraw = m.look || {};
+    const look = {
+      skin: lv(lraw.skin, 3), hair: lv(lraw.hair, 5), style: lv(lraw.style, 2),
+      shirt: lv(lraw.shirt, 7), pants: lv(lraw.pants, 3),
+    };
     const player = {
       conn, id: pid,
       name: sanitizeText(m.name, 14) || 'Anónima',
-      color: HERO_COLORS.includes((m.color || '').toLowerCase()) ? m.color : HERO_COLORS[0],
+      look,
       x: 0, y: 0, dir: 'down', f: 0, hp: 10, chatT: 0,
     };
     conn.player = player;
@@ -571,7 +578,7 @@ function handleMessage(conn, m) {
 }
 
 function publicPlayer(p) {
-  return { id: p.id, name: p.name, color: p.color, x: p.x, y: p.y, dir: p.dir, frameI: p.f, hp: p.hp };
+  return { id: p.id, name: p.name, look: p.look, x: p.x, y: p.y, dir: p.dir, frameI: p.f, hp: p.hp };
 }
 
 function snapshotPlayers() {

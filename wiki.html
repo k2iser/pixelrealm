@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guía de PixelRealm</title>
+<meta name="description" content="Enciclopedia de PixelRealm: biomas, recursos, crafteo, construcciones y criaturas. Generada automáticamente desde los datos del juego.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { overflow: auto; background: #101522; }
+  #wiki {
+    max-width: 980px; margin: 0 auto; padding: 40px 20px 80px;
+    color: var(--parchment); font-size: 10px; line-height: 1.9;
+  }
+  #wiki h1 { font-size: 26px; color: var(--accent); text-shadow: 3px 3px 0 var(--accent-dark), 6px 6px 0 rgba(0,0,0,0.5); margin-bottom: 6px; }
+  #wiki .sub { color: #9fb38a; margin-bottom: 28px; font-size: 9px; }
+  #wiki h2 { font-size: 15px; color: #e8c14d; text-shadow: 2px 2px 0 #000; margin: 44px 0 16px; border-bottom: 3px solid var(--wood-dark); padding-bottom: 10px; }
+  #wiki nav { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 18px 0 8px; }
+  #wiki nav a { color: #8fb37a; text-decoration: none; font-size: 9px; }
+  #wiki nav a:hover { color: var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--panel-bg); padding: 14px 16px;
+    box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--wood-dark);
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .card img { image-rendering: pixelated; flex-shrink: 0; }
+  .card .body { flex: 1; }
+  .card .title { color: #fff; font-size: 10px; margin-bottom: 6px; }
+  .card .meta { color: #b3a17c; font-size: 8px; }
+  .card .meta b { color: #e8c14d; font-weight: normal; }
+  .card .flavor { color: #8d9b7c; font-size: 8px; margin-top: 8px; font-style: italic; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 14px; }
+  .tile { text-align: center; font-size: 8px; color: #b3a17c; }
+  .tile img { image-rendering: pixelated; display: block; margin: 0 auto 6px; }
+  table.wt { border-collapse: collapse; font-size: 9px; width: 100%; }
+  table.wt td, table.wt th { padding: 8px 12px; border-bottom: 2px solid #241b10; text-align: left; }
+  table.wt th { color: #e8c14d; font-weight: normal; }
+  .back { position: fixed; top: 14px; left: 14px; }
+</style>
+</head>
+<body>
+<a class="back linkbtn" href="index.html">← Volver al juego</a>
+<div id="wiki"><p style="padding:60px;text-align:center">Generando la guía desde los datos del juego…</p></div>
+<script src="js/utils.js"></script>
+<script src="js/config.js"></script>
+<script src="js/assets.js"></script>
+<script src="js/wiki.js"></script>
+</body>
+</html>

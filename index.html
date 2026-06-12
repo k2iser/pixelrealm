@@ -73,6 +73,7 @@
       <tr><td>1–9 / Rueda</td><td>Elegir de la barra</td></tr>
       <tr><td>E</td><td>Inventario, fabricación y construcciones</td></tr>
       <tr><td>T</td><td>Chat (online)</td></tr>
+      <tr><td>+ / −</td><td>Acercar o alejar la cámara</td></tr>
       <tr><td>H</td><td>Esta ayuda</td></tr>
       <tr><td>M</td><td>Silenciar sonido</td></tr>
     </table>
@@ -82,6 +83,25 @@
   </div>
 
   <div id="toast"></div>
+
+  <!-- Editor de personaje -->
+  <div id="hero-editor" class="overlay hidden">
+    <div class="editor-box">
+      <h2>Tu héroe</h2>
+      <canvas id="hero-preview" width="28" height="40"></canvas>
+      <div class="opt-rows">
+        <div class="opt-row"><span>Piel</span><button data-opt="skin" data-d="-1">◀</button><i id="sw-skin" class="swatch"></i><button data-opt="skin" data-d="1">▶</button></div>
+        <div class="opt-row"><span>Peinado</span><button data-opt="style" data-d="-1">◀</button><em id="sw-style">Corto</em><button data-opt="style" data-d="1">▶</button></div>
+        <div class="opt-row"><span>Pelo</span><button data-opt="hair" data-d="-1">◀</button><i id="sw-hair" class="swatch"></i><button data-opt="hair" data-d="1">▶</button></div>
+        <div class="opt-row"><span>Camiseta</span><button data-opt="shirt" data-d="-1">◀</button><i id="sw-shirt" class="swatch"></i><button data-opt="shirt" data-d="1">▶</button></div>
+        <div class="opt-row"><span>Pantalón</span><button data-opt="pants" data-d="-1">◀</button><i id="sw-pants" class="swatch"></i><button data-opt="pants" data-d="1">▶</button></div>
+      </div>
+      <div class="editor-btns">
+        <button id="btn-look-random" class="linkbtn">🎲 Aleatorio</button>
+        <button id="btn-look-done" class="bigbtn">¡Listo!</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Pantalla de muerte -->
   <div id="death-overlay" class="overlay hidden">
@@ -103,6 +123,10 @@
         <button id="btn-online" class="bigbtn online hidden">Entrar al mundo compartido</button>
         <button id="btn-continue" class="bigbtn hidden">Continuar partida</button>
         <button id="btn-new" class="bigbtn">Nuevo mundo (un jugador)</button>
+        <div class="title-links">
+          <button id="btn-hero" class="linkbtn">⚒ Personalizar héroe</button>
+          <a href="wiki.html" target="_blank" class="linkbtn">📖 Guía del mundo</a>
+        </div>
         <div class="seedrow">
           <label for="seed-input">Semilla:</label>
           <input id="seed-input" type="text" placeholder="aleatoria" maxlength="24" autocomplete="off">

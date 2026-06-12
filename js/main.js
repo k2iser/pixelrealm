@@ -6,6 +6,8 @@ let world = null;
 const G = {
   running: false,
   online: false,    // espejo de Net.online para módulos que cargan antes
+  zoom: 2,          // 1 lejos · 2 cerca (Stardew) · 3 muy cerca
+  look: DEFAULT_LOOK,
   time: 0.08,       // fracción del día [0,1)
   day: 1,
   elapsed: 0,
@@ -28,12 +30,18 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 function resize() {
-  const scale = Math.max(2, Math.round(window.innerWidth / 640));
-  canvas.width = Math.ceil(window.innerWidth / scale);
-  canvas.height = Math.ceil(window.innerHeight / scale);
+  canvas.width = Math.ceil(window.innerWidth / G.zoom);
+  canvas.height = Math.ceil(window.innerHeight / G.zoom);
   ctx.imageSmoothingEnabled = false;
 }
 window.addEventListener('resize', resize);
+
+function setZoom(z) {
+  G.zoom = clamp(z | 0, 1, 3);
+  try { localStorage.setItem('pixelrealm.zoom', G.zoom); } catch (e) { /* da igual */ }
+  resize();
+  UI.toast('Zoom: ' + ['lejos', 'cerca', 'muy cerca'][G.zoom - 1]);
+}
 
 /* ---------- arranque de partidas ---------- */
 
@@ -403,27 +411,35 @@ function update(dt) {
       if (Input.keys['d'] || Input.keys['arrowright']) ix += 1;
     }
     player.moving = ix !== 0 || iy !== 0;
+    // aceleración breve: el arranque y la frenada se sienten físicos
+    let twx = 0, twy = 0;
     if (player.moving) {
       let wx = ix + 2 * iy, wy = 2 * iy - ix;
       const len = Math.hypot(wx, wy);
-      wx /= len; wy /= len;
       const sp = CFG.PLAYER_SPEED * world.speedAt(Math.floor(player.x), Math.floor(player.y));
-      moveEntity(player, wx * sp * dt, wy * sp * dt, 0.3);
+      twx = (wx / len) * sp;
+      twy = (wy / len) * sp;
       if (Math.abs(ix) > Math.abs(iy)) player.dir = ix > 0 ? 'right' : 'left';
       else if (iy !== 0) player.dir = iy > 0 ? 'down' : 'up';
       player.animT += dt;
+    } else {
+      player.animT = 0;
+    }
+    const accK = 1 - Math.pow(0.000001, dt);
+    player.velX = (player.velX || 0) + (twx - (player.velX || 0)) * accK;
+    player.velY = (player.velY || 0) + (twy - (player.velY || 0)) * accK;
+    if (Math.abs(player.velX) > 0.02 || Math.abs(player.velY) > 0.02) {
+      moveEntity(player, player.velX * dt, player.velY * dt, 0.3);
       // polvillo en los pies
       player.dustT -= dt;
-      if (player.dustT <= 0 && world.ground(Math.floor(player.x), Math.floor(player.y)) !== T.WATER) {
+      if (player.moving && player.dustT <= 0 && world.ground(Math.floor(player.x), Math.floor(player.y)) !== T.WATER) {
         player.dustT = 0.22;
         particles.push({
           x: player.x + randRange(-0.1, 0.1), y: player.y + randRange(-0.1, 0.1),
-          vx: -wx * 0.8, vy: -wy * 0.8, z: 0.05, vz: randRange(0.4, 1),
+          vx: -player.velX * 0.18, vy: -player.velY * 0.18, z: 0.05, vz: randRange(0.4, 1),
           life: 0.35, maxLife: 0.35, color: 'rgba(190,175,140,0.7)',
         });
       }
-    } else {
-      player.animT = 0;
     }
 
     // pose del héroe: 0 quieto, 1-4 andar, 5 ataque
@@ -472,7 +488,7 @@ function update(dt) {
       const x = player.x + Math.cos(ang) * d;
       const y = player.y + Math.sin(ang) * d;
       const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;
-      if (ssx > -32 && ssx < canvas.width + 32 && ssy > -48 && ssy < canvas.height + 32) continue;
+      if (ssx > -64 && ssx < canvas.width + 64 && ssy > -96 && ssy < canvas.height + 64) continue;
       const tx = Math.floor(x), ty = Math.floor(y);
       const gr = world.ground(tx, ty);
       if (gr !== T.DEEP && gr !== T.WATER && !world.isSolid(tx, ty)) {
@@ -593,6 +609,12 @@ function loop(now) {
 
 function boot() {
   buildAssets();
+  // preferencias guardadas: zoom y apariencia del héroe
+  try {
+    G.zoom = clamp(parseInt(localStorage.getItem('pixelrealm.zoom'), 10) || 2, 1, 3);
+    G.look = clampLook(JSON.parse(localStorage.getItem('pixelrealm.hero') || 'null') || DEFAULT_LOOK);
+  } catch (e) { /* valores por defecto */ }
+  Assets.player = getHeroLookSet(G.look);
   resize();
   setupInput(canvas);
   UI.init();
@@ -626,6 +648,9 @@ function boot() {
 
   // sondea si hay servidor multijugador (en GitHub Pages no lo hay: se oculta el botón)
   if (typeof Net !== 'undefined') Net.probe();
+
+  // pack de texturas opcional (textures/pack.json); si no existe, arte procedural
+  loadTexturePack();
 
   requestAnimationFrame(loop);
 }

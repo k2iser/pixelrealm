@@ -12,7 +12,10 @@ let placedAt = null;
 
 ws.onopen = () => {
   console.log('[bot] conectada a', URL);
-  ws.send(JSON.stringify({ t: 'hello', pid: 'bot-' + NAME.toLowerCase(), name: NAME, color: '#c0563a' }));
+  ws.send(JSON.stringify({
+    t: 'hello', pid: 'bot-' + NAME.toLowerCase(), name: NAME,
+    look: { skin: 1, hair: 3, style: 1, shirt: 1, pants: 2 },
+  }));
 };
 
 ws.onmessage = e => {

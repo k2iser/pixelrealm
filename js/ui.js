@@ -80,6 +80,71 @@ const UI = {
       const n = localStorage.getItem('pixelrealm.name');
       if (n) this.el('name-input').value = n;
     } catch (e) { /* sin almacenamiento */ }
+
+    this.initHeroEditor();
+  },
+
+  /* ---------- editor de personaje ---------- */
+
+  _edLook: null,
+  _edTimer: null,
+  _edT: 0,
+
+  initHeroEditor() {
+    this.el('btn-hero').addEventListener('click', () => {
+      this._edLook = clampLook(G.look);
+      this.el('hero-editor').classList.remove('hidden');
+      this.refreshEditor();
+      clearInterval(this._edTimer);
+      this._edTimer = setInterval(() => this.drawHeroPreview(), 150);
+    });
+    for (const b of document.querySelectorAll('.opt-row button')) {
+      b.addEventListener('click', () => {
+        const opt = b.dataset.opt, d = +b.dataset.d;
+        const lens = { skin: HERO_SKINS.length, hair: HERO_HAIRC.length, style: HERO_STYLES.length, shirt: 8, pants: HERO_PANTS.length };
+        this._edLook[opt] = (this._edLook[opt] + d + lens[opt]) % lens[opt];
+        Sfx.init(); Sfx.place();
+        this.refreshEditor();
+      });
+    }
+    this.el('btn-look-random').addEventListener('click', () => {
+      this._edLook = clampLook({
+        skin: Math.random() * HERO_SKINS.length, hair: Math.random() * HERO_HAIRC.length,
+        style: Math.random() * HERO_STYLES.length, shirt: Math.random() * 8, pants: Math.random() * HERO_PANTS.length,
+      });
+      Sfx.init(); Sfx.craft();
+      this.refreshEditor();
+    });
+    this.el('btn-look-done').addEventListener('click', () => {
+      G.look = this._edLook;
+      try { localStorage.setItem('pixelrealm.hero', JSON.stringify(G.look)); } catch (e) { /* da igual */ }
+      Assets.player = getHeroLookSet(G.look);
+      clearInterval(this._edTimer);
+      this.el('hero-editor').classList.add('hidden');
+    });
+  },
+
+  refreshEditor() {
+    const l = this._edLook;
+    this.el('sw-skin').style.background = HERO_SKINS[l.skin];
+    this.el('sw-hair').style.background = HERO_HAIRC[l.hair];
+    this.el('sw-shirt').style.background = HERO_COLORS[l.shirt];
+    this.el('sw-pants').style.background = HERO_PANTS[l.pants];
+    this.el('sw-style').textContent = HERO_STYLES[l.style];
+    this.drawHeroPreview();
+  },
+
+  drawHeroPreview() {
+    const c = this.el('hero-preview');
+    const g = c.getContext('2d');
+    const set = getHeroLookSet(this._edLook);
+    this._edT++;
+    const dirs = ['down', 'right', 'up', 'left'];
+    const dir = dirs[Math.floor(this._edT / 9) % 4];
+    const frame = 1 + (this._edT % 4);
+    g.clearRect(0, 0, c.width, c.height);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(set[dir][frame], 0, 0);
   },
 
   setTab(which) {

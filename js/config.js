@@ -2,8 +2,9 @@
 /* ============ Configuración y datos del juego ============ */
 
 const CFG = {
-  TW: 32, TH: 16,          // tamaño del rombo isométrico (px internos)
-  HW: 16, HH: 8,           // medio rombo
+  TW: 64, TH: 32,          // tamaño del rombo isométrico (px internos) — doble resolución v3
+  HW: 32, HH: 16,          // medio rombo
+  SPR: 4,                  // factor de escalado de los sprites de rejilla del mundo
   CHUNK: 32,               // lado del chunk en casillas
   DAY_LENGTH: 300,         // segundos por día completo
   REACH: 3.4,              // alcance de interacción (casillas)
@@ -12,7 +13,7 @@ const CFG = {
   PLAYER_MAXHP: 10,
   HIT_COOLDOWN: 0.32,      // segundos entre golpes
   MOB_CAP: 10,             // enemigos simultáneos máximos
-  CUBE_H: 12,              // altura visual de los muros (px)
+  CUBE_H: 24,              // altura visual de los muros (px)
   SAVE_KEY: 'pixelrealm.save.v1',  // los guardados antiguos siguen cargando: los campos nuevos son opcionales
   AUTOSAVE: 30,            // segundos entre autoguardados
   BOSS_NIGHT_EVERY: 3,     // cada cuántas noches viene el Coloso
@@ -152,6 +153,27 @@ const MINIMAP_COLORS = {
   [T.DEEP]: '#1d3a78', [T.WATER]: '#2f5fb0', [T.SAND]: '#e3cd8b', [T.GRASS]: '#4f9c3e',
   [T.DIRT]: '#8a6242', [T.STONE]: '#8c8c94', [T.SNOW]: '#e9f1f4', [T.FLOOR]: '#a87b4f',
 };
+
+// --- Apariencia del héroe (editor de personaje) ---
+const HERO_COLORS = ['#2e8f83', '#c0563a', '#7a5fc0', '#3a7ac0', '#c09a3a', '#58a04a', '#c05a8a', '#36b3c9'];
+const HERO_SKINS = ['#eab487', '#d9985f', '#b5703f', '#7d4a28'];
+const HERO_HAIRC = ['#4a3120', '#26262c', '#a8742c', '#c8452a', '#6e6e78', '#e8c14d'];
+const HERO_PANTS = ['#3b3b46', '#5a4a32', '#2e4a6e', '#5e2e2e'];
+const HERO_STYLES = ['Corto', 'Melena', 'Rapado'];
+const DEFAULT_LOOK = { skin: 0, hair: 0, style: 0, shirt: 0, pants: 0 };
+
+// Sanea un look recibido (del editor, de localStorage o de la red)
+function clampLook(l) {
+  const v = (n, max) => Math.min(max, Math.max(0, n | 0));
+  l = l || {};
+  return {
+    skin: v(l.skin, HERO_SKINS.length - 1),
+    hair: v(l.hair, HERO_HAIRC.length - 1),
+    style: v(l.style, HERO_STYLES.length - 1),
+    shirt: v(l.shirt, 7),
+    pants: v(l.pants, HERO_PANTS.length - 1),
+  };
+}
 
 // Color de las partículas al golpear cada objeto
 const PART_COLOR = {

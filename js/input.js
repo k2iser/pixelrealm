@@ -36,6 +36,10 @@ function setupInput(canvas) {
       Inv.sel = +k - 1;
       UI.refreshHotbar();
       if (UI.panelOpen) UI.refreshInv();
+    } else if (k === '+' || k === '=') {
+      setZoom(G.zoom + 1);
+    } else if (k === '-') {
+      setZoom(G.zoom - 1);
     }
   });
 
