@@ -855,6 +855,26 @@ function makeAltar(frame) {
   return scaleSprite(c, CFG.SPR);
 }
 
+// Pozo de aldea: brocal de piedra, tejadillo de madera y un cubo colgando
+function makeWell() {
+  const [c, g] = cv(20, 24);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // postes y tejadillo
+  R(4, 4, 2, 9, '#884b2b'); R(14, 4, 2, 9, '#884b2b');
+  for (let i = 0; i < 5; i++) R(2 + i, 4 - Math.floor(i / 2), 16 - i * 2 + (i % 2), 1, i % 2 ? '#7a4841' : '#a23e3c');
+  R(2, 1, 16, 2, '#a23e3c'); R(8, 0, 4, 1, '#cf573c');
+  // cuerda + cubo
+  R(9, 5, 1, 5, '#3a3a42');
+  R(8, 10, 4, 3, '#884b2b'); R(8, 10, 4, 1, '#a87b4f');
+  // brocal de piedra (boca oscura con agua)
+  R(3, 14, 14, 8, '#819796'); R(3, 14, 14, 1, '#a8b5b2');
+  R(5, 15, 10, 5, '#1a2a3a'); R(6, 16, 8, 3, '#3c5e8b'); // agua
+  R(6, 16, 3, 1, '#73bed3');
+  R(3, 21, 14, 2, '#577277');
+  for (let x = 4; x < 17; x += 3) R(x, 20, 1, 2, '#394a50'); // junta de piedras
+  return scaleSprite(c, CFG.SPR);
+}
+
 /* ================= items ================= */
 
 function buildItems() {
@@ -939,6 +959,16 @@ function buildItems() {
     '.GGGGGGGGGG',
     '.dddddddddd',
   ], { G: '#e8c14d', g: '#7be37b', r: '#d83434', d: '#b8901e' });
+
+  it.coin = gridSprite([
+    '..ggg',
+    '.gYYYg',
+    'gYWYYYg',
+    'gYYdYYg',
+    'gYYYWYg',
+    '.gYYYg',
+    '..ggg',
+  ], { g: '#b8901e', Y: '#e8c14d', W: '#fff2b8', d: '#b8901e' });
 
   it.plank = gridSprite([
     '.pppppppppp',
@@ -1161,6 +1191,7 @@ function buildAssets() {
   Assets.obj[O.FARM] = makeFarm();
   Assets.obj[O.BRAZIER] = [makeBrazier(0), makeBrazier(1)];
   Assets.obj[O.ALTAR] = [makeAltar(0), makeAltar(1)];
+  Assets.obj[O.WELL] = makeWell();
   Assets.obj[O.PART] = null; // invisible: lo dibuja su ancla
 
   // héroe por defecto y enemigos
@@ -1239,7 +1270,7 @@ function buildAssets() {
 const TEX_T = { deep: T.DEEP, water: T.WATER, sand: T.SAND, grass: T.GRASS, dirt: T.DIRT, stone: T.STONE, snow: T.SNOW, floor: T.FLOOR };
 const TEX_O = { tree: O.TREE, pine: O.PINE, cactus: O.CACTUS, rock: O.ROCK, flower: O.FLOWER, tallgrass: O.TALLGRASS, bush: O.BUSH,
                 wallw: O.WALLW, walls: O.WALLS, torch: O.TORCH, fire: O.FIRE,
-                hut: O.HUT, tower: O.TOWER, sawmill: O.SAWMILL, quarry: O.QUARRY, farm: O.FARM, brazier: O.BRAZIER, altar: O.ALTAR };
+                hut: O.HUT, tower: O.TOWER, sawmill: O.SAWMILL, quarry: O.QUARRY, farm: O.FARM, brazier: O.BRAZIER, altar: O.ALTAR, well: O.WELL };
 
 async function loadTexturePack() {
   if (!location.protocol.startsWith('http')) return;

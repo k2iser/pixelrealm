@@ -44,6 +44,28 @@ El cliente ya usa `wss://` automáticamente cuando la página va por HTTPS. Con 
 
 > Alternativa sin dominio: `cloudflared tunnel` o Tailscale Funnel sobre el puerto 5173.
 
+## Comerciantes con IA (Gemma) — opcional
+
+Los comerciantes de las aldeas conversan con **diálogo procedural** por defecto (funciona en GitHub Pages, sin servidor). Si sirves el juego con `node server.js`, puedes enchufar un LLM real y `server.js` hará de proxy en `/npc-chat` (sin dependencias). Se activa con variables de entorno:
+
+**Opción A — Ollama local (gratis, privado, sin API key):**
+
+```bash
+# instala Ollama (ollama.com) y descarga el modelo
+ollama pull gemma3:4b           # ligero; 12b/27b si tienes GPU
+# arranca PixelRealm apuntando a Ollama
+PIXELREALM_AI=ollama PIXELREALM_MODEL=gemma3:4b node server.js
+# (OLLAMA_URL por defecto http://localhost:11434)
+```
+
+**Opción B — Google AI Studio (Gemma/Gemini gestionado, capa gratuita):**
+
+```bash
+PIXELREALM_AI=google GOOGLE_API_KEY=tu_clave PIXELREALM_MODEL=gemma-3-27b-it node server.js
+```
+
+Sin estas variables, el endpoint responde 501 y el cliente cae al diálogo procedural automáticamente. El prompt del sistema se arma con el nombre, oficio y personalidad de cada comerciante (`buildNpcPrompt` en `server.js`), pide respuestas breves en español y en personaje. Hay timeout de 7 s en cliente y 15 s en servidor; cualquier fallo degrada a procedural sin romper la partida.
+
 ## Fase 2 — Cuentas con Google (Firebase Auth)
 
 Ya tenéis proyecto de Firebase: solo hay que **pegar la config web** en `js/firebase-config.js` (no se versiona) y añadir el SDK por CDN en `index.html`. Flujo:

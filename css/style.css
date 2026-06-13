@@ -186,6 +186,92 @@ html, body {
 }
 .bigbtn.online:hover { background: #3a7ac0; }
 .bigbtn.online:active { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #1d4368, 0 2px 0 4px #122a42; }
+.bigbtn.creative {
+  background: #6a4fa0;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #4a3578, 0 6px 0 4px #2e2050;
+}
+.bigbtn.creative:hover { background: #8a6fc8; }
+.bigbtn.creative:active { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px #4a3578, 0 2px 0 4px #2e2050; }
+
+/* ---------- paleta creativa ---------- */
+#creativelist {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px;
+  max-height: 56vh; overflow-y: auto; padding-right: 6px;
+  min-width: 340px; align-content: start;
+}
+#creativelist::-webkit-scrollbar { width: 8px; }
+#creativelist::-webkit-scrollbar-thumb { background: var(--wood); }
+.cre-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: #241b10; border: none; cursor: pointer;
+  box-shadow: inset 0 0 0 2px var(--wood-dark);
+  padding: 6px 2px; color: var(--parchment);
+}
+.cre-item:hover { box-shadow: inset 0 0 0 2px var(--accent-dark); }
+.cre-item img { width: 28px; height: 28px; image-rendering: pixelated; }
+.cre-item span { font-size: 6px; line-height: 1.3; text-align: center; }
+
+/* ---------- diálogo con comerciantes ---------- */
+#npc-dialog {
+  position: absolute; right: 16px; bottom: 16px;
+  width: min(380px, 46vw);
+  background: var(--panel-bg);
+  color: var(--parchment);
+  padding: 14px 16px 12px;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--wood), 0 0 0 6px var(--ink);
+}
+#npc-close {
+  position: absolute; top: 5px; right: 8px;
+  background: none; border: none; color: #8d7c5c;
+  font-family: var(--pixel-font); font-size: 11px; cursor: pointer;
+}
+#npc-close:hover { color: var(--danger); }
+.npc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+#npc-portrait {
+  width: 56px; height: 80px; image-rendering: pixelated;
+  background: radial-gradient(circle at 50% 80%, rgba(122,79,160,0.25), transparent 70%), #18222e;
+  box-shadow: inset 0 0 0 2px var(--wood-dark);
+}
+.npc-id { display: flex; flex-direction: column; gap: 5px; }
+.npc-id span { font-size: 12px; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+.npc-id em { font-style: normal; font-size: 8px; color: #b3a17c; }
+#npc-log {
+  height: 150px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 8px; line-height: 1.6; padding-right: 6px; margin-bottom: 8px;
+}
+#npc-log::-webkit-scrollbar { width: 8px; }
+#npc-log::-webkit-scrollbar-thumb { background: var(--wood); }
+.npc-line { padding: 5px 8px; max-width: 92%; word-break: break-word; }
+.npc-line.them { background: rgba(122,79,160,0.22); align-self: flex-start; }
+.npc-line.me { background: rgba(111,206,78,0.18); align-self: flex-end; }
+#npc-trade {
+  max-height: 180px; overflow-y: auto; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.trade-coins { font-size: 9px; color: #e8c14d; margin-bottom: 4px; }
+.trade-h { font-size: 8px; color: #9fb38a; margin-top: 6px; }
+.trade-row { display: flex; align-items: center; gap: 8px; background: #241b10; padding: 5px 8px; box-shadow: inset 0 0 0 2px var(--wood-dark); }
+.trade-row img { width: 22px; height: 22px; image-rendering: pixelated; }
+.trade-name { flex: 1; font-size: 8px; }
+.trade-row button {
+  font-family: var(--pixel-font); font-size: 7px;
+  background: var(--accent-dark); color: #fff; border: none; padding: 7px 8px; cursor: pointer;
+}
+.trade-row button:hover:not(:disabled) { background: var(--accent); }
+.trade-row button:disabled { background: #4a4036; color: #847661; cursor: not-allowed; }
+.npc-row { display: flex; gap: 4px; }
+#npc-input {
+  flex: 1; font-family: var(--pixel-font); font-size: 9px;
+  background: #1c150c; color: var(--parchment); border: none; padding: 9px;
+  box-shadow: 0 0 0 2px var(--wood-dark); outline: none;
+}
+#npc-input:focus { box-shadow: 0 0 0 2px #7a5fc0; }
+#npc-send, #npc-trade-btn {
+  font-family: var(--pixel-font); font-size: 11px;
+  background: #6a4fa0; color: #fff; border: none; padding: 0 12px; cursor: pointer;
+}
+#npc-send:hover, #npc-trade-btn:hover { background: #8a6fc8; }
 
 /* ---------- panel inventario / crafteo ---------- */
 #panel {

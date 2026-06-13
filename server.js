@@ -14,12 +14,24 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const https = require('https');
+
 const PORT = process.env.PORT || 5173;
 const ROOT = __dirname;
 const WORLD_FILE = path.join(ROOT, 'world-server.json');
 
+/* ---- IA de los comerciantes (opcional) ----
+   PIXELREALM_AI = 'ollama' | 'google' | (vacío = diálogo procedural del cliente)
+   Ollama:  PIXELREALM_AI=ollama  [PIXELREALM_MODEL=gemma3:4b]  [OLLAMA_URL=http://localhost:11434]
+   Google:  PIXELREALM_AI=google  GOOGLE_API_KEY=...  [PIXELREALM_MODEL=gemma-3-27b-it] */
+const AI_PROVIDER = (process.env.PIXELREALM_AI || '').toLowerCase();
+const AI_MODEL = process.env.PIXELREALM_MODEL || (AI_PROVIDER === 'google' ? 'gemma-3-27b-it' : 'gemma3:4b');
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const GOOGLE_KEY = process.env.GOOGLE_API_KEY || '';
+
 /* ---- constantes espejo de js/config.js (mantener en sincronía) ---- */
 const DAY_LENGTH = 300;
+const BOSS_ENABLED = false;       // el Coloso está retirado por ahora
 const BOSS_NIGHT_EVERY = 3;
 const O_NONE = 0, O_ALTAR = 18;
 const PROD = {                       // id de objeto -> producción
@@ -94,6 +106,8 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  // endpoint de diálogo de los comerciantes (IA opcional)
+  if (urlPath === '/npc-chat') { handleNpcChat(req, res); return; }
   if (urlPath === '/') urlPath = '/index.html';
   if (urlPath === '/world-server.json') { res.writeHead(403); res.end(); return; }
   const filePath = path.join(ROOT, path.normalize(urlPath));
@@ -112,6 +126,86 @@ const server = http.createServer((req, res) => {
     res.end(data);
   });
 });
+
+/* ================= IA de los comerciantes (proxy a Gemma) ================= */
+
+// Lee el cuerpo JSON de una petición (con tope de tamaño)
+function readBody(req, cb) {
+  let body = '';
+  req.on('data', c => { body += c; if (body.length > 16384) req.destroy(); });
+  req.on('end', () => { try { cb(JSON.parse(body)); } catch (e) { cb(null); } });
+  req.on('error', () => cb(null));
+}
+
+function handleNpcChat(req, res) {
+  if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+  if (!AI_PROVIDER) { res.writeHead(501); res.end('IA no configurada'); return; }  // el cliente usa diálogo procedural
+  readBody(req, m => {
+    if (!m || typeof m.message !== 'string') { res.writeHead(400); res.end(); return; }
+    const sys = buildNpcPrompt(m);
+    const done = reply => {
+      if (reply) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ reply: String(reply).slice(0, 240) })); }
+      else { res.writeHead(502); res.end('Sin respuesta del modelo'); }
+    };
+    if (AI_PROVIDER === 'ollama') askOllama(sys, m, done);
+    else if (AI_PROVIDER === 'google') askGoogle(sys, m, done);
+    else done(null);
+  });
+}
+
+function buildNpcPrompt(m) {
+  const name = String(m.name || 'comerciante').slice(0, 24);
+  const title = String(m.title || '').slice(0, 24);
+  const persona = String(m.persona || '').slice(0, 200);
+  const night = m.world && m.world.night;
+  return 'Eres ' + name + ', ' + title + ' en PixelRealm, un mundo abierto de pixel art. ' +
+    'Personalidad: ' + persona + '. ' +
+    'Responde SIEMPRE en español, en 1-2 frases breves, en primer persona, sin emojis ni markdown, ' +
+    'manteniéndote en el personaje. Es ' + (night ? 'de noche (cuidado con las babas)' : 'de día') +
+    ', día ' + ((m.world && m.world.day) | 0) + '. No inventes mecánicas que no existan.';
+}
+
+// POST JSON a una URL http/https; devuelve el objeto parseado o null
+function postJson(url, payload, headers, cb) {
+  let mod, opts;
+  try {
+    const u = new URL(url);
+    mod = u.protocol === 'https:' ? https : http;
+    opts = { method: 'POST', hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}) };
+  } catch (e) { cb(null); return; }
+  const data = JSON.stringify(payload);
+  opts.headers['Content-Length'] = Buffer.byteLength(data);
+  const r = mod.request(opts, resp => {
+    let body = '';
+    resp.on('data', c => { body += c; });
+    resp.on('end', () => { if (resp.statusCode >= 200 && resp.statusCode < 300) { try { cb(JSON.parse(body)); } catch (e) { cb(null); } } else cb(null); });
+  });
+  r.setTimeout(15000, () => { r.destroy(); cb(null); });
+  r.on('error', () => cb(null));
+  r.write(data); r.end();
+}
+
+function askOllama(sys, m, done) {
+  const messages = [{ role: 'system', content: sys }];
+  for (const h of (m.history || []).slice(-8)) messages.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.text || '').slice(0, 240) });
+  messages.push({ role: 'user', content: String(m.message).slice(0, 240) });
+  postJson(OLLAMA_URL + '/api/chat', { model: AI_MODEL, messages, stream: false, options: { temperature: 0.8, num_predict: 90 } },
+    null, j => done(j && j.message && j.message.content));
+}
+
+function askGoogle(sys, m, done) {
+  if (!GOOGLE_KEY) { done(null); return; }
+  const contents = [];
+  for (const h of (m.history || []).slice(-8)) contents.push({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: String(h.text || '').slice(0, 240) }] });
+  contents.push({ role: 'user', parts: [{ text: String(m.message).slice(0, 240) }] });
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + AI_MODEL + ':generateContent?key=' + encodeURIComponent(GOOGLE_KEY);
+  postJson(url, { systemInstruction: { parts: [{ text: sys }] }, contents, generationConfig: { temperature: 0.8, maxOutputTokens: 120 } },
+    null, j => {
+      const t = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0] && j.candidates[0].content.parts[0].text;
+      done(t);
+    });
+}
 
 /* ================= WebSocket artesanal (RFC 6455) ================= */
 
@@ -546,6 +640,7 @@ function handleMessage(conn, m) {
     }
 
     case 'summon': {
+      if (!BOSS_ENABLED) return;     // el Coloso está retirado
       const c = validXY(p, m);
       if (!c || !takeEdit(p)) return;
       const e = state.edits[c.x + ',' + c.y];
@@ -614,13 +709,12 @@ setInterval(() => {
     state.day++;
     bossNightDone = false;
     dirty = true;
-    broadcast({ t: 'chat', id: 0, name: '✦', m: 'Amanece el día ' + state.day +
-      (state.day % BOSS_NIGHT_EVERY === 0 ? ' — esta noche viene el Coloso' : '') });
+    broadcast({ t: 'chat', id: 0, name: '✦', m: 'Amanece el día ' + state.day });
   }
   const dark = darknessAt(state.time);
 
-  // noche del Coloso
-  if (!boss && !bossNightDone && dark >= 1 && state.day % BOSS_NIGHT_EVERY === 0 && state.day >= BOSS_NIGHT_EVERY) {
+  // noche del Coloso (retirada por ahora: BOSS_ENABLED=false)
+  if (BOSS_ENABLED && !boss && !bossNightDone && dark >= 1 && state.day % BOSS_NIGHT_EVERY === 0 && state.day >= BOSS_NIGHT_EVERY) {
     const list = [...players.values()];
     const target = list[(Math.random() * list.length) | 0];
     const ang = Math.random() * Math.PI * 2;

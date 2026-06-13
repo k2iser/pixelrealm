@@ -56,13 +56,14 @@ const Inv = {
   },
 
   canCraft(r) {
+    if (G.creative) return true;                 // en creativo todo es gratis
     for (const id in r.cost) if (this.count(id) < r.cost[id]) return false;
     return true;
   },
 
   craft(r) {
     if (!this.canCraft(r)) return false;
-    for (const id in r.cost) this.remove(id, r.cost[id]);
+    if (!G.creative) for (const id in r.cost) this.remove(id, r.cost[id]);
     const left = this.add(r.out, r.n);
     if (left > 0) spawnDrop(player.x, player.y, r.out, left); // inventario lleno: al suelo
     return true;

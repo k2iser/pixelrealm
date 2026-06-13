@@ -34,8 +34,11 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
   - 🪚 **Aserradero** / ⛏ **Cantera** / 🫐 **Huerto** — producen recursos con el tiempo; recógelos con clic derecho
   - 🔥 **Brasero** — un gran círculo de luz nocturna
   - 🗿 **Altar antiguo** — invoca al jefe… si te atreves
+- **Movimiento estilo MOBA (clic para ir)**: clic izquierdo y el héroe va solo —con pathfinding A\* que rodea obstáculos— a caminar, talar, atacar o hablar; mantenlo pulsado para arrastrarte. WASD sigue disponible.
+- **Aldeas con comerciantes**: pueblos procedurales (casas, plaza, pozo, faroles) habitados por **herborista, cantero, carpintero y mercader**, cada uno con su nombre, aspecto y personalidad. Habla con ellos y comercia con monedas. El diálogo usa respuestas procedurales y, si conectas un modelo (Gemma vía Ollama o Google AI), conversación con IA de verdad — ver [DEPLOY.md](DEPLOY.md).
+- **Modo creativo**: recursos infinitos (paleta con todos los objetos), construir y romper al instante, sin daño ni enemigos. Ideal para probar y diseñar.
 - **Tres enemigos nocturnos**: babas saltarinas, sombras que caminan sin descanso (sueltan esencia oscura) y murciélagos que vuelan sobre tus muros.
-- **El Coloso de Baba**: jefe con barra de vida, salto con onda expansiva, oleadas de esbirros y enfado al 30 % de vida. Viene solo cada 3ª noche o cuando alguien activa un altar. Suelta una corona.
+- *(El jefe «Coloso de Baba» está retirado de momento; su código queda dormido tras `CFG.BOSS_ENABLED`.)*
 - **Multijugador cooperativo sin PvP**:
   - Chat integrado (tecla `T`) con bocadillos sobre los jugadores.
   - **Lo que construyes es tuyo**: cualquiera puede *usar* tu huerto, tus torres o calentarse en tu fogata, pero solo tú puedes destruirlo.
@@ -46,16 +49,17 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 
 ## ⌨ Controles
 
-| Tecla | Acción |
+| Control | Acción |
 |---|---|
-| `WASD` / flechas | Moverse |
-| Clic izquierdo (mantener) | Golpear / talar / picar / atacar |
-| Clic derecho | Colocar · comer · recoger producción · activar altar |
+| **Clic izquierdo** | Ir ahí · talar/picar · atacar · hablar con comerciantes (estilo MOBA) |
+| Clic izquierdo (mantener) | Arrastrar para moverte |
+| **Clic derecho** | Colocar · comer · recoger producción |
+| `WASD` / flechas | Moverse a mano (alternativa) |
 | `1–9` / rueda | Seleccionar en la barra rápida |
 | `E` | Inventario, fabricación y construcciones |
 | `T` | Chat (online) |
-| `H` | Ayuda |
-| `M` | Silenciar |
+| `+` / `−` | Acercar o alejar la cámara |
+| `H` | Ayuda · `M` Silenciar |
 
 ## 🧱 Cómo está hecho
 
@@ -67,9 +71,11 @@ js/
   config.js          datos: tiles, objetos, items, recetas, enemigos, jefe
   assets.js          TODO el pixel art, generado en canvas al vuelo
   audio.js           sintetizador WebAudio
-  world.js           chunks infinitos + biomas + edificios 2x2
+  world.js           chunks infinitos + biomas + edificios + ruinas + aldeas
+  path.js            pathfinding A* acotado para el click-to-move
   inventory.js       inventario y crafteo
   entities.js        jugador, enemigos (3 IAs), jefe, flechas, drops
+  npc.js             comerciantes: aparición por aldea, diálogo (LLM/procedural), comercio
   input.js           teclado, ratón y chat
   renderer.js        proyección isométrica, culling, luces, jugadores remotos
   ui.js              HUD, paneles, minimapa, chat, barra del jefe
@@ -85,12 +91,14 @@ Sin build, sin framework, sin `npm install`. Nada de dependencias: ni en el clie
 ## 🗺 Hoja de ruta
 
 - [x] Construcciones con función (producción, defensa, luz, respawn)
-- [x] Jefe cooperativo y nuevos enemigos
 - [x] Multijugador con chat y propiedad de construcciones
-- [ ] Intercambio de objetos entre jugadores
+- [x] Movimiento click-to-move con pathfinding
+- [x] Aldeas con comerciantes (diálogo + comercio; IA opcional con Gemma)
+- [x] Modo creativo
+- [ ] Cuentas Google (Firebase) y partidas en la nube — ver [DEPLOY.md](DEPLOY.md)
+- [ ] Misiones de los comerciantes (recados con recompensa)
 - [ ] Minerales (carbón, hierro) y segundo nivel de herramientas
-- [ ] Animales pasivos y agricultura plantable
-- [ ] Más jefes (uno por bioma)
+- [ ] Reintroducir el jefe como evento opcional
 - [ ] Soporte táctil para móvil
 
 ## Licencia

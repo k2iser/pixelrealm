@@ -151,6 +151,13 @@ function render(g, W, H) {
   }
   for (const p of particles) drawables.push({ d: p.x + p.y, type: 'part', p });
   for (const pr of projectiles) drawables.push({ d: pr.x + pr.y, type: 'proj', pr });
+  // comerciantes (NPCs)
+  for (const n of npcs) {
+    const sx = w2sx(n.x, n.y) + ox, sy = w2sy(n.x, n.y) + oy;
+    if (sx < -80 || sx > W + 80 || sy < -120 || sy > H + 80) continue;
+    drawables.push({ d: n.x + n.y, type: 'npc', n });
+    labels.push({ x: Math.round(sx), y: Math.round(sy) - 52, text: n.name + ' · ' + NPC_ROLES[n.role].title, color: '#ffe9a8' });
+  }
   if (!player.dead) drawables.push({ d: player.x + player.y, type: 'player' });
   if (typeof Net !== 'undefined' && Net.online) {
     for (const [, rp] of Net.players) {
@@ -175,6 +182,18 @@ function render(g, W, H) {
   }
 
   for (const d of drawables) drawDrawable(g, d, ox, oy);
+
+  // marcador de destino del clic (anillo que se expande, estilo MOBA)
+  if (G.running && !player.dead && player.path && player.path.length && !player.drag) {
+    const wp = player.path[player.path.length - 1];
+    const mx = w2sx(wp.x, wp.y) + ox, my = w2sy(wp.x, wp.y) + oy + CFG.HH;
+    const t = (G.elapsed * 2.4) % 1;
+    g.strokeStyle = 'rgba(120,200,255,' + (0.75 * (1 - t)).toFixed(2) + ')';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(mx, my, 7 + t * 13, 3.5 + t * 6.5, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
 
   ghostPreview(g, hov, inReach, ox, oy);
 
@@ -392,6 +411,18 @@ function drawDrawable(g, d, ox, oy) {
     const sy = w2sy(rp.px, rp.py) + oy;
     const inWater = world.ground(Math.floor(rp.px), Math.floor(rp.py)) === T.WATER;
     drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, 0, null, inWater);
+    return;
+  }
+
+  if (d.type === 'npc') {
+    const n = d.n;
+    const sx = w2sx(n.x, n.y) + ox;
+    const sy = w2sy(n.x, n.y) + oy;
+    drawHero(g, getHeroLookSet(n.look), n.dir, n.frameI, sx, sy, 0, null, false);
+    // moneda flotante: distingue a los comerciantes
+    const coin = Assets.items.coin;
+    const bob = Math.sin(G.elapsed * 3 + n.x) * 3;
+    g.drawImage(coin, Math.round(sx - coin.width), Math.round(sy - 56 + bob), coin.width * 2, coin.height * 2);
     return;
   }
 

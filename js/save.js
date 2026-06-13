@@ -24,6 +24,7 @@ const Save = {
     const data = {
       v: 1,
       seed: world.seed,
+      creative: G.creative,
       time: G.time,
       day: G.day,
       spawn: G.spawn,

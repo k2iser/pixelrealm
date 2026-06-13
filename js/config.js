@@ -17,8 +17,12 @@ const CFG = {
   SAVE_KEY: 'pixelrealm.save.v1',  // los guardados antiguos siguen cargando: los campos nuevos son opcionales
   AUTOSAVE: 30,            // segundos entre autoguardados
   BOSS_NIGHT_EVERY: 3,     // cada cuántas noches viene el Coloso
+  BOSS_ENABLED: false,     // el Coloso está retirado por ahora (código dormido)
   TOWER_ACTIVE_R: 26,      // radio en que las torres están activas alrededor de un jugador
   DROP_TTL: 180,           // segundos de vida de un objeto en el suelo
+  CREATIVE_REACH: 8,       // alcance ampliado en modo creativo
+  ARRIVE_DIST: 0.22,       // distancia para considerar alcanzado un punto del camino
+  NPC_TALK_R: 2.2,         // radio para hablar con un comerciante
 };
 
 // --- Suelos ---
@@ -31,6 +35,7 @@ const O = {
   // construcciones prefab (las de size 2 ocupan 2x2 casillas con O.PART)
   HUT: 12, TOWER: 13, SAWMILL: 14, QUARRY: 15, FARM: 16, BRAZIER: 17, ALTAR: 18,
   PART: 19, // casilla secundaria de un edificio 2x2 (invisible, sólida)
+  WELL: 20, // pozo de aldea (decorativo, sólido)
 };
 
 // drops: [item, cantidad, probabilidad]
@@ -68,6 +73,8 @@ const OBJ = {
                  altar: true, light: 3.5, lightColor: '#a070ff',
                  drops: [['stone', 6, 1], ['essence', 1, 1]] },
   [O.PART]:    { name: '', hp: 1, solid: true, tool: null, drops: [], part: true },
+  [O.WELL]:    { name: 'Pozo', hp: 30, solid: true, tool: 'pick', size: 1, light: 2.5,
+                 drops: [['stone', 4, 1]] },
 };
 
 // --- Objetos de inventario ---
@@ -79,6 +86,7 @@ const ITEMS = {
   slime:    { name: 'Baba', stack: 99 },
   essence:  { name: 'Esencia oscura', stack: 99 },
   crown:    { name: 'Corona del Coloso', stack: 9 },
+  coin:     { name: 'Moneda', stack: 999 },
   plank:    { name: 'Tablón', stack: 99 },
   stick:    { name: 'Palo', stack: 99 },
   axe:      { name: 'Hacha', stack: 1, tool: 'axe', dmg: 2 },
@@ -121,8 +129,7 @@ const RECIPES = [
     desc: 'Cultiva bayas con el tiempo' },
   { out: 'brazier', n: 1, cost: { stone: 4, wood: 2, fiber: 2 }, cat: 'build',
     desc: 'Gran círculo de luz nocturna' },
-  { out: 'altar', n: 1, cost: { stone: 12, essence: 3, slime: 5 }, cat: 'build',
-    desc: 'Invoca al Coloso de Baba (clic der.)' },
+  // El altar (invocaba al Coloso) está retirado por ahora.
 ];
 
 // --- Enemigos ---
@@ -147,6 +154,39 @@ const BOSS_CFG = {
   hitbox: 1.6,       // radio para golpearlo con el cursor
   loot: [['slime', 12, 1], ['berry', 6, 1], ['essence', 4, 1], ['crown', 1, 1]],
 };
+
+// --- Comerciantes (NPCs) y aldeas ---
+const VILLAGE_RARITY = 0.022;   // ~1 de cada ~45 chunks candidatos esconde una aldea
+const NPC_NAMES = ['Mira', 'Tobías', 'Elara', 'Bran', 'Nadia', 'Olmo', 'Sela', 'Garr',
+                   'Ivy', 'Kael', 'Rosa', 'Doran', 'Yara', 'Finn', 'Lena', 'Hugo'];
+
+// goods: pares [item, precio en monedas]. sells = la NPC te vende; buys = te compra.
+const NPC_ROLES = [
+  { key: 'herbalist', title: 'Herborista', shirt: 5, hair: 2,
+    persona: 'una herborista amable y dicharachera que adora las plantas, las bayas y los remedios naturales',
+    sells: [['berry', 3], ['fiber', 2]], buys: [['fiber', 1], ['berry', 2]],
+    lines: ['Las bayas frescas curan el cuerpo y el ánimo.',
+            'Si plantas fibra cerca del agua, crece el doble de rápido.',
+            'El bosque siempre da, si sabes pedirlo con respeto.'] },
+  { key: 'mason', title: 'Cantero', shirt: 4, hair: 4,
+    persona: 'un cantero rudo pero honesto, de pocas palabras, orgulloso de su piedra y sus muros',
+    sells: [['stone', 4], ['walls', 7], ['pick', 38]], buys: [['stone', 2]],
+    lines: ['La piedra bien puesta dura mil años.',
+            'Un muro de piedra aguanta lo que tres de madera.',
+            '¿Vas a las montañas? Llévate un buen pico.'] },
+  { key: 'carpenter', title: 'Carpintero', shirt: 2, hair: 0,
+    persona: 'un carpintero meticuloso y tranquilo que habla de la madera con cariño de artesano',
+    sells: [['plank', 2], ['wood', 3], ['axe', 38], ['campfire', 9]], buys: [['wood', 1], ['plank', 2]],
+    lines: ['Cada tabla tiene su veta; hay que respetarla.',
+            'Con cuatro tablones y dos palos te haces un hacha decente.',
+            'Una fogata bien hecha espanta el frío y a las babas.'] },
+  { key: 'trader', title: 'Mercader', shirt: 0, hair: 3,
+    persona: 'un mercader viajero astuto y simpático que ha recorrido mundo y siempre tiene una historia o un trato a mano',
+    sells: [['torch', 3], ['sword', 52], ['campfire', 9]], buys: [['slime', 2], ['essence', 9], ['crown', 250], ['berry', 1]],
+    lines: ['Vengo de tierras lejanas, amigo. ¿Buscas algo especial?',
+            'Te compro esas babas a buen precio, no preguntes para qué.',
+            'Dicen que en las ruinas del este aún arde una antorcha sola…'] },
+];
 
 // Colores del minimapa por tipo de suelo
 const MINIMAP_COLORS = {
@@ -181,5 +221,5 @@ const PART_COLOR = {
   [O.FLOWER]: '#e886a8', [O.TALLGRASS]: '#5fb84d', [O.BUSH]: '#c4344c',
   [O.WALLW]: '#8a5a33', [O.WALLS]: '#8c8c94', [O.TORCH]: '#ffb347', [O.FIRE]: '#ff8c2e',
   [O.HUT]: '#a87b4f', [O.TOWER]: '#9a9aa4', [O.SAWMILL]: '#a87b4f', [O.QUARRY]: '#8c8c94',
-  [O.FARM]: '#5fb84d', [O.BRAZIER]: '#ffb347', [O.ALTAR]: '#a070ff',
+  [O.FARM]: '#5fb84d', [O.BRAZIER]: '#ffb347', [O.ALTAR]: '#a070ff', [O.WELL]: '#819796',
 };

@@ -5,6 +5,7 @@ const Input = {
   keys: {},
   mx: 0, my: 0,     // posición del ratón en píxeles internos del canvas
   mdown: false,     // botón izquierdo mantenido
+  mdownT: 0,        // tiempo que lleva mantenido (para arrastrar al moverse)
 };
 
 function setupInput(canvas) {
@@ -61,15 +62,22 @@ function setupInput(canvas) {
   canvas.addEventListener('mousedown', e => {
     Sfx.init();
     Sfx.resume();
-    if (!G.running) return;
-    if (e.button === 0) Input.mdown = true;
-    if (e.button === 2) tryUseItem();
+    if (!G.running || player.dead) return;
+    if (UI.panelOpen || UI.dialogOpen || UI.chatOpen) return;
+    if (e.button === 0) {
+      Input.mdown = true;
+      Input.mdownT = 0;
+      issueClickCommand(hoveredTile());   // mover / interactuar (estilo LoL)
+    } else if (e.button === 2) {
+      tryUseItem();                       // usar / colocar lo que llevas en la mano
+    }
   });
 
   window.addEventListener('mouseup', e => {
     if (e.button === 0) {
       Input.mdown = false;
-      player.breaking = null;
+      Input.mdownT = 0;
+      player.drag = false;
     }
   });
 

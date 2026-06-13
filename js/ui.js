@@ -5,6 +5,8 @@ const UI = {
   panelOpen: false,
   helpOpen: false,
   chatOpen: false,    // el campo de chat tiene el foco
+  dialogOpen: false,  // hablando con un comerciante
+  _tradeOpen: false,
   _swapFrom: -1,
   _toastTimer: null,
   _lastClockStep: -1,
@@ -62,7 +64,35 @@ const UI = {
     // pestañas del panel derecho
     this.el('tab-craft').addEventListener('click', () => this.setTab('craft'));
     this.el('tab-build').addEventListener('click', () => this.setTab('build'));
+    this.el('tab-creative').addEventListener('click', () => this.setTab('creative'));
     this.el('btn-close-panel').addEventListener('click', () => this.togglePanel());
+
+    // paleta creativa: todos los objetos a un clic
+    const clist = this.el('creativelist');
+    for (const id of Object.keys(ITEMS)) {
+      if (id === 'coin') continue;
+      const b = document.createElement('button');
+      b.className = 'cre-item';
+      b.title = ITEMS[id].name;
+      const img = document.createElement('img'); img.src = iconURL(id); img.alt = '';
+      const sp = document.createElement('span'); sp.textContent = ITEMS[id].name;
+      b.appendChild(img); b.appendChild(sp);
+      b.addEventListener('click', () => {
+        Inv.add(id, ITEMS[id].stack > 1 ? ITEMS[id].stack : 1);
+        Sfx.place();
+        this.refreshAll();
+      });
+      clist.appendChild(b);
+    }
+
+    // diálogo de comerciantes
+    this.el('npc-send').addEventListener('click', () => this.npcSend());
+    this.el('npc-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { this.npcSend(); e.preventDefault(); }
+      if (e.key === 'Escape') this.closeNpc();
+    });
+    this.el('npc-trade-btn').addEventListener('click', () => this.toggleTrade());
+    this.el('npc-close').addEventListener('click', () => this.closeNpc());
 
     // corazones
     const hearts = this.el('hearts');
@@ -155,8 +185,10 @@ const UI = {
   setTab(which) {
     this.el('craftlist').classList.toggle('hidden', which !== 'craft');
     this.el('buildlist').classList.toggle('hidden', which !== 'build');
+    this.el('creativelist').classList.toggle('hidden', which !== 'creative');
     this.el('tab-craft').classList.toggle('active', which === 'craft');
     this.el('tab-build').classList.toggle('active', which === 'build');
+    this.el('tab-creative').classList.toggle('active', which === 'creative');
   },
 
   /* ---------- casillas ---------- */
@@ -243,6 +275,8 @@ const UI = {
       this.el('help').classList.add('hidden');
       this.helpOpen = false;
       this._swapFrom = -1;
+      this.el('tab-creative').classList.toggle('hidden', !G.creative);
+      this.setTab(G.creative ? 'creative' : 'craft');
       this.refreshInv();
       this.refreshCraft();
       Input.mdown = false;
@@ -265,6 +299,107 @@ const UI = {
     this.el('help').classList.add('hidden');
     this.closeChatInput();
     this.closeHeroEditor();
+    this.closeNpc();
+  },
+
+  /* ---------- diálogo con comerciantes ---------- */
+
+  openNpc(npc) {
+    NPC.active = npc;
+    NPC.history = [];
+    this.dialogOpen = true;
+    this._tradeOpen = false;
+    player.cmd = null; player.path = null; player.drag = false; Input.mdown = false;
+    this.el('npc-dialog').classList.remove('hidden');
+    this.el('npc-trade').classList.add('hidden');
+    this.el('npc-name').textContent = npc.name;
+    this.el('npc-role').textContent = NPC_ROLES[npc.role].title;
+    this.el('npc-log').innerHTML = '';
+    this.drawNpcPortrait(npc);
+    this.npcLine('them', '¡Hola! Soy ' + npc.name + ', ' + NPC_ROLES[npc.role].title.toLowerCase() +
+      '. ¿Charlamos o quieres ver mi género?');
+    setTimeout(() => this.el('npc-input').focus(), 30);
+  },
+
+  closeNpc() {
+    this.dialogOpen = false;
+    NPC.active = null;
+    const d = this.el('npc-dialog');
+    if (d) d.classList.add('hidden');
+    const i = this.el('npc-input');
+    if (i) i.blur();
+  },
+
+  npcLine(who, text) {
+    const log = this.el('npc-log');
+    const line = document.createElement('div');
+    line.className = 'npc-line ' + (who === 'me' ? 'me' : 'them');
+    line.textContent = text;
+    log.appendChild(line);
+    while (log.children.length > 40) log.removeChild(log.firstChild);
+    this.scrollNpc();
+    return line;
+  },
+
+  scrollNpc() { const log = this.el('npc-log'); log.scrollTop = log.scrollHeight; },
+
+  npcSend() {
+    const npc = NPC.active;
+    if (!npc) return;
+    const inp = this.el('npc-input');
+    const v = inp.value.trim();
+    if (!v) return;
+    inp.value = '';
+    this.npcLine('me', v);
+    const pending = this.npcLine('them', '…');
+    NPC.reply(npc, v).then(r => { pending.textContent = r; this.scrollNpc(); });
+  },
+
+  toggleTrade() {
+    this._tradeOpen = !this._tradeOpen;
+    this.el('npc-trade').classList.toggle('hidden', !this._tradeOpen);
+    if (this._tradeOpen) this.renderTrade();
+  },
+
+  renderTrade() {
+    const npc = NPC.active;
+    if (!npc) return;
+    const role = NPC_ROLES[npc.role];
+    const wrap = this.el('npc-trade');
+    wrap.innerHTML = '';
+    const coins = document.createElement('div');
+    coins.className = 'trade-coins';
+    coins.textContent = '◉ Tus monedas: ' + Inv.count('coin');
+    wrap.appendChild(coins);
+    const mkRow = (item, price, kind) => {
+      const row = document.createElement('div');
+      row.className = 'trade-row';
+      const img = document.createElement('img'); img.src = iconURL(item); img.alt = '';
+      const name = document.createElement('span'); name.className = 'trade-name';
+      name.textContent = ITEMS[item].name + (kind === 'sell' ? ' ×' + Inv.count(item) : '');
+      const btn = document.createElement('button');
+      btn.textContent = (kind === 'buy' ? 'Comprar' : 'Vender') + ' ' + price + '◉';
+      if (kind === 'sell' && Inv.count(item) < 1) btn.disabled = true;
+      btn.addEventListener('click', () => {
+        const ok = kind === 'buy' ? NPC.buy(npc, item, price) : NPC.sell(npc, item, price);
+        if (ok) { this.refreshAll(); this.renderTrade(); }
+      });
+      row.appendChild(img); row.appendChild(name); row.appendChild(btn);
+      wrap.appendChild(row);
+    };
+    if (role.sells.length) { const h = document.createElement('div'); h.className = 'trade-h'; h.textContent = 'A la venta'; wrap.appendChild(h); }
+    for (const [item, price] of role.sells) mkRow(item, price, 'buy');
+    if (role.buys.length) { const h = document.createElement('div'); h.className = 'trade-h'; h.textContent = 'Te compra'; wrap.appendChild(h); }
+    for (const [item, price] of role.buys) mkRow(item, price, 'sell');
+  },
+
+  drawNpcPortrait(npc) {
+    const c = this.el('npc-portrait');
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, c.width, c.height);
+    const img = getHeroLookSet(npc.look).down[0];
+    g.drawImage(img, 0, 0, img.width, img.height, 2, 2, c.width - 4, c.height - 4);
   },
 
   /* ---------- chat (multijugador) ---------- */

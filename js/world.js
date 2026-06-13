@@ -40,7 +40,72 @@ class World {
       }
     }
     this.stampRuin(cx, cy, ground, obj);
+    this.stampVillage(cx, cy, ground, obj);
     return { cx, cy, ground, obj, modified: false, _b64: null };
+  }
+
+  // Datos deterministas de la aldea de un chunk (o null). Lo usan tanto la
+  // generación de terreno como el sistema de NPCs, así que deben coincidir.
+  villageInfo(cx, cy) {
+    const s = this.seed;
+    if (hash2(cx, cy, s ^ 0x1d7) >= VILLAGE_RARITY) return null;
+    const N = CFG.CHUNK;
+    const vx = cx * N + 9 + Math.floor(hash2(cx, cy, s + 71) * (N - 18));
+    const vy = cy * N + 9 + Math.floor(hash2(cx, cy, s + 72) * (N - 18));
+    if (this.genTile(vx, vy)[0] !== T.GRASS) return null;            // solo en pradera
+    for (const [dx, dy] of [[5, 0], [-5, 0], [0, 5], [0, -5]]) {     // entorno sin agua
+      const g = this.genTile(vx + dx, vy + dy)[0];
+      if (g === T.DEEP || g === T.WATER) return null;
+    }
+    return {
+      vx, vy,
+      houses: [[-5, -4], [5, -4], [-5, 4], [5, 4]],
+      lamps: [[-6, 0], [6, 0], [0, -6], [0, 6]],
+      npcs: [
+        { role: 0, x: vx - 2.5, y: vy + 1.5 },
+        { role: 1, x: vx + 2.5, y: vy + 1.5 },
+        { role: 2, x: vx - 2.5, y: vy - 2.5 },
+        { role: 3, x: vx + 2.5, y: vy - 2.5 },
+      ],
+    };
+  }
+
+  // Estampa la aldea en el terreno: plaza de losas, casas, pozo y faroles.
+  stampVillage(cx, cy, ground, obj) {
+    const v = this.villageInfo(cx, cy);
+    if (!v) return;
+    const N = CFG.CHUNK;
+    const idx = (gx, gy) => {
+      const lx = gx - cx * N, ly = gy - cy * N;
+      return (lx < 0 || ly < 0 || lx >= N || ly >= N) ? -1 : ly * N + lx;
+    };
+    // plaza de losas (limpia vegetación)
+    for (let dy = -5; dy <= 5; dy++) {
+      for (let dx = -6; dx <= 6; dx++) {
+        if (dx * dx / 36 + dy * dy / 25 > 1) continue;
+        const i = idx(v.vx + dx, v.vy + dy);
+        if (i < 0 || ground[i] === T.DEEP || ground[i] === T.WATER) continue;
+        ground[i] = T.FLOOR; obj[i] = O.NONE;
+      }
+    }
+    // casas (cabañas 2x2)
+    for (const [hx, hy] of v.houses) {
+      const ax = v.vx + hx, ay = v.vy + hy;
+      const i = idx(ax, ay);
+      if (i < 0 || ground[i] === T.DEEP || ground[i] === T.WATER) continue;
+      obj[i] = O.HUT;
+      for (const [dx, dy] of [[1, 0], [0, 1], [1, 1]]) {
+        const j = idx(ax + dx, ay + dy);
+        if (j >= 0) obj[j] = O.PART;
+      }
+    }
+    // pozo al centro y faroles
+    const wi = idx(v.vx, v.vy);
+    if (wi >= 0) obj[wi] = O.WELL;
+    for (const [lx, ly] of v.lamps) {
+      const i = idx(v.vx + lx, v.vy + ly);
+      if (i >= 0 && obj[i] === O.NONE && ground[i] !== T.DEEP && ground[i] !== T.WATER) obj[i] = O.TORCH;
+    }
   }
 
   // Ruinas antiguas: ~1 de cada 80 chunks esconde un anillo de muros caídos

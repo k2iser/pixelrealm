@@ -12,8 +12,12 @@ const player = {
   noDmgT: 99,     // tiempo sin recibir daño (para regenerar)
   regenT: 0,
   dustT: 0,       // polvillo al caminar
+  velX: 0, velY: 0,
   dead: false,
   breaking: null, // { tx, ty, id, dmg } objeto que se está rompiendo
+  path: null,     // waypoints del click-to-move
+  cmd: null,      // { type, tx, ty, mob, npc } orden tras llegar
+  drag: false,    // arrastrando con el ratón mantenido
 };
 
 const mobs = [];
@@ -390,6 +394,7 @@ function updateProjectiles(dt) {
 /* ---------- jugador ---------- */
 
 function damagePlayer(n, src) {
+  if (G.creative) return;                 // en creativo no recibes daño
   if (player.invuln > 0 || player.dead) return;
   player.hp -= n;
   player.invuln = 0.8;

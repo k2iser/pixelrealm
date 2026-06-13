@@ -56,20 +56,39 @@
       <div class="tabs">
         <button id="tab-craft" class="active">Fabricación</button>
         <button id="tab-build">Construcciones</button>
+        <button id="tab-creative" class="hidden">Creativo</button>
       </div>
       <div id="craftlist"></div>
       <div id="buildlist" class="hidden"></div>
+      <div id="creativelist" class="hidden"></div>
     </div>
     <button id="btn-close-panel" title="Cerrar (E)">✕</button>
+  </div>
+
+  <!-- Diálogo con comerciantes -->
+  <div id="npc-dialog" class="hidden">
+    <button id="npc-close" title="Cerrar (Esc)">✕</button>
+    <div class="npc-head">
+      <canvas id="npc-portrait" width="56" height="80"></canvas>
+      <div class="npc-id"><span id="npc-name">Comerciante</span><em id="npc-role">Mercader</em></div>
+    </div>
+    <div id="npc-log"></div>
+    <div id="npc-trade" class="hidden"></div>
+    <div class="npc-row">
+      <input id="npc-input" type="text" maxlength="160" placeholder="Habla con el comerciante…" autocomplete="off">
+      <button id="npc-send">➤</button>
+      <button id="npc-trade-btn" title="Comerciar">⚖</button>
+    </div>
   </div>
 
   <!-- Ayuda -->
   <div id="help" class="hidden">
     <h3>Controles</h3>
     <table>
-      <tr><td>WASD / Flechas</td><td>Moverse</td></tr>
-      <tr><td>Clic izq. (mantener)</td><td>Golpear / talar / picar</td></tr>
-      <tr><td>Clic derecho</td><td>Colocar · comer · recoger producción · activar altar</td></tr>
+      <tr><td>Clic izquierdo</td><td>Ir ahí · talar/picar · atacar · hablar con comerciantes</td></tr>
+      <tr><td>Clic izq. (mantener)</td><td>Arrastrar para moverte</td></tr>
+      <tr><td>Clic derecho</td><td>Colocar · comer · recoger producción</td></tr>
+      <tr><td>WASD / Flechas</td><td>Moverse a mano (alternativa)</td></tr>
       <tr><td>1–9 / Rueda</td><td>Elegir de la barra</td></tr>
       <tr><td>E</td><td>Inventario, fabricación y construcciones</td></tr>
       <tr><td>T</td><td>Chat (online)</td></tr>
@@ -77,9 +96,9 @@
       <tr><td>H</td><td>Esta ayuda</td></tr>
       <tr><td>M</td><td>Silenciar sonido</td></tr>
     </table>
-    <p class="hint">Construye aserraderos y canteras para generar recursos,<br>
-    torres para defenderte… y un altar si te atreves a despertar al Coloso.<br>
-    Cada 3ª noche vendrá él solito. Online nadie puede romper lo tuyo: cooperad.</p>
+    <p class="hint">Explora hasta dar con una <b>aldea</b>: sus comerciantes charlan contigo y comercian.<br>
+    Construye aserraderos y canteras para generar recursos, torres para defenderte.<br>
+    Online nadie puede romper lo tuyo: cooperad.</p>
   </div>
 
   <div id="toast"></div>
@@ -123,6 +142,7 @@
         <button id="btn-online" class="bigbtn online hidden">Entrar al mundo compartido</button>
         <button id="btn-continue" class="bigbtn hidden">Continuar partida</button>
         <button id="btn-new" class="bigbtn">Nuevo mundo (un jugador)</button>
+        <button id="btn-creative" class="bigbtn creative">Modo creativo</button>
         <div class="title-links">
           <button id="btn-hero" class="linkbtn">⚒ Personalizar héroe</button>
           <a href="wiki.html" target="_blank" class="linkbtn">📖 Guía del mundo</a>
@@ -133,8 +153,8 @@
         </div>
       </div>
       <div class="title-controls">
-        <span>WASD moverse</span><span>Clic izq. golpear</span><span>Clic der. colocar/usar</span>
-        <span>E inventario</span><span>T chat</span><span>H ayuda</span>
+        <span>Clic izq. ir/recolectar</span><span>Clic der. colocar/usar</span>
+        <span>E inventario</span><span>T chat</span><span>H ayuda</span><span>+/− zoom</span>
       </div>
       <p class="credits">Hecho con JS vanilla + Canvas + WebSocket artesanal · Sin dependencias · Todo el arte se genera por código</p>
     </div>
@@ -146,8 +166,10 @@
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/world.js"></script>
+<script src="js/path.js"></script>
 <script src="js/inventory.js"></script>
 <script src="js/entities.js"></script>
+<script src="js/npc.js"></script>
 <script src="js/input.js"></script>
 <script src="js/renderer.js"></script>
 <script src="js/ui.js"></script>

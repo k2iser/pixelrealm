@@ -71,7 +71,7 @@ function build() {
   root.appendChild($('<p class="sub">Generada automáticamente desde los datos del juego — siempre al día.</p>'));
   root.appendChild($(`<nav>
     <a href="#biomas">Biomas</a><a href="#recursos">Recursos</a><a href="#recetas">Fabricación</a>
-    <a href="#construcciones">Construcciones</a><a href="#criaturas">Criaturas</a><a href="#coloso">El Coloso</a>
+    <a href="#construcciones">Construcciones</a><a href="#criaturas">Criaturas</a><a href="#aldeas">Aldeas</a>
     <a href="#mundo">El mundo</a><a href="#multi">Jugar juntos</a><a href="#controles">Controles</a>
   </nav>`));
 
@@ -148,16 +148,20 @@ function build() {
   root.appendChild(grid);
   root.appendChild($('<p class="meta" style="margin-top:12px">Aparecen al caer la noche y se desvanecen con el sol. Las sombras arden al amanecer; los murciélagos vuelan por encima de cualquier muro, así que una torre arquera nunca sobra.</p>'));
 
-  /* ---- el coloso ---- */
-  section(root, 'coloso', '👑 El Coloso de Baba');
-  const bossCard = card(Assets.boss[0], 1, BOSS_CFG.name, [
-    '<b>Vida:</b> ' + BOSS_CFG.hp + ' (+50 por cada jugador extra online)',
-    '<b>Ataques:</b> salto con onda expansiva (daño ' + BOSS_CFG.dmg + ', radio ' + BOSS_CFG.slamRadius + ') · oleadas de esbirros cada ' + BOSS_CFG.minionEvery + 's',
-    '<b>Se enfurece</b> por debajo del ' + Math.round(BOSS_CFG.enrageAt * 100) + '% de vida: salta mucho más rápido',
-    '<b>Aparece:</b> cada ' + CFG.BOSS_NIGHT_EVERY + 'ª noche, o invocado en un Altar antiguo',
-    '<b>Botín:</b> ' + dropsText(BOSS_CFG.loot),
-  ], 'No respeta muros. Sí respeta las flechas. Tráete amigos.');
-  root.appendChild(bossCard);
+  /* ---- aldeas y comerciantes ---- */
+  section(root, 'aldeas', '🏘 Aldeas y comerciantes');
+  grid = $('<div class="cards"></div>');
+  for (let i = 0; i < NPC_ROLES.length; i++) {
+    const r = NPC_ROLES[i];
+    const look = clampLook({ skin: 1, hair: r.hair, style: 0, shirt: r.shirt, pants: 1 });
+    const portrait = getHeroLookSet(look).down[0];
+    const meta = [];
+    if (r.sells.length) meta.push('<b>Vende:</b> ' + r.sells.map(([it, p]) => ITEMS[it].name + ' (' + p + '◉)').join(', '));
+    if (r.buys.length) meta.push('<b>Compra:</b> ' + r.buys.map(([it, p]) => ITEMS[it].name + ' (' + p + '◉)').join(', '));
+    grid.appendChild(card(portrait, 1, r.title, meta, r.lines[0]));
+  }
+  root.appendChild(grid);
+  root.appendChild($('<p class="meta" style="margin-top:12px">Explora hasta dar con una <b>aldea</b> (casas, plaza, pozo y faroles). Haz clic en un comerciante para acercarte y hablar: charla libremente o pulsa <b>⚖</b> para comerciar con monedas. Vende babas, esencia o madera para conseguir oro y cómprales herramientas y materiales. Si el servidor tiene un modelo de IA conectado (Gemma), los comerciantes responden con conversación real; si no, con diálogo procedural.</p>'));
 
   /* ---- mundo ---- */
   section(root, 'mundo', '🗺 Secretos del mundo');
@@ -165,14 +169,15 @@ function build() {
 
   /* ---- multijugador ---- */
   section(root, 'multi', '🤝 Jugar juntos');
-  root.appendChild($('<p class="meta">El mundo compartido es <b>cooperativo, sin PvP</b>: nadie puede destruir lo que construyas, pero cualquiera puede usarlo — recoger tu huerto, refugiarse tras tus muros, calentarse en tu fogata. El Coloso es el enemigo de todos: su vida crece con cada jugador y su botín cae para todos los presentes. Habla con la tecla <b>T</b>; si estás cerca, tu bocadillo aparece sobre tu cabeza. Personaliza tu héroe desde la pantalla de título para que te reconozcan.</p>'));
+  root.appendChild($('<p class="meta">El mundo compartido es <b>cooperativo, sin PvP</b>: nadie puede destruir lo que construyas, pero cualquiera puede usarlo — recoger tu huerto, refugiarse tras tus muros, calentarse en tu fogata. Habla con la tecla <b>T</b>; si estás cerca, tu bocadillo aparece sobre tu cabeza. Personaliza tu héroe desde la pantalla de título para que te reconozcan.</p>'));
 
   /* ---- controles ---- */
   section(root, 'controles', '⌨ Controles');
   root.appendChild($(`<table class="wt">
-    <tr><td>WASD / Flechas</td><td>Moverse</td></tr>
-    <tr><td>Clic izq. (mantener)</td><td>Golpear · talar · picar · atacar</td></tr>
-    <tr><td>Clic derecho</td><td>Colocar · comer · recoger producción · activar altar</td></tr>
+    <tr><td>Clic izquierdo</td><td>Ir ahí · talar/picar · atacar · hablar con comerciantes</td></tr>
+    <tr><td>Clic izq. (mantener)</td><td>Arrastrar para moverte</td></tr>
+    <tr><td>Clic derecho</td><td>Colocar · comer · recoger producción</td></tr>
+    <tr><td>WASD / Flechas</td><td>Moverse a mano (alternativa)</td></tr>
     <tr><td>1–9 / Rueda</td><td>Barra rápida</td></tr>
     <tr><td>E</td><td>Inventario, fabricación y construcciones</td></tr>
     <tr><td>T</td><td>Chat (online)</td></tr>
