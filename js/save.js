@@ -25,6 +25,7 @@ const Save = {
       v: 1,
       seed: world.seed,
       creative: G.creative,
+      quest: G.quest,
       time: G.time,
       day: G.day,
       spawn: G.spawn,

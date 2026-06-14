@@ -25,6 +25,7 @@ const G = {
   minimapTimer: 0,
   beaconT: 0,
   nearestVillage: null,   // { x, y, d } para la brújula
+  quest: null,            // recado activo { role, item, need, reward, rewardItem? }
 };
 
 const _towerCd = new Map();   // "tx,ty" -> cooldown restante
@@ -108,6 +109,7 @@ function startWorld(seed, data) {
     Inv.add('coin', 12);   // unas monedas para estrenar el comercio
     drops.length = 0;
   }
+  G.quest = (data && data.quest && NPC_ROLES[data.quest.role | 0] && ITEMS[data.quest.item]) ? data.quest : null;
   world.center = { x: player.x, y: player.y };
   finishStart(data ? 'Partida cargada' : (G.creative ? 'Modo creativo: clic para moverte, recursos infinitos' : 'Clic izquierdo para moverte y recolectar · busca una aldea'));
 }
@@ -150,6 +152,7 @@ function startOnlineWorld(w) {
   player.x = osp.x; player.y = osp.y;
   G.online = true;
   G.creative = false;   // el mundo compartido es de supervivencia
+  G.quest = null;       // los recados son por mundo local de momento
   if (w.boss) Net.applyBossState(w.boss);
   finishStart('Bienvenido al mundo compartido — sé amable, construid juntos');
 }
@@ -182,6 +185,7 @@ function finishStart(msg) {
   UI.hideTitle();
   UI.refreshAll();
   UI.renderMinimap();
+  UI.updateQuestHud();
   UI.toast(msg);
 }
 
@@ -651,6 +655,7 @@ function update(dt) {
   if (G.minimapTimer <= 0) {
     G.minimapTimer = 0.5;
     UI.renderMinimap();
+    UI.updateQuestHud();   // el progreso del recado cambia al recolectar
   }
 
   // brújula a la aldea conocida más cercana (escaneo periódico, es caro)

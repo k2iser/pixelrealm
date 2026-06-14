@@ -223,6 +223,41 @@ const NPC = {
 
   /* ---------- comercio ---------- */
 
+  /* ---------- recados (quests) ---------- */
+
+  // Genera un recado para un rol: tráeme N de X a cambio de monedas (y a veces objeto)
+  makeQuest(role) {
+    const w = NPC_ROLES[role].wants;
+    const item = w[Math.floor(Math.random() * w.length)];
+    const need = 5 + Math.floor(Math.random() * 11);   // 5-15
+    const q = { role, item, need, reward: need * 4 + 6 };
+    if (need >= 12) q.rewardItem = ['axe', 'pick', 'sword'][Math.floor(Math.random() * 3)];
+    return q;
+  },
+
+  accept(q) {
+    G.quest = q;
+    UI.updateQuestHud();
+  },
+
+  turnIn(npc) {
+    const q = G.quest;
+    if (!q || q.role !== npc.role || Inv.count(q.item) < q.need) return false;
+    Inv.remove(q.item, q.need);
+    Inv.add('coin', q.reward);
+    if (q.rewardItem) {
+      const left = Inv.add(q.rewardItem, 1);
+      if (left > 0) spawnDrop(player.x, player.y, q.rewardItem, 1);
+    }
+    G.quest = null;
+    Sfx.craft();
+    UI.toast('¡Recado completado! +' + q.reward + ' monedas' + (q.rewardItem ? ' y ' + ITEMS[q.rewardItem].name : ''));
+    UI.updateQuestHud();
+    return true;
+  },
+
+  /* ---------- comercio ---------- */
+
   buy(npc, item, price) {
     if (G.creative) { Inv.add(item, 1); Sfx.pickup(); return true; }
     if (Inv.count('coin') < price) { UI.toast('No tienes monedas suficientes'); return false; }

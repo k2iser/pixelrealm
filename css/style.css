@@ -260,6 +260,27 @@ html, body {
 }
 .trade-row button:hover:not(:disabled) { background: var(--accent); }
 .trade-row button:disabled { background: #4a4036; color: #847661; cursor: not-allowed; }
+#npc-quest {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  background: rgba(232,193,77,0.14); padding: 7px 9px;
+  box-shadow: inset 0 0 0 2px #6a5a2a;
+}
+#npc-quest .quest-txt { flex: 1; font-size: 8px; color: #ffe9a8; line-height: 1.5; }
+#npc-quest button {
+  font-family: var(--pixel-font); font-size: 8px;
+  background: #c09a3a; color: #1c150c; border: none; padding: 7px 9px; cursor: pointer;
+}
+#npc-quest button:hover:not(:disabled) { background: #e8c14d; }
+#npc-quest button:disabled { background: #4a4036; color: #847661; cursor: not-allowed; }
+
+#questhud {
+  background: var(--panel-bg);
+  padding: 6px 10px;
+  color: #ffe9a8; font-size: 9px;
+  width: fit-content;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--wood-dark);
+}
+
 .npc-row { display: flex; gap: 4px; }
 #npc-input {
   flex: 1; font-family: var(--pixel-font); font-size: 9px;

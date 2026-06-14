@@ -317,7 +317,8 @@ const UI = {
     this.el('npc-log').innerHTML = '';
     this.drawNpcPortrait(npc);
     this.npcLine('them', '¡Hola! Soy ' + npc.name + ', ' + NPC_ROLES[npc.role].title.toLowerCase() +
-      '. ¿Charlamos o quieres ver mi género?');
+      '. ¿Charlamos, comerciamos o tienes un momento para un recado?');
+    this.renderNpcQuest(npc);
     setTimeout(() => this.el('npc-input').focus(), 30);
   },
 
@@ -326,8 +327,63 @@ const UI = {
     NPC.active = null;
     const d = this.el('npc-dialog');
     if (d) d.classList.add('hidden');
+    const q = this.el('npc-quest');
+    if (q) q.classList.add('hidden');
     const i = this.el('npc-input');
     if (i) i.blur();
+  },
+
+  _offer: null,
+
+  renderNpcQuest(npc) {
+    const el = this.el('npc-quest');
+    el.innerHTML = '';
+    const q = G.quest;
+    const txt = document.createElement('div');
+    txt.className = 'quest-txt';
+    const btn = document.createElement('button');
+    if (q && q.role === npc.role) {
+      const have = Math.min(Inv.count(q.item), q.need);
+      const ready = Inv.count(q.item) >= q.need;
+      txt.textContent = '⚑ ' + have + '/' + q.need + ' ' + ITEMS[q.item].name + ' → ' + q.reward + '◉' +
+        (q.rewardItem ? ' + ' + ITEMS[q.rewardItem].name : '');
+      btn.textContent = ready ? 'Entregar' : 'En curso…';
+      btn.disabled = !ready;
+      btn.addEventListener('click', () => {
+        if (NPC.turnIn(npc)) {
+          this.npcLine('them', '¡Justo lo que necesitaba, gracias! Aquí tienes lo prometido.');
+          this.refreshAll();
+          this.renderNpcQuest(npc);
+        }
+      });
+    } else if (!q) {
+      if (!this._offer || this._offer.role !== npc.role) this._offer = NPC.makeQuest(npc.role);
+      const off = this._offer;
+      txt.textContent = '⚑ Recado: ' + off.need + ' ' + ITEMS[off.item].name + ' → ' + off.reward + '◉' +
+        (off.rewardItem ? ' + ' + ITEMS[off.rewardItem].name : '');
+      btn.textContent = 'Aceptar';
+      btn.addEventListener('click', () => {
+        NPC.accept(off);
+        this._offer = null;
+        this.npcLine('them', '¡Trato hecho! Tráemelo cuando puedas.');
+        this.renderNpcQuest(npc);
+      });
+    } else {
+      el.classList.add('hidden');   // ya tienes un recado de otro comerciante
+      return;
+    }
+    el.appendChild(txt);
+    el.appendChild(btn);
+    el.classList.remove('hidden');
+  },
+
+  updateQuestHud() {
+    const el = this.el('questhud');
+    if (!el) return;
+    const q = G.quest;
+    if (!q) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.textContent = '⚑ ' + Math.min(Inv.count(q.item), q.need) + '/' + q.need + ' ' + ITEMS[q.item].name;
   },
 
   npcLine(who, text) {
