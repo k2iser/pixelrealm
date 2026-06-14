@@ -70,6 +70,24 @@ class World {
     };
   }
 
+  // Aldea conocida más cercana al punto dado (escaneo determinista de chunks).
+  // Devuelve { x, y, d } (d en casillas) o null.
+  nearestVillage(px, py, maxChunks) {
+    const N = CFG.CHUNK;
+    const pcx = Math.floor(px / N), pcy = Math.floor(py / N);
+    const R = maxChunks || 10;
+    let best = null, bd = Infinity;
+    for (let cy = pcy - R; cy <= pcy + R; cy++) {
+      for (let cx = pcx - R; cx <= pcx + R; cx++) {
+        const v = this.villageInfo(cx, cy);
+        if (!v) continue;
+        const d = Math.hypot(v.vx + 0.5 - px, v.vy + 0.5 - py);
+        if (d < bd) { bd = d; best = { x: v.vx + 0.5, y: v.vy + 0.5, d }; }
+      }
+    }
+    return best;
+  }
+
   // Estampa la aldea en el terreno: plaza de losas, casas, pozo y faroles.
   stampVillage(cx, cy, ground, obj) {
     const v = this.villageInfo(cx, cy);

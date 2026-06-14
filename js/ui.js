@@ -491,6 +491,25 @@ const UI = {
         g.fillRect(x * px, y * px, px, px);
       }
     }
+    // aldeas dentro del minimapa (cuadro dorado)
+    const N = CFG.CHUNK;
+    for (let cy = Math.floor(y0 / N); cy <= Math.floor((y0 + span) / N); cy++) {
+      for (let cx = Math.floor(x0 / N); cx <= Math.floor((x0 + span) / N); cx++) {
+        const v = world.villageInfo(cx, cy);
+        if (!v) continue;
+        const mx = (v.vx - x0) * px, my = (v.vy - y0) * px;
+        if (mx >= 0 && mx < size && my >= 0 && my < size) {
+          g.fillStyle = '#4d2b32'; g.fillRect(mx - 3, my - 3, 6, 6);
+          g.fillStyle = '#e8c14d'; g.fillRect(mx - 2, my - 2, 4, 4);
+        }
+      }
+    }
+    // comerciantes cargados
+    g.fillStyle = '#ffe9a8';
+    for (const n of npcs) {
+      const mx = (n.x - x0) * px, my = (n.y - y0) * px;
+      if (mx >= 0 && mx < size && my >= 0 && my < size) g.fillRect(mx - 1, my - 1, 2, 2);
+    }
     // otros jugadores
     if (typeof Net !== 'undefined' && Net.online) {
       g.fillStyle = '#ffd34d';

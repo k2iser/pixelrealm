@@ -294,11 +294,48 @@ function render(g, W, H) {
     }
   }
 
+  // --- brújula a la aldea más cercana (cuando está fuera de pantalla) ---
+  if (G.running && !player.dead && G.nearestVillage && G.nearestVillage.d > 10) {
+    drawVillageBeacon(g, W, H, ox, oy);
+  }
+
   // --- flash de daño ---
   if (player.hurtT > 0) {
     g.fillStyle = 'rgba(216,52,52,' + (0.32 * player.hurtT / 0.35).toFixed(3) + ')';
     g.fillRect(0, 0, W, H);
   }
+}
+
+function drawVillageBeacon(g, W, H, ox, oy) {
+  const v = G.nearestVillage;
+  const vx = w2sx(v.x, v.y) + ox, vy = w2sy(v.x, v.y) + oy;
+  const m = 26;
+  // si la aldea ya está dentro de la pantalla, no hace falta flecha
+  if (vx > m && vx < W - m && vy > m && vy < H - m) return;
+  const cx = W / 2, cy = H / 2;
+  const ang = Math.atan2(vy - cy, vx - cx);
+  // punto en el borde (rectángulo con margen) en la dirección de la aldea
+  const hw = W / 2 - m, hh = H / 2 - m;
+  const t = Math.min(Math.abs(hw / Math.cos(ang)) || 1e9, Math.abs(hh / Math.sin(ang)) || 1e9);
+  const bx = cx + Math.cos(ang) * t, by = cy + Math.sin(ang) * t;
+  g.save();
+  g.translate(bx, by);
+  g.rotate(ang);
+  g.fillStyle = '#e8c14d';
+  g.strokeStyle = '#4d2b32';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(9, 0); g.lineTo(-6, -6); g.lineTo(-2, 0); g.lineTo(-6, 6);
+  g.closePath();
+  g.fill(); g.stroke();
+  g.restore();
+  // distancia en metros (casillas)
+  g.font = '8px "Press Start 2P", monospace';
+  g.textAlign = 'center';
+  const label = '⚑ ' + Math.round(v.d) + 'm';
+  let lx = clamp(bx, 30, W - 30), ly = clamp(by, 18, H - 8);
+  g.fillStyle = '#000'; g.fillText(label, lx + 1, ly + 11);
+  g.fillStyle = '#ffe9a8'; g.fillText(label, lx, ly + 10);
 }
 
 function drawDiamond(g, tx, ty, ox, oy, color) {

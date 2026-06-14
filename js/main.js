@@ -23,6 +23,8 @@ const G = {
   spawnTimer: 0,
   saveTimer: 0,
   minimapTimer: 0,
+  beaconT: 0,
+  nearestVillage: null,   // { x, y, d } para la brújula
 };
 
 const _towerCd = new Map();   // "tx,ty" -> cooldown restante
@@ -649,6 +651,13 @@ function update(dt) {
   if (G.minimapTimer <= 0) {
     G.minimapTimer = 0.5;
     UI.renderMinimap();
+  }
+
+  // brújula a la aldea conocida más cercana (escaneo periódico, es caro)
+  G.beaconT -= dt;
+  if (G.beaconT <= 0) {
+    G.beaconT = 1.2;
+    G.nearestVillage = world.nearestVillage(player.x, player.y, 10);
   }
 
   UI.setTime();
