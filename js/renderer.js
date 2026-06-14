@@ -175,7 +175,8 @@ function render(g, W, H) {
   drawables.sort((a, b) => a.d - b.d);
 
   const hov = hoveredTile();
-  const inReach = dist2(player.x, player.y, hov.wx, hov.wy) <= CFG.REACH * CFG.REACH;
+  const reach = effReach();
+  const inReach = dist2(player.x, player.y, hov.wx, hov.wy) <= reach * reach;
 
   if (G.running && !player.dead && !UI.panelOpen && !UI.chatOpen && inReach) {
     drawDiamond(g, hov.tx, hov.ty, ox, oy, Input.mdown ? 'rgba(255,220,90,0.85)' : 'rgba(255,255,255,0.55)');

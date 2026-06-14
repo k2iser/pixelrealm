@@ -13,6 +13,8 @@ const NPC = {
   _scanT: 0,
   _spawned: new Set(),     // claves de aldea ya pobladas
   _endpointOk: null,       // null=desconocido, false=no hay LLM, true=disponible
+  _failStreak: 0,          // fallos 5xx/timeout consecutivos del LLM
+  _coolUntil: 0,           // no reintentar el LLM hasta este instante (ms)
   active: null,            // NPC con el que hablas ahora
   history: [],             // turnos de la conversación actual
 
@@ -42,8 +44,10 @@ const NPC = {
       }
     }
     // desvanece aldeas lejanas (reaparecen deterministas al volver)
+    // Histéresis: el spawn cubre chunks ±2 (centro a ≤~127 casillas en diagonal),
+    // así que el despawn debe ocurrir MÁS allá de ese alcance para no parpadear.
     for (let i = npcs.length - 1; i >= 0; i--) {
-      if (dist2(npcs[i].hx, npcs[i].hy, player.x, player.y) > 95 * 95) {
+      if (dist2(npcs[i].hx, npcs[i].hy, player.x, player.y) > 135 * 135) {
         if (this.active === npcs[i]) UI.closeNpc();
         this._spawned.delete(npcs[i].vk);
         npcs.splice(i, 1);
@@ -118,7 +122,8 @@ const NPC = {
   async reply(npc, text) {
     this.history.push({ role: 'user', text });
     let out = null;
-    if (this._endpointOk !== false) out = await this.remote(npc, text);
+    // salta el LLM si está descartado (404/501/405) o en enfriamiento por fallos seguidos
+    if (this._endpointOk !== false && Date.now() >= this._coolUntil) out = await this.remote(npc, text);
     if (out == null) out = this.procedural(npc, text);
     this.history.push({ role: 'npc', text: out });
     if (this.history.length > 12) this.history.splice(0, this.history.length - 12);
@@ -126,15 +131,16 @@ const NPC = {
   },
 
   async remote(npc, text) {
-    const role = NPC_ROLES[npc.role];
+    let to = null;
     try {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 7000);
+      to = setTimeout(() => ctrl.abort(), 7000);
       const res = await fetch('npc-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: npc.name, title: role.title, persona: role.persona,
+          // solo el ÍNDICE de rol: la persona la fija el servidor (anti inyección)
+          role: npc.role,
           message: text,
           history: this.history.slice(-8),
           world: { day: G.day, night: G.darkness > 0.5 },
@@ -143,13 +149,26 @@ const NPC = {
       });
       clearTimeout(to);
       if (res.status === 404 || res.status === 501 || res.status === 405) { this._endpointOk = false; return null; }
-      if (!res.ok) return null;
+      if (!res.ok) { this._noteFail(); return null; }   // 5xx (modelo caído): backoff, no bloquear cada turno
       const j = await res.json();
-      if (j && typeof j.reply === 'string' && j.reply.trim()) { this._endpointOk = true; return j.reply.trim().slice(0, 240); }
+      if (j && typeof j.reply === 'string' && j.reply.trim()) {
+        this._endpointOk = true; this._failStreak = 0; this._coolUntil = 0;
+        return j.reply.trim().slice(0, 240);
+      }
+      this._noteFail();
       return null;
     } catch (e) {
-      return null; // sin servidor / timeout → procedural
+      clearTimeout(to);
+      this._noteFail(); // sin servidor / timeout (cuelgue del LLM) → backoff y procedural
+      return null;
     }
+  },
+
+  // Tras varios fallos 5xx/timeout seguidos, deja de reintentar el LLM un rato
+  // (no es permanente: si el modelo se recupera, vuelve a probarse pasado el enfriamiento)
+  _noteFail() {
+    this._failStreak++;
+    if (this._failStreak >= 3) this._coolUntil = Date.now() + 60000; // 60 s de pausa
   },
 
   // Respuestas procedurales por palabras clave + personalidad del rol
@@ -208,7 +227,8 @@ const NPC = {
     if (G.creative) { Inv.add(item, 1); Sfx.pickup(); return true; }
     if (Inv.count('coin') < price) { UI.toast('No tienes monedas suficientes'); return false; }
     Inv.remove('coin', price);
-    Inv.add(item, 1);
+    const left = Inv.add(item, 1);
+    if (left > 0) spawnDrop(player.x, player.y, item, left); // inventario lleno: al suelo
     Sfx.craft();
     return true;
   },

@@ -410,6 +410,7 @@ function damagePlayer(n, src) {
   if (player.hp <= 0) {
     player.hp = 0;
     player.dead = true;
+    UI.closeNpc();   // si moriste hablando, cierra el diálogo: si no, dialogOpen bloquearía el movimiento al reaparecer
     Sfx.die();
     UI.showDeath();
   }
@@ -426,6 +427,7 @@ function respawn() {
   player.velX = 0; // sin deslizamiento fantasma de la inercia previa
   player.velY = 0;
   mobs.length = 0;
+  UI.closeNpc();   // defensa: nunca reaparecer con el diálogo abierto (bloquearía teclado/clic)
   UI.refreshHearts();
   UI.hideDeath();
   UI.toast('De vuelta al campamento…');

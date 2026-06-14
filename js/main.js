@@ -457,6 +457,21 @@ function runCmd(dt) {
       if (player.hitT <= 0) swingMob(m);
       return [0, 0];
     }
+    // Guardia anti-persecución infinita: si el héroe no logra acercarse al mob
+    // (volador que esquiva, o enemigo tras un muro sin salida), abandonar en vez
+    // de repathear A* completo cada 0.3 s indefinidamente.
+    const d2m = dist2(player.x, player.y, m.x, m.y);
+    if (c.best === undefined || d2m < c.best - 0.04) { c.best = d2m; c.stall = 0; }
+    else { c.stall = (c.stall || 0) + dt; }
+    // mob fuera del radio que A* puede explorar, o estancado >3 s sin acercarse
+    if (Math.abs(m.x - player.x) > Path.RADIUS || Math.abs(m.y - player.y) > Path.RADIUS || c.stall > 3) {
+      player.cmd = null; player.path = null; return [0, 0];
+    }
+    // los voladores ignoran obstáculos: perseguir en línea recta, sin A*
+    if (m.kind && MOBS[m.kind] && MOBS[m.kind].ai === 'fly') {
+      player.path = null;
+      return steerWorld(m.x, m.y, rr * 0.6);
+    }
     c.rep = (c.rep || 0) - dt;
     if (c.rep <= 0 || !player.path || !player.path.length) {
       c.rep = 0.3;
