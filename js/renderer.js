@@ -56,6 +56,20 @@ function objSprite(id, tx, ty) {
   return img;
 }
 
+// --- Viento: cuánto se mece la copa de cada vegetal (px de desplazamiento) ---
+const SWAY_AMP = {
+  [O.TREE]: 3.4, [O.PINE]: 2.4, [O.CACTUS]: 0.7,
+  [O.FLOWER]: 1.9, [O.TALLGRASS]: 2.6, [O.BUSH]: 1.7,
+  [O.CROP0]: 1.2, [O.CROP1]: 1.6, [O.CROP2]: 2.0, [O.CROP3]: 2.3,
+};
+// ráfaga global (envolvente lenta) + onda local desfasada por casilla.
+// G.windBoost lo sube el clima (lluvia/tormenta de la tarea de clima).
+function windAt(tx, ty) {
+  const phase = tx * 0.7 + ty * 0.9;
+  const gust = 0.55 + 0.45 * Math.sin(G.elapsed * 0.21 + 1.3);
+  return (Math.sin(G.elapsed * 1.5 + phase) + 0.34 * Math.sin(G.elapsed * 3.0 + phase * 1.7)) * gust;
+}
+
 function render(g, W, H) {
   g.fillStyle = '#0b0e1a';
   g.fillRect(0, 0, W, H);
@@ -184,6 +198,9 @@ function render(g, W, H) {
 
   for (const d of drawables) drawDrawable(g, d, ox, oy);
 
+  // motas de polen flotando a plena luz del día (ambiente)
+  drawDayMotes(g, W, H, ox, oy);
+
   // marcador de destino del clic (anillo que se expande, estilo MOBA)
   if (G.running && !player.dead && player.path && player.path.length && !player.drag) {
     const wp = player.path[player.path.length - 1];
@@ -264,7 +281,11 @@ function render(g, W, H) {
         g.fillRect(sx | 0, sy | 0, s, s);
       }
       g.globalCompositeOperation = 'source-over';
+      // luciérnagas que vagan y parpadean en la noche cerrada
+      drawFireflies(g, W, H, sa);
     }
+    // ascuas que ascienden desde las fuentes de luz cálida
+    drawEmbers(g, lights);
     // halo cálido (naranja) o místico (violeta del altar)
     g.globalCompositeOperation = 'lighter';
     for (const l of lights) {
@@ -278,6 +299,15 @@ function render(g, W, H) {
       g.fillRect(l.x - r, l.y - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = 'source-over';
+  }
+
+  // --- viñeta cinematográfica (oscurece bordes, más marcada de noche) ---
+  {
+    const vg = g.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.40, W / 2, H * 0.46, Math.max(W, H) * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,' + (0.26 + 0.22 * G.darkness).toFixed(3) + ')');
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
   }
 
   // --- textos flotantes y nombres (encima de la iluminación) ---
@@ -421,11 +451,23 @@ function drawDrawable(g, d, ox, oy) {
     else if (def.size === 1) lift = 14;  // torre, brasero
     else lift = 12;                      // vegetación
     // tiembla mientras lo estás talando/picando
-    let shakeX = 0;
-    if (player.breaking && player.breaking.tx === d.tx && player.breaking.ty === d.ty) {
-      shakeX = Math.round(Math.sin(G.elapsed * 42) * 2);
+    const breakingThis = player.breaking && player.breaking.tx === d.tx && player.breaking.ty === d.ty;
+    const shakeX = breakingThis ? Math.round(Math.sin(G.elapsed * 42) * 2) : 0;
+    const dx = Math.round(cx - img.width / 2) + shakeX;
+    const dy = Math.round(cy + lift - img.height);
+    // viento: la copa se inclina cizallando el sprite (base fija, cima mecida)
+    const swayAmp = breakingThis ? 0 : (SWAY_AMP[d.id] || 0);
+    if (swayAmp) {
+      const sway = swayAmp * (1 + (G.windBoost || 0)) * windAt(d.tx, d.ty);
+      const bx = cx + shakeX, by = cy + lift;
+      g.save();
+      g.translate(bx, by);
+      g.transform(1, 0, -sway / img.height, 1, 0, 0);
+      g.drawImage(img, dx - bx, dy - by);
+      g.restore();
+    } else {
+      g.drawImage(img, dx, dy);
     }
-    g.drawImage(img, Math.round(cx - img.width / 2) + shakeX, Math.round(cy + lift - img.height));
 
     // stock listo para recoger: icono flotando encima
     if (def.prod) {
@@ -619,6 +661,66 @@ function ghostPreview(g, hov, inReach, ox, oy) {
       fillDiamond(g, hov.tx + dx, hov.ty + dy, ox, oy);
     }
   }
+}
+
+// Motas de polen/polvo a contraluz, solo de día. Derivan despacio y orbitan
+// con la cámara (parallax suave) para sentirse parte del mundo.
+function drawDayMotes(g, W, H, ox, oy) {
+  const day = clamp(1 - G.darkness / 0.6, 0, 1);
+  if (day < 0.06) return;
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 22; i++) {
+    const driftX = G.elapsed * (0.012 + hash2(i, 1, 5) * 0.018) + ox * 0.00045;
+    const driftY = Math.sin(G.elapsed * 0.25 + i) * 0.03 + oy * 0.00045;
+    const mx = (((hash2(i, 2, 5) + driftX) % 1) + 1) % 1;
+    const my = (((hash2(i, 3, 5) + driftY) % 1) + 1) % 1;
+    const x = (mx * W) | 0, y = (my * H * 0.85) | 0;
+    const a = day * (0.08 + 0.09 * Math.abs(Math.sin(G.elapsed * 0.7 + i * 1.6)));
+    g.fillStyle = 'rgba(255,250,222,' + a.toFixed(3) + ')';
+    g.fillRect(x, y, 1, 1);
+    if (hash2(i, 4, 5) < 0.28) g.fillRect(x + 1, y, 1, 1);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+// Luciérnagas: puntos verde-amarillos que vagan y parpadean (noche cerrada).
+function drawFireflies(g, W, H, sa) {
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 20; i++) {
+    const px = (((hash2(i, 1, 9) + Math.sin(G.elapsed * (0.14 + hash2(i, 2, 9) * 0.18) + i) * 0.06) % 1) + 1) % 1;
+    const py = (((hash2(i, 3, 9) + Math.cos(G.elapsed * (0.11 + hash2(i, 4, 9) * 0.18) + i * 1.7) * 0.05) % 1) + 1) % 1;
+    const x = px * W, y = py * H * 0.88 + H * 0.06;
+    const blink = Math.max(0, Math.sin(G.elapsed * (1.1 + hash2(i, 5, 9)) + i * 2.1));
+    const a = sa * blink * 0.8;
+    if (a < 0.02) continue;
+    const r = 5;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(190,255,130,' + (a * 0.5).toFixed(3) + ')');
+    grad.addColorStop(1, 'rgba(190,255,130,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+    g.fillStyle = 'rgba(222,255,170,' + a.toFixed(3) + ')';
+    g.fillRect(x | 0, y | 0, 1, 1);
+  }
+  g.globalCompositeOperation = 'source-over';
+}
+
+// Ascuas que ascienden y se apagan sobre fuegos, hornos, braseros y antorchas.
+function drawEmbers(g, lights) {
+  g.globalCompositeOperation = 'lighter';
+  for (const l of lights) {
+    if (!l.warm) continue;
+    for (let k = 0; k < 4; k++) {
+      const ph = ((G.elapsed * (0.5 + hash2(k, 1, 3) * 0.4) + hash2(k, 5, 3)) % 1);
+      const ex = l.x + Math.sin(G.elapsed * 2.2 + k * 1.7 + (l.x | 0)) * 6;
+      const ey = l.y - 6 - ph * 28;
+      const a = (1 - ph) * 0.5 * G.darkness;
+      if (a < 0.02) continue;
+      g.fillStyle = 'rgba(255,' + (150 + ((hash2(k, 2, 3) * 80) | 0)) + ',60,' + a.toFixed(3) + ')';
+      g.fillRect(ex | 0, ey | 0, 1, hash2(k, 3, 3) < 0.3 ? 2 : 1);
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
 }
 
 function fillDiamond(g, tx, ty, ox, oy) {
