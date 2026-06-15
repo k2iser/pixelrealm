@@ -7,6 +7,8 @@ const G = {
   running: false,
   online: false,    // espejo de Net.online para módulos que cargan antes
   zoom: 2,          // 1 lejos · 2 cerca (Stardew) · 3 muy cerca
+  renderScale: 2,   // escala lógico→dispositivo (zoom·dpr); el render dibuja en px lógicos
+  viewW: 0, viewH: 0, // dimensiones lógicas de render (= innerW/zoom); las usan cámara/cursor
   creative: false,  // modo creativo: recursos infinitos, sin daño, romper al instante
   look: DEFAULT_LOOK,
   time: 0.08,       // fracción del día [0,1)
@@ -45,20 +47,31 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 function resize() {
-  canvas.width = Math.ceil(window.innerWidth / G.zoom);
-  canvas.height = Math.ceil(window.innerHeight / G.zoom);
-  ctx.imageSmoothingEnabled = false;
+  // Render HD: el backing-store va a resolución nativa (más píxeles + suavizado),
+  // y el zoom se aplica como escala de mundo vía ctx.setTransform en render().
+  // Las dimensiones LÓGICAS (viewW/viewH = innerW/zoom) son idénticas al pipeline
+  // anterior, así que el rango de casillas visible, la cámara y el culling no cambian.
+  const dpr = Math.min(window.devicePixelRatio || 1, CFG.MAX_DPR);
+  G.renderScale = G.zoom * dpr;
+  const iw = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const ih = window.innerHeight || document.documentElement.clientHeight || 720;
+  canvas.width = Math.max(1, Math.round(iw * dpr));
+  canvas.height = Math.max(1, Math.round(ih * dpr));
+  G.viewW = canvas.width / G.renderScale;
+  G.viewH = canvas.height / G.renderScale;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 }
 window.addEventListener('resize', resize);
 
 function setZoom(z) {
   G.zoom = clamp(z | 0, 1, 3);
   try { localStorage.setItem('pixelrealm.zoom', G.zoom); } catch (e) { /* da igual */ }
-  const oldW = canvas.width, oldH = canvas.height;
+  const oldVW = G.viewW || 1, oldVH = G.viewH || 1;
   resize();
-  // reescala el cursor a la nueva resolución interna (hasta el próximo mousemove)
-  Input.mx *= canvas.width / oldW;
-  Input.my *= canvas.height / oldH;
+  // reescala el cursor al nuevo espacio lógico (hasta el próximo mousemove)
+  Input.mx *= G.viewW / oldVW;
+  Input.my *= G.viewH / oldVH;
   UI.toast('Zoom: ' + ['lejos', 'cerca', 'muy cerca'][G.zoom - 1]);
 }
 
@@ -726,14 +739,14 @@ function update(dt) {
       const exPx = Math.abs(Math.cos(ang) - Math.sin(ang)) * CFG.HW;
       const eyPx = Math.abs(Math.cos(ang) + Math.sin(ang)) * CFG.HH;
       const dEdge = Math.min(
-        exPx > 1e-6 ? (canvas.width / 2 + 64) / exPx : Infinity,
-        eyPx > 1e-6 ? (canvas.height / 2 + 96) / eyPx : Infinity,
+        exPx > 1e-6 ? (G.viewW / 2 + 64) / exPx : Infinity,
+        eyPx > 1e-6 ? (G.viewH / 2 + 96) / eyPx : Infinity,
       );
       const d = Math.max(randRange(9, 22), dEdge + randRange(1, 5));
       const x = player.x + Math.cos(ang) * d;
       const y = player.y + Math.sin(ang) * d;
       const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;
-      if (ssx > -64 && ssx < canvas.width + 64 && ssy > -96 && ssy < canvas.height + 64) continue;
+      if (ssx > -64 && ssx < G.viewW + 64 && ssy > -96 && ssy < G.viewH + 64) continue;
       const tx = Math.floor(x), ty = Math.floor(y);
       const gr = world.ground(tx, ty);
       if (gr !== T.DEEP && gr !== T.WATER && !world.isSolid(tx, ty)) {
@@ -753,7 +766,7 @@ function update(dt) {
       const ang = Math.random() * Math.PI * 2, d = randRange(8, 16);
       const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
       const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;
-      const onScreen = ssx > -64 && ssx < canvas.width + 64 && ssy > -96 && ssy < canvas.height + 64;
+      const onScreen = ssx > -64 && ssx < G.viewW + 64 && ssy > -96 && ssy < G.viewH + 64;
       const tx = Math.floor(x), ty = Math.floor(y);
       if (!onScreen && world.ground(tx, ty) === T.GRASS && !world.isSolid(tx, ty)) {
         spawnMob(Math.random() < 0.7 ? 'rabbit' : 'deer', x, y);
@@ -946,8 +959,8 @@ function loop(now) {
   if (dt > 0.05) dt = 0.05;
   if (!G.running || !world) return;
   update(dt);
-  updateCamera(dt, canvas.width, canvas.height);
-  render(ctx, canvas.width, canvas.height);
+  updateCamera(dt, G.viewW, G.viewH);
+  render(ctx, G.viewW, G.viewH);
 }
 
 /* ---------- inicio ---------- */

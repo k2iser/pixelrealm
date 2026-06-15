@@ -29,8 +29,7 @@ html, body {
 #canvas {
   position: absolute; inset: 0;
   width: 100vw; height: 100vh;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  image-rendering: auto;   /* render HD: el backing-store va a resolución nativa y se suaviza */
   cursor: crosshair;
 }
 

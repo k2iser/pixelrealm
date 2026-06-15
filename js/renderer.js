@@ -111,6 +111,10 @@ function windAt(tx, ty) {
 }
 
 function render(g, W, H) {
+  // El zoom es una escala de mundo: dibujamos en píxeles lógicos (W,H) y la
+  // transformada amplía al backing-store nativo con suavizado. setTransform
+  // reemplaza cualquier transformada previa, así que es seguro al inicio del frame.
+  g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
   g.fillStyle = '#0b0e1a';
   g.fillRect(0, 0, W, H);
   let ox = cam.ox, oy = cam.oy;
@@ -175,19 +179,27 @@ function render(g, W, H) {
   // --- luces: pasada aparte con margen amplio para que no hagan "pop" en los bordes ---
   const lights = [];
   if (G.darkness > 0.02) {
-    const LP = 9;
-    for (let ty = tymin - LP; ty <= tymax + LP; ty++) {
-      for (let tx = txmin - LP; tx <= txmax + LP; tx++) {
-        const ob = world.object(tx, ty);
-        if (ob === O.NONE || ob === O.PART) continue;
-        const def = OBJ[ob];
-        if (!def || !def.light) continue;
-        const size = def.size || 1;
-        const lx = w2sx(tx + size / 2, ty + size / 2) + ox;
-        const ly = w2sy(tx + size / 2, ty + size / 2) + oy;
-        const r = def.light * CFG.HW;
-        if (lx < -r * 1.2 || lx > W + r * 1.2 || ly < -r * 1.2 || ly > H + r * 1.2) continue;
-        lights.push({ x: lx, y: ly, r, warm: true, color: def.lightColor || null });
+    const LP = 9, N = CFG.CHUNK;
+    // En vez de barrer casilla a casilla, recorremos los chunks que intersectan
+    // el rango visible+margen y solo sus emisores (ch.lights). Conservamos el
+    // mismo recorte rectangular LP y el recorte de pantalla del bucle original,
+    // así el conjunto de luces dibujadas es idéntico al de antes.
+    const cxmin = Math.floor((txmin - LP) / N), cxmax = Math.floor((txmax + LP) / N);
+    const cymin = Math.floor((tymin - LP) / N), cymax = Math.floor((tymax + LP) / N);
+    for (let ccy = cymin; ccy <= cymax; ccy++) {
+      for (let ccx = cxmin; ccx <= cxmax; ccx++) {
+        const ls = world.chunkAt(ccx, ccy).lights;
+        for (let i = 0; i < ls.length; i++) {
+          const tx = ls[i].tx, ty = ls[i].ty;
+          if (tx < txmin - LP || tx > txmax + LP || ty < tymin - LP || ty > tymax + LP) continue;
+          const def = OBJ[ls[i].ob];
+          const size = def.size || 1;
+          const lx = w2sx(tx + size / 2, ty + size / 2) + ox;
+          const ly = w2sy(tx + size / 2, ty + size / 2) + oy;
+          const r = def.light * CFG.HW;
+          if (lx < -r * 1.2 || lx > W + r * 1.2 || ly < -r * 1.2 || ly > H + r * 1.2) continue;
+          lights.push({ x: lx, y: ly, r, warm: true, color: def.lightColor || null });
+        }
       }
     }
   }

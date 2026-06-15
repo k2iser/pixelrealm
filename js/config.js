@@ -23,6 +23,8 @@ const CFG = {
   CREATIVE_REACH: 8,       // alcance ampliado en modo creativo
   ARRIVE_DIST: 0.22,       // distancia para considerar alcanzado un punto del camino
   NPC_TALK_R: 2.2,         // radio para hablar con un comerciante
+  MAX_DPR: 2,              // tope de densidad de píxel del render HD (limita el fill-rate)
+  GFX: 2,                  // calidad gráfica: 0 básico · 1 medio · 2 alto (bloom, tilt-shift, agua avanzada)
 };
 
 // --- Suelos ---

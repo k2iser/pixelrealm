@@ -55,8 +55,9 @@ function setupInput(canvas) {
 
   canvas.addEventListener('mousemove', e => {
     const r = canvas.getBoundingClientRect();
-    Input.mx = (e.clientX - r.left) * (canvas.width / r.width);
-    Input.my = (e.clientY - r.top) * (canvas.height / r.height);
+    // a píxeles LÓGICOS de render (mismo espacio que cam/s2w), no al backing-store nativo
+    Input.mx = (e.clientX - r.left) * (G.viewW / r.width);
+    Input.my = (e.clientY - r.top) * (G.viewH / r.height);
   });
 
   canvas.addEventListener('mousedown', e => {

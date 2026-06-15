@@ -42,7 +42,25 @@ class World {
     }
     this.stampRuin(cx, cy, ground, obj);
     this.stampVillage(cx, cy, ground, obj);
-    return { cx, cy, ground, obj, modified: false, _b64: null };
+    const ch = { cx, cy, ground, obj, modified: false, _b64: null };
+    ch.lights = this.buildLights(ch);
+    return ch;
+  }
+
+  // Lista de emisores de luz del chunk: { tx, ty, ob } por cada objeto con
+  // OBJ[ob].light. Se construye una vez al generar/cargar y se mantiene al día
+  // en setObject, para que la pasada de luces del render itere solo emisores
+  // en vez de barrer todo el grid visible cada frame nocturno.
+  buildLights(ch) {
+    const N = CFG.CHUNK;
+    const out = [];
+    for (let ly = 0; ly < N; ly++) {
+      for (let lx = 0; lx < N; lx++) {
+        const ob = ch.obj[ly * N + lx];
+        if (ob && OBJ[ob] && OBJ[ob].light) out.push({ tx: ch.cx * N + lx, ty: ch.cy * N + ly, ob });
+      }
+    }
+    return out;
   }
 
   // Datos deterministas de la aldea de un chunk (o null). Lo usan tanto la
@@ -244,6 +262,14 @@ class World {
     ch.obj[(ty - cy * N) * N + (tx - cx * N)] = v;
     ch.modified = true;
     ch._b64 = null;
+    // mantener la lista de emisores al día: quitar el de esta casilla (si lo
+    // había) y añadirlo si el nuevo objeto emite luz. O(1) salvo el splice.
+    if (ch.lights) {
+      for (let i = ch.lights.length - 1; i >= 0; i--) {
+        if (ch.lights[i].tx === tx && ch.lights[i].ty === ty) { ch.lights.splice(i, 1); break; }
+      }
+      if (v && OBJ[v] && OBJ[v].light) ch.lights.push({ tx, ty, ob: v });
+    }
   }
 
   setGround(tx, ty, v) {
@@ -357,12 +383,14 @@ class World {
   applyModified(data) {
     for (const k in data) {
       const p = k.split(',');
-      this.chunks.set(k, {
+      const ch = {
         cx: parseInt(p[0], 10), cy: parseInt(p[1], 10),
         ground: u8FromB64(data[k].g), obj: u8FromB64(data[k].o),
         modified: true,
         _b64: { g: data[k].g, o: data[k].o },
-      });
+      };
+      ch.lights = this.buildLights(ch);
+      this.chunks.set(k, ch);
     }
     this._lastKey = null;
     this._lastChunk = null;
