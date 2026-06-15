@@ -896,6 +896,28 @@ function makeWell() {
   return scaleSprite(c, CFG.SPR);
 }
 
+// Horno de piedra con la boca al rojo (dos frames de brasa)
+function makeFurnace(frame) {
+  const [c, g] = cv(18, 22);
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  // cuerpo de piedra
+  R(2, 4, 14, 17, '#577277');
+  R(2, 4, 14, 1, '#819796');
+  R(14, 5, 2, 16, '#394a50');
+  for (let y = 6; y < 20; y += 3) for (let x = 3; x < 14; x += 4) R(x + (y % 6 ? 1 : 0), y, 1, 1, '#46565b');
+  // chimenea
+  R(4, 1, 4, 4, '#46565b'); R(4, 1, 4, 1, '#6e8085');
+  // boca con brasa
+  R(5, 11, 8, 7, '#1a1014');
+  const fp = frame === 0
+    ? ['..ff..', '.fFYFf', 'fFYYYF', '.FYYF.']
+    : ['.ff...', 'fFYFf.', 'FYYYFf', '.FYYF.'];
+  const fire = gridSprite(fp, { f: '#cf573c', F: '#de9e41', Y: '#e8c14d' });
+  g.drawImage(fire, 6, 12);
+  R(4, 18, 10, 3, '#46565b'); R(4, 20, 10, 1, '#2a363b'); // base
+  return scaleSprite(c, CFG.SPR);
+}
+
 /* ================= items ================= */
 
 function buildItems() {
@@ -924,6 +946,34 @@ function buildItems() {
     '..sSSSSds',
     '...ddddd',
   ], { s: '#55555e', S: '#8c8c94', W: '#b8b8c2', d: '#5e5e66' });
+
+  it.coal = gridSprite([
+    '..kkk',
+    '.kKKKk',
+    'kKKkKKk',
+    'kKkKKKk',
+    'kKKKkKk',
+    '.kKKKk',
+    '..kkk',
+  ], { k: '#16181d', K: '#3a3f47' });
+
+  it.iron_ore = gridSprite([
+    '...sss',
+    '..sSoSs',
+    '.sSoSSos',
+    '.soSSSoS',
+    '.sSSoSSs',
+    '..sSSss',
+    '...sss',
+  ], { s: '#3a3228', S: '#6e6052', o: '#d89a5a' });
+
+  it.iron = gridSprite([
+    '.WWWWWWW',
+    'WSSSSSSSd',
+    'WSWWWWSSd',
+    'WSSSSSSSd',
+    '.dddddddd',
+  ], { W: '#c8d0d8', S: '#9aa6b0', d: '#5a646e' });
 
   it.fiber = gridSprite([
     '..g..g..g',
@@ -1079,6 +1129,22 @@ function buildItems() {
     '..o',
   ], toolPal);
 
+  // herramientas de hierro: misma forma, hoja azul-acero y mango oscuro
+  const ironPal = { o: '#10141f', S: '#6e8aa6', W: '#bcd0e4', s: '#46566a',
+                    B: '#5a646e', b: '#2a323c', g: '#e8c14d', G: '#b8901e' };
+  it.iron_axe = gridSprite([
+    '.....ooo', '....oSWWo', '...oSSWWWo', '...oSSSWWo', '...obSSSWo',
+    '..obBboSo', '.obBbo.o', 'obBbo', 'oBbo', 'obo',
+  ], ironPal);
+  it.iron_pick = gridSprite([
+    '...ooooo', '..oSWWWSo', '.oWo...oWo', '.oSo.oo.oSo', '.oo.obBo.oo',
+    '....obBbo', '...obBbo', '..obBbo', '.obBbo', '.oBbo', '.obo',
+  ], ironPal);
+  it.iron_sword = gridSprite([
+    '.........oo', '........oWWo', '.......oWWSo', '......oWWSo', '.....oWWSo',
+    '..o.oWWSo', '.ogooWSo', '..oggSo', '..oGgo', '.oboGgo', '.obo..o', '..o',
+  ], ironPal);
+
   it.torch = gridSprite([
     '.....ff',
     '....fFFf',
@@ -1133,6 +1199,7 @@ function buildItems() {
   it.farm = spriteIcon(Assets.obj[O.FARM]);
   it.brazier = spriteIcon(Assets.obj[O.BRAZIER][0]);
   it.altar = spriteIcon(Assets.obj[O.ALTAR][0]);
+  it.furnace = spriteIcon(Assets.obj[O.FURNACE][0]);
 }
 
 /* ================= construcción de todo ================= */
@@ -1234,6 +1301,24 @@ function buildAssets() {
   Assets.obj[O.BRAZIER] = [makeBrazier(0), makeBrazier(1)];
   Assets.obj[O.ALTAR] = [makeAltar(0), makeAltar(1)];
   Assets.obj[O.WELL] = makeWell();
+  // vetas de mineral (roca con motas) y horno
+  const oreRows = (k) => [
+    '......ssss',
+    '....ssSSSSs',
+    '...sSS' + k + 'WSSSs',
+    '..sSWWWSS' + k + 'SSs',
+    '.sSSWW' + k + 'SSSSSds',
+    '.sSS' + k + 'SSSSSdSds',
+    'sSSSSSSS' + k + 'SSdds',
+    'sSSSS' + k + 'SSdddds',
+    '.sddSSSdddds',
+    '..ssddddddss',
+  ];
+  Assets.obj[O.ROCK_COAL] = scaleSprite(gridSprite(oreRows('k'),
+    { s: '#394a50', S: '#577277', W: '#819796', d: '#2a363b', k: '#16181d' }), CFG.SPR);
+  Assets.obj[O.ROCK_IRON] = scaleSprite(gridSprite(oreRows('k'),
+    { s: '#4a4036', S: '#6e6052', W: '#9a8a74', d: '#3a3228', k: '#c08552' }), CFG.SPR);
+  Assets.obj[O.FURNACE] = [makeFurnace(0), makeFurnace(1)];
   // cultivo: 4 fases (brote → plantón → cultivo → maduro con bayas)
   const cropPal = { g: '#75a743', G: '#468232', d: '#25562e', R: '#a53030', r: '#cf573c', t: '#7a4841' };
   Assets.obj[O.CROP0] = scaleSprite(gridSprite([

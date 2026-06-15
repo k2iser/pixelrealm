@@ -47,7 +47,7 @@ function objSprite(id, tx, ty) {
   let img = Assets.obj[id];
   if (!img) return null;
   if (Array.isArray(img)) {
-    if (id === O.TORCH || id === O.FIRE || id === O.BRAZIER || id === O.ALTAR) {
+    if (id === O.TORCH || id === O.FIRE || id === O.BRAZIER || id === O.ALTAR || id === O.FURNACE) {
       img = img[(Math.floor(G.elapsed * 7) + tx + ty) & 1]; // & 1: seguro con coordenadas negativas
     } else {
       img = img[Math.floor(hash2(tx, ty, 99) * img.length)];

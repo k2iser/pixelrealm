@@ -184,8 +184,10 @@ class World {
       g = T.SAND;
       if (r < 0.012) o = O.ROCK;
     } else if (e > 0.76) {
-      g = T.STONE;
-      if (r < 0.10) o = O.ROCK;
+      g = T.STONE;                                 // montaña: vetas de mineral
+      if (r < 0.03) o = O.ROCK_IRON;
+      else if (r < 0.09) o = O.ROCK_COAL;
+      else if (r < 0.13) o = O.ROCK;
     } else if (tp < 0.36) {
       g = T.SNOW;
       if (r < 0.07) o = O.PINE;

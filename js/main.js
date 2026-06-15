@@ -235,12 +235,14 @@ function swingTile(tx, ty) {
   if (!canBreak(tx, ty)) { player.breaking = null; return false; }
   const odef = OBJ[ob];
   const sel = Inv.selected(), def = sel ? ITEMS[sel.id] : null;
-  const dmg = G.creative ? odef.hp : ((def && def.tool && def.tool === odef.tool) ? 3 : 1);
+  // herramienta correcta = más daño (el hierro pica/tala más rápido); puño = 1
+  const dmg = G.creative ? odef.hp : ((def && def.tool && def.tool === odef.tool) ? (def.dmg + 1) : 1);
   if (!player.breaking || player.breaking.tx !== tx || player.breaking.ty !== ty || player.breaking.id !== ob) {
     player.breaking = { tx, ty, id: ob, dmg: 0 };
   }
   player.breaking.dmg += dmg;
-  const stony = ob === O.ROCK || ob === O.WALLS || ob === O.QUARRY || ob === O.BRAZIER || ob === O.ALTAR || ob === O.WELL;
+  const stony = ob === O.ROCK || ob === O.WALLS || ob === O.QUARRY || ob === O.BRAZIER || ob === O.ALTAR ||
+    ob === O.WELL || ob === O.ROCK_COAL || ob === O.ROCK_IRON || ob === O.FURNACE;
   if (stony) Sfx.mine(); else Sfx.chop();
   spawnParticles(tx + 0.5, ty + 0.5, PART_COLOR[ob] || '#caa178', 5);
   if (player.breaking.dmg >= odef.hp) {
@@ -294,6 +296,11 @@ function issueClickCommand(h) {
       atx = anchor.tx; aty = anchor.ty; size = OBJ[anchor.id].size || 1;
       if (OBJ[anchor.id].prod) {
         player.cmd = { type: 'collect', tx: atx, ty: aty };
+        player.path = Path.findAdjacent(player.x, player.y, atx, aty, size) || [];
+        return;
+      }
+      if (OBJ[anchor.id].furnace) {
+        player.cmd = { type: 'smelt', tx: atx, ty: aty };
         player.path = Path.findAdjacent(player.x, player.y, atx, aty, size) || [];
         return;
       }
@@ -483,6 +490,10 @@ function runCmd(dt) {
     }
     player.cmd = null; return [0, 0];
   }
+  if (c.type === 'smelt') {
+    if (dist2(player.x, player.y, c.tx + 0.5, c.ty + 0.5) <= rr * rr) smeltAt();
+    player.cmd = null; return [0, 0];
+  }
   if (c.type === 'harvest') {
     if (world.object(c.tx, c.ty) === O.NONE) { player.cmd = null; return [0, 0]; }
     if (dist2(player.x, player.y, c.tx + 0.5, c.ty + 0.5) <= rr * rr) {
@@ -527,6 +538,20 @@ function runCmd(dt) {
     return steerWorld(m.x, m.y, rr * 0.6);
   }
   return [0, 0];
+}
+
+// Fundir: por cada mineral de hierro + carbón, un lingote (en lote, al usar el horno)
+function smeltAt() {
+  const ore = Inv.count('iron_ore'), coal = Inv.count('coal');
+  const n = Math.min(ore, coal);
+  if (n <= 0) { UI.toast(coal <= 0 ? 'El horno necesita carbón' : 'No tienes mineral de hierro'); return; }
+  Inv.remove('iron_ore', n);
+  Inv.remove('coal', n);
+  Inv.add('iron', n);
+  Sfx.craft();
+  spawnParticles(player.x, player.y, '#ff8c2e', 8);
+  UI.toast('Fundido: ' + n + ' lingote' + (n > 1 ? 's' : '') + ' de hierro');
+  UI.refreshHotbar();
 }
 
 function collectBuilding(anchor) {

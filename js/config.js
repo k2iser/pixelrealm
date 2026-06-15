@@ -37,6 +37,7 @@ const O = {
   PART: 19, // casilla secundaria de un edificio 2x2 (invisible, sólida)
   WELL: 20, // pozo de aldea (decorativo, sólido)
   CROP0: 21, CROP1: 22, CROP2: 23, CROP3: 24, // cultivo: 4 fases de crecimiento
+  FURNACE: 25, ROCK_COAL: 26, ROCK_IRON: 27,  // horno y rocas con mineral (montaña)
 };
 const CROP_SECS = 28;   // segundos por fase de crecimiento (madura en ~84 s)
 
@@ -82,12 +83,21 @@ const OBJ = {
   [O.CROP2]:   { name: 'Cultivo', hp: 1, solid: false, tool: null, crop: 2, drops: [['seeds', 1, 1]] },
   [O.CROP3]:   { name: 'Cultivo maduro', hp: 1, solid: false, tool: null, crop: 3,
                  drops: [['berry', 3, 1], ['seeds', 1, 0.8]] },
+  [O.ROCK_COAL]: { name: 'Veta de carbón', hp: 9, solid: true, tool: 'pick',
+                   drops: [['stone', 2, 1], ['coal', 2, 1], ['coal', 1, 0.5]] },
+  [O.ROCK_IRON]: { name: 'Veta de hierro', hp: 11, solid: true, tool: 'pick',
+                   drops: [['stone', 2, 1], ['iron_ore', 2, 1], ['iron_ore', 1, 0.4]] },
+  [O.FURNACE]: { name: 'Horno', hp: 16, solid: true, tool: 'pick', size: 1, furnace: true, light: 3.5,
+                 lightColor: '#ff8c2e', drops: [['stone', 6, 1]] },
 };
 
 // --- Objetos de inventario ---
 const ITEMS = {
   wood:     { name: 'Madera', stack: 99 },
   stone:    { name: 'Piedra', stack: 99 },
+  coal:     { name: 'Carbón', stack: 99 },
+  iron_ore: { name: 'Mineral de hierro', stack: 99 },
+  iron:     { name: 'Lingote de hierro', stack: 99 },
   fiber:    { name: 'Fibra', stack: 99 },
   berry:    { name: 'Bayas', stack: 99, food: 2 },
   seeds:    { name: 'Semillas', stack: 99, plant: true },
@@ -101,6 +111,10 @@ const ITEMS = {
   axe:      { name: 'Hacha', stack: 1, tool: 'axe', dmg: 2 },
   pick:     { name: 'Pico', stack: 1, tool: 'pick', dmg: 2 },
   sword:    { name: 'Espada', stack: 1, tool: 'sword', dmg: 3 },
+  iron_axe:   { name: 'Hacha de hierro', stack: 1, tool: 'axe', dmg: 4 },
+  iron_pick:  { name: 'Pico de hierro', stack: 1, tool: 'pick', dmg: 4 },
+  iron_sword: { name: 'Espada de hierro', stack: 1, tool: 'sword', dmg: 5 },
+  furnace:  { name: 'Horno', stack: 9, place: O.FURNACE },
   torch:    { name: 'Antorcha', stack: 99, place: O.TORCH },
   campfire: { name: 'Fogata', stack: 99, place: O.FIRE },
   wallw:    { name: 'Muro de madera', stack: 99, place: O.WALLW },
@@ -139,7 +153,12 @@ const RECIPES = [
     desc: 'Cultiva bayas con el tiempo' },
   { out: 'brazier', n: 1, cost: { stone: 4, wood: 2, fiber: 2 }, cat: 'build',
     desc: 'Gran círculo de luz nocturna' },
-  // El altar (invocaba al Coloso) está retirado por ahora.
+  { out: 'furnace', n: 1, cost: { stone: 8 }, cat: 'build',
+    desc: 'Funde mineral de hierro (necesita carbón). Clic para fundir' },
+
+  { out: 'iron_axe', n: 1, cost: { iron: 3, stick: 2 }, cat: 'item', desc: 'Tala más rápido' },
+  { out: 'iron_pick', n: 1, cost: { iron: 3, stick: 2 }, cat: 'item', desc: 'Pica más rápido' },
+  { out: 'iron_sword', n: 1, cost: { iron: 2, stick: 1 }, cat: 'item', desc: 'Más daño en combate' },
 ];
 
 // --- Enemigos ---
@@ -234,4 +253,5 @@ const PART_COLOR = {
   [O.HUT]: '#a87b4f', [O.TOWER]: '#9a9aa4', [O.SAWMILL]: '#a87b4f', [O.QUARRY]: '#8c8c94',
   [O.FARM]: '#5fb84d', [O.BRAZIER]: '#ffb347', [O.ALTAR]: '#a070ff', [O.WELL]: '#819796',
   [O.CROP0]: '#75a743', [O.CROP1]: '#75a743', [O.CROP2]: '#468232', [O.CROP3]: '#a53030',
+  [O.ROCK_COAL]: '#394a50', [O.ROCK_IRON]: '#c08552', [O.FURNACE]: '#ff8c2e',
 };
