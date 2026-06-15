@@ -205,6 +205,7 @@ function makeFringe(base, dark, edge, seed) {
 
 // Prioridad de derrame: el mayor se come visualmente el borde del menor
 const FRINGE_PRIORITY = {
+  [T.TILLED]: 8, // tierra arada: nada se derrama sobre el cultivo
   [T.GRASS]: 7, [T.SNOW]: 6, [T.DIRT]: 5, [T.SAND]: 4,
   [T.STONE]: 3, [T.WATER]: 2, [T.DEEP]: 1, [T.FLOOR]: 0, // lo construido no se mezcla
 };
@@ -220,6 +221,26 @@ function makeFloorTile(seed) {
       let col = base;
       if (((x + 2 * y) % 16) < 2) col = dark;
       else if (hash2(x, y, seed) > 0.93) col = light;
+      if (y > H / 2 - 1 && dx + dy > 0.9) col = dark;
+      g.fillStyle = col;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  return c;
+}
+
+// Tierra arada: surcos paralelos oscuros sobre tierra
+function makeTilledTile(seed) {
+  const base = '#7a4841', dark = '#5a3431', light = '#9a5a4a';
+  const W = CFG.TW, H = CFG.TH, cx = W / 2 - 0.5, cy = H / 2 - 0.5;
+  const [c, g] = cv(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = Math.abs(x - cx) / (W / 2), dy = Math.abs(y - cy) / (H / 2);
+      if (dx + dy > 1.04) continue;
+      let col = base;
+      if (((x - 2 * y) % 12 + 12) % 12 < 2) col = dark;        // surcos diagonales
+      else if (hash2(x, y, seed) > 0.9) col = light;
       if (y > H / 2 - 1 && dx + dy > 0.9) col = dark;
       g.fillStyle = col;
       g.fillRect(x, y, 1, 1);
@@ -960,6 +981,26 @@ function buildItems() {
     '.dddddddddd',
   ], { G: '#e8c14d', g: '#7be37b', r: '#d83434', d: '#b8901e' });
 
+  it.seeds = gridSprite([
+    '.b..b.',
+    'bBb.bBb',
+    '.b.b.b',
+    '..bBb.',
+    '.bBb..',
+    '..b...',
+  ], { b: '#7a4841', B: '#c89b62' });
+
+  it.hoe = gridSprite([
+    '......ss',
+    '.....sSSs',
+    '.....sSs',
+    '....bs',
+    '...b',
+    '..b',
+    '.b',
+    'b',
+  ], { s: '#9fa8b0', S: '#d8e0e8', b: '#6b4226' });
+
   it.coin = gridSprite([
     '..ggg',
     '.gYYYg',
@@ -1107,6 +1148,7 @@ function buildAssets() {
   tiles[T.STONE] = [15, 16, 17].map(s => makeGroundTile('#577277', '#394a50', '#819796', s));
   tiles[T.SNOW]  = [18, 19, 20].map(s => makeGroundTile('#ebede9', '#c7cfcc', '#ffffff', s));
   tiles[T.FLOOR] = [21, 22].map(s => makeFloorTile(s));
+  tiles[T.TILLED] = [23, 24].map(s => makeTilledTile(s));
 
   // flecos de transición entre biomas (auto-tiling)
   const fringeCols = {
@@ -1192,6 +1234,37 @@ function buildAssets() {
   Assets.obj[O.BRAZIER] = [makeBrazier(0), makeBrazier(1)];
   Assets.obj[O.ALTAR] = [makeAltar(0), makeAltar(1)];
   Assets.obj[O.WELL] = makeWell();
+  // cultivo: 4 fases (brote → plantón → cultivo → maduro con bayas)
+  const cropPal = { g: '#75a743', G: '#468232', d: '#25562e', R: '#a53030', r: '#cf573c', t: '#7a4841' };
+  Assets.obj[O.CROP0] = scaleSprite(gridSprite([
+    '....',
+    '..g.',
+    '.gt.',
+    '.tt.',
+  ], cropPal), CFG.SPR);
+  Assets.obj[O.CROP1] = scaleSprite(gridSprite([
+    '..g..',
+    '.gGg.',
+    '..G..',
+    '..t..',
+    '.ttt.',
+  ], cropPal), CFG.SPR);
+  Assets.obj[O.CROP2] = scaleSprite(gridSprite([
+    '.g.g.g',
+    'gGgGgG',
+    '.GGGG.',
+    '..GG..',
+    '..dd..',
+    '.tddt.',
+  ], cropPal), CFG.SPR);
+  Assets.obj[O.CROP3] = scaleSprite(gridSprite([
+    '.g.g.g',
+    'gGRGRG',
+    'RGGGGR',
+    '.GRRG.',
+    '..GG..',
+    '.tddt.',
+  ], cropPal), CFG.SPR);
   Assets.obj[O.PART] = null; // invisible: lo dibuja su ancla
 
   // héroe por defecto y enemigos

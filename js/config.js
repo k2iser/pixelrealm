@@ -26,7 +26,7 @@ const CFG = {
 };
 
 // --- Suelos ---
-const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7 };
+const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8 };
 
 // --- Objetos del mundo ---
 const O = {
@@ -36,7 +36,9 @@ const O = {
   HUT: 12, TOWER: 13, SAWMILL: 14, QUARRY: 15, FARM: 16, BRAZIER: 17, ALTAR: 18,
   PART: 19, // casilla secundaria de un edificio 2x2 (invisible, sólida)
   WELL: 20, // pozo de aldea (decorativo, sólido)
+  CROP0: 21, CROP1: 22, CROP2: 23, CROP3: 24, // cultivo: 4 fases de crecimiento
 };
+const CROP_SECS = 28;   // segundos por fase de crecimiento (madura en ~84 s)
 
 // drops: [item, cantidad, probabilidad]
 const OBJ = {
@@ -45,8 +47,8 @@ const OBJ = {
   [O.CACTUS]:    { name: 'Cactus', hp: 3, solid: true, tool: 'sword', drops: [['fiber', 2, 1]] },
   [O.ROCK]:      { name: 'Roca', hp: 8, solid: true, tool: 'pick', drops: [['stone', 3, 1]] },
   [O.FLOWER]:    { name: 'Flor', hp: 1, solid: false, tool: null, drops: [['fiber', 1, 0.6]] },
-  [O.TALLGRASS]: { name: 'Hierba alta', hp: 1, solid: false, tool: null, drops: [['fiber', 1, 0.9]] },
-  [O.BUSH]:      { name: 'Arbusto de bayas', hp: 2, solid: false, tool: null, drops: [['berry', 2, 1], ['fiber', 1, 0.7]] },
+  [O.TALLGRASS]: { name: 'Hierba alta', hp: 1, solid: false, tool: null, drops: [['fiber', 1, 0.9], ['seeds', 1, 0.4]] },
+  [O.BUSH]:      { name: 'Arbusto de bayas', hp: 2, solid: false, tool: null, drops: [['berry', 2, 1], ['fiber', 1, 0.7], ['seeds', 1, 0.5]] },
   [O.WALLW]:     { name: 'Muro de madera', hp: 6, solid: true, tool: 'axe', drops: [['wallw', 1, 1]] },
   [O.WALLS]:     { name: 'Muro de piedra', hp: 10, solid: true, tool: 'pick', drops: [['walls', 1, 1]] },
   [O.TORCH]:     { name: 'Antorcha', hp: 1, solid: false, tool: null, drops: [['torch', 1, 1]], light: 4.5 },
@@ -75,6 +77,11 @@ const OBJ = {
   [O.PART]:    { name: '', hp: 1, solid: true, tool: null, drops: [], part: true },
   [O.WELL]:    { name: 'Pozo', hp: 30, solid: true, tool: 'pick', size: 1, light: 2.5,
                  drops: [['stone', 4, 1]] },
+  [O.CROP0]:   { name: 'Brote', hp: 1, solid: false, tool: null, crop: 0, drops: [['seeds', 1, 1]] },
+  [O.CROP1]:   { name: 'Plantón', hp: 1, solid: false, tool: null, crop: 1, drops: [['seeds', 1, 1]] },
+  [O.CROP2]:   { name: 'Cultivo', hp: 1, solid: false, tool: null, crop: 2, drops: [['seeds', 1, 1]] },
+  [O.CROP3]:   { name: 'Cultivo maduro', hp: 1, solid: false, tool: null, crop: 3,
+                 drops: [['berry', 3, 1], ['seeds', 1, 0.8]] },
 };
 
 // --- Objetos de inventario ---
@@ -83,6 +90,8 @@ const ITEMS = {
   stone:    { name: 'Piedra', stack: 99 },
   fiber:    { name: 'Fibra', stack: 99 },
   berry:    { name: 'Bayas', stack: 99, food: 2 },
+  seeds:    { name: 'Semillas', stack: 99, plant: true },
+  hoe:      { name: 'Azada', stack: 1, tool: 'hoe', dmg: 1 },
   slime:    { name: 'Baba', stack: 99 },
   essence:  { name: 'Esencia oscura', stack: 99 },
   crown:    { name: 'Corona del Coloso', stack: 9 },
@@ -112,6 +121,7 @@ const RECIPES = [
   { out: 'axe', n: 1, cost: { plank: 3, stick: 2 }, cat: 'item' },
   { out: 'pick', n: 1, cost: { plank: 3, stick: 2 }, cat: 'item' },
   { out: 'sword', n: 1, cost: { plank: 2, stick: 1 }, cat: 'item' },
+  { out: 'hoe', n: 1, cost: { plank: 2, stick: 2 }, cat: 'item', desc: 'Ara la tierra para plantar semillas' },
   { out: 'torch', n: 2, cost: { stick: 1, fiber: 1 }, cat: 'item' },
   { out: 'campfire', n: 1, cost: { wood: 3, stone: 2 }, cat: 'item' },
   { out: 'wallw', n: 2, cost: { plank: 4 }, cat: 'item' },
@@ -192,6 +202,7 @@ const NPC_ROLES = [
 const MINIMAP_COLORS = {
   [T.DEEP]: '#253a5e', [T.WATER]: '#4f8fba', [T.SAND]: '#e8c170', [T.GRASS]: '#468232',
   [T.DIRT]: '#ad7757', [T.STONE]: '#577277', [T.SNOW]: '#ebede9', [T.FLOOR]: '#c09473',
+  [T.TILLED]: '#7a4841',
 };
 
 // --- Apariencia del héroe (editor de personaje) — rampas Apollo ---
@@ -222,4 +233,5 @@ const PART_COLOR = {
   [O.WALLW]: '#8a5a33', [O.WALLS]: '#8c8c94', [O.TORCH]: '#ffb347', [O.FIRE]: '#ff8c2e',
   [O.HUT]: '#a87b4f', [O.TOWER]: '#9a9aa4', [O.SAWMILL]: '#a87b4f', [O.QUARRY]: '#8c8c94',
   [O.FARM]: '#5fb84d', [O.BRAZIER]: '#ffb347', [O.ALTAR]: '#a070ff', [O.WELL]: '#819796',
+  [O.CROP0]: '#75a743', [O.CROP1]: '#75a743', [O.CROP2]: '#468232', [O.CROP3]: '#a53030',
 };

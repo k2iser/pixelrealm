@@ -11,6 +11,7 @@ class World {
     this.center = { x: 0, y: 0 };     // posición del jugador, para purgar chunks lejanos
     this.buildings = new Map();       // "tx,ty" del ancla -> { stock, owner }
     this.owners = new Map();          // "tx,ty" -> { id, name } (solo multijugador)
+    this.crops = new Map();           // "tx,ty" -> { t } tiempo de crecimiento acumulado
     this._lastKey = null;
     this._lastChunk = null;
   }
@@ -367,5 +368,16 @@ class World {
     for (const k in data) {
       this.buildings.set(k, { stock: data[k].stock || 0, owner: data[k].owner || 0 });
     }
+  }
+
+  cropsData() {
+    const out = {};
+    for (const [k, c] of this.crops) out[k] = +c.t.toFixed(1);
+    return out;
+  }
+
+  applyCrops(data) {
+    this.crops.clear();
+    for (const k in data) this.crops.set(k, { t: data[k] || 0 });
   }
 }

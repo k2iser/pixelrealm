@@ -78,6 +78,7 @@ function startWorld(seed, data) {
   if (data) {
     world.applyModified(data.chunks || {});
     world.applyBuildings(data.buildings || {});
+    world.applyCrops(data.crops || {});
     G.time = data.time;
     G.day = data.day;
     G.spawn = data.spawn || world.findSpawn();
@@ -314,17 +315,55 @@ function tryUseItem() {
   const def = sel ? ITEMS[sel.id] : null;
   if (def && def.food) { eatSelected(); return; }
   const h = hoveredTile();
-  if (!def || def.place == null) {
-    // sin nada colocable: recoge la producción del edificio bajo el cursor si está cerca
+  const usable = def && (def.place != null || def.tool === 'hoe' || def.plant);
+  if (!usable) {
+    // sin nada usable: recoge la producción del edificio bajo el cursor si está cerca
     const a = world.buildingAnchor(h.tx, h.ty);
     if (a && OBJ[a.id].prod && dist2(player.x, player.y, h.wx, h.wy) <= effReach() * effReach()) collectBuilding(a);
     return;
   }
   if (dist2(player.x, player.y, h.wx, h.wy) <= effReach() * effReach()) {
-    placeAt(h.tx, h.ty);
+    useHeldAt(h.tx, h.ty);
   } else {
     player.cmd = { type: 'use', tx: h.tx, ty: h.ty };
-    player.path = Path.findAdjacent(player.x, player.y, h.tx, h.ty, OBJ[def.place].size || 1) || [];
+    const size = def.place != null ? (OBJ[def.place].size || 1) : 1;
+    player.path = Path.findAdjacent(player.x, player.y, h.tx, h.ty, size) || [];
+  }
+}
+
+// Aplica el objeto en mano a una casilla: colocar / arar / plantar
+function useHeldAt(tx, ty) {
+  const sel = Inv.selected();
+  if (!sel) return;
+  const def = ITEMS[sel.id];
+  if (def.tool === 'hoe') return tillAt(tx, ty);
+  if (def.plant) return plantAt(tx, ty);
+  if (def.place != null) return placeAt(tx, ty);
+}
+
+function tillAt(tx, ty) {
+  const gr = world.ground(tx, ty);
+  if ((gr === T.GRASS || gr === T.DIRT || gr === T.SAND) && world.object(tx, ty) === O.NONE) {
+    world.setGround(tx, ty, T.TILLED);
+    setFacingWorld(tx + 0.5 - player.x, ty + 0.5 - player.y);
+    player.swingT = 0.18;
+    Sfx.mine();
+    spawnParticles(tx + 0.5, ty + 0.5, '#7a4841', 5);
+  } else {
+    UI.toast('Solo se ara hierba o tierra despejada');
+  }
+}
+
+function plantAt(tx, ty) {
+  const gr = world.ground(tx, ty);
+  if ((gr === T.TILLED || gr === T.DIRT) && world.object(tx, ty) === O.NONE) {
+    world.setObject(tx, ty, O.CROP0);
+    world.crops.set(tx + ',' + ty, { t: 0 });
+    if (!G.creative) Inv.consumeSelected(1);
+    Sfx.place();
+    UI.refreshHotbar();
+  } else {
+    UI.toast('Planta en tierra arada');
   }
 }
 
@@ -436,7 +475,7 @@ function runCmd(dt) {
     }
     player.cmd = null; return [0, 0];
   }
-  if (c.type === 'use') { player.cmd = null; placeAt(c.tx, c.ty); return [0, 0]; }
+  if (c.type === 'use') { player.cmd = null; useHeldAt(c.tx, c.ty); return [0, 0]; }
   if (c.type === 'collect') {
     if (dist2(player.x, player.y, c.tx + 0.5, c.ty + 0.5) <= rr * rr) {
       const a = world.buildingAnchor(c.tx, c.ty);
@@ -589,6 +628,7 @@ function update(dt) {
   updateFloaters(dt);
   updateProjectiles(dt);
   updateBuildings(dt);
+  updateCrops(dt);
   NPC.update(dt);
   if (typeof Net !== 'undefined') Net.update(dt);
 
@@ -666,6 +706,20 @@ function update(dt) {
   }
 
   UI.setTime();
+}
+
+// Crecimiento de cultivos (las casillas con cultivo están en chunks modificados,
+// así que nunca se purgan y conservan su id de fase)
+function updateCrops(dt) {
+  for (const [key, c] of world.crops) {
+    const i = key.indexOf(',');
+    const tx = +key.slice(0, i), ty = +key.slice(i + 1);
+    const ob = world.object(tx, ty);
+    if (ob < O.CROP0 || ob > O.CROP3) { world.crops.delete(key); continue; }  // cosechado o destruido
+    c.t += dt;
+    const want = O.CROP0 + Math.min(3, Math.floor(c.t / CROP_SECS));
+    if (ob !== want) world.setObject(tx, ty, want);
+  }
 }
 
 // Producción pasiva y torres
