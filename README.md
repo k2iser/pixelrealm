@@ -36,6 +36,10 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
   - 🗿 **Altar antiguo** — invoca al jefe… si te atreves
 - **Movimiento estilo MOBA (clic para ir)**: clic izquierdo y el héroe va solo —con pathfinding A\* que rodea obstáculos— a caminar, talar, atacar o hablar; mantenlo pulsado para arrastrarte. WASD sigue disponible.
 - **Aldeas con comerciantes**: pueblos procedurales (casas, plaza, pozo, faroles) habitados por **herborista, cantero, carpintero y mercader**, cada uno con su nombre, aspecto y personalidad. Habla con ellos y comercia con monedas. El diálogo usa respuestas procedurales y, si conectas un modelo (Gemma vía Ollama o Google AI), conversación con IA de verdad — ver [DEPLOY.md](DEPLOY.md).
+- **Recados (quests)**: cada comerciante te encarga traerle materiales a cambio de monedas y, a veces, una herramienta. Un tracker en el HUD muestra el progreso.
+- **Descubrimiento**: una brújula **⚑** te guía a la aldea más cercana y el minimapa marca aldeas, comerciantes y otros jugadores — para no perderte en un mundo infinito.
+- **Granja**: ara la tierra con la azada, planta semillas (de hierba y arbustos), míralas crecer en cuatro fases y cosecha comida.
+- **Minería y herrería**: pica vetas de **carbón** y **hierro** en las montañas, funde el mineral en un **horno** y fabrica herramientas de hierro (tier 2) que talan y pican más rápido.
 - **Modo creativo**: recursos infinitos (paleta con todos los objetos), construir y romper al instante, sin daño ni enemigos. Ideal para probar y diseñar.
 - **Tres enemigos nocturnos**: babas saltarinas, sombras que caminan sin descanso (sueltan esencia oscura) y murciélagos que vuelan sobre tus muros.
 - *(El jefe «Coloso de Baba» está retirado de momento; su código queda dormido tras `CFG.BOSS_ENABLED`.)*
@@ -94,10 +98,12 @@ Sin build, sin framework, sin `npm install`. Nada de dependencias: ni en el clie
 - [x] Multijugador con chat y propiedad de construcciones
 - [x] Movimiento click-to-move con pathfinding
 - [x] Aldeas con comerciantes (diálogo + comercio; IA opcional con Gemma)
+- [x] Recados de los comerciantes (con recompensa)
+- [x] Descubrimiento: brújula y marcadores de aldea en el minimapa
+- [x] Granja (arar, plantar, cosechar)
+- [x] Minerales (carbón, hierro), horno y herramientas de hierro
 - [x] Modo creativo
 - [ ] Cuentas Google (Firebase) y partidas en la nube — ver [DEPLOY.md](DEPLOY.md)
-- [ ] Misiones de los comerciantes (recados con recompensa)
-- [ ] Minerales (carbón, hierro) y segundo nivel de herramientas
 - [ ] Reintroducir el jefe como evento opcional
 - [ ] Soporte táctil para móvil
 

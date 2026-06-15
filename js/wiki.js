@@ -94,13 +94,16 @@ function build() {
   /* ---- recursos ---- */
   section(root, 'recursos', '🎒 Recursos');
   const HOW = {
-    wood: 'Talando árboles y pinos (con hacha, ×3)', stone: 'Picando rocas (con pico, ×3)',
-    fiber: 'Hierba alta, flores y cactus', berry: 'Arbustos y huertos — clic der. para comer (+2 ❤)',
-    slime: 'Sueltan las babas al caer', essence: 'Sueltan las sombras al caer; enciende altares',
-    crown: 'El trofeo del Coloso. Solo para quien lo haya visto caer.',
+    wood: 'Talando árboles y pinos (con hacha más rápido)', stone: 'Picando rocas (con pico más rápido)',
+    fiber: 'Hierba alta, flores y cactus', berry: 'Arbustos, huertos y cultivos — clic der. para comer (+2 ❤)',
+    seeds: 'Hierba alta y arbustos; se plantan en tierra arada', coin: 'Vendiendo a los comerciantes',
+    coal: 'Vetas de carbón en las montañas', iron_ore: 'Vetas de hierro en las montañas',
+    iron: 'Fundiendo mineral de hierro en un horno (gasta carbón)',
+    slime: 'Sueltan las babas al caer', essence: 'Sueltan las sombras al caer',
+    crown: 'El trofeo del jefe (retirado por ahora).',
   };
   let grid = $('<div class="cards"></div>');
-  for (const id of ['wood', 'stone', 'fiber', 'berry', 'slime', 'essence', 'crown']) {
+  for (const id of ['wood', 'stone', 'coal', 'iron_ore', 'iron', 'fiber', 'berry', 'seeds', 'coin', 'slime', 'essence']) {
     grid.appendChild(card(Assets.items[id], 3, ITEMS[id].name, ['<b>Se consigue:</b> ' + HOW[id]], null));
   }
   root.appendChild(grid);
@@ -161,7 +164,11 @@ function build() {
     grid.appendChild(card(portrait, 1, r.title, meta, r.lines[0]));
   }
   root.appendChild(grid);
-  root.appendChild($('<p class="meta" style="margin-top:12px">Explora hasta dar con una <b>aldea</b> (casas, plaza, pozo y faroles). Haz clic en un comerciante para acercarte y hablar: charla libremente o pulsa <b>⚖</b> para comerciar con monedas. Vende babas, esencia o madera para conseguir oro y cómprales herramientas y materiales. Si el servidor tiene un modelo de IA conectado (Gemma), los comerciantes responden con conversación real; si no, con diálogo procedural.</p>'));
+  root.appendChild($('<p class="meta" style="margin-top:12px">Explora hasta dar con una <b>aldea</b> (casas, plaza, pozo y faroles): una <b>brújula ⚑</b> te guía a la más cercana y el minimapa la marca. Haz clic en un comerciante para acercarte y hablar: charla libremente, pulsa <b>⚖</b> para comerciar con monedas, o acepta un <b>recado</b> (tráele materiales a cambio de oro y, a veces, una herramienta). Vende babas, esencia o madera para conseguir oro. Si el servidor tiene un modelo de IA conectado (Gemma), los comerciantes responden con conversación real; si no, con diálogo procedural.</p>'));
+
+  /* ---- granja y mineria ---- */
+  section(root, 'oficios', '🌾 Granja y minería');
+  root.appendChild($('<p class="meta">· <b>Granja:</b> fabrica una azada para arar hierba o tierra; planta semillas (que sueltan la hierba alta y los arbustos) en la tierra arada y, tras cuatro fases de crecimiento, cosecha bayas y más semillas.<br>· <b>Minería:</b> en las montañas hay vetas de <b>carbón</b> y <b>hierro</b>. Pícalas con el pico, construye un <b>horno</b> y haz clic en él para fundir el mineral (gasta carbón) en lingotes.<br>· Con lingotes de hierro fabricas hacha, pico y espada de hierro: más daño y recolección más rápida que las de madera.</p>'));
 
   /* ---- mundo ---- */
   section(root, 'mundo', '🗺 Secretos del mundo');
