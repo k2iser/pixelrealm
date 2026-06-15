@@ -975,6 +975,26 @@ function buildItems() {
     '.dddddddd',
   ], { W: '#c8d0d8', S: '#9aa6b0', d: '#5a646e' });
 
+  it.meat = gridSprite([
+    '...WW',
+    '..WRRW',
+    '.WRRRRW',
+    'WRRRRRR',
+    'WRRRRRb',
+    '.WRRRb.',
+    '..WRb..',
+  ], { R: '#d06a6a', W: '#e8a0a0', b: '#e8e0d4' });
+
+  it.cooked_meat = gridSprite([
+    '...kk',
+    '..kBBk',
+    '.kBBBBk',
+    'kBBBBBB',
+    'kBBBBBW',
+    '.kBBBW.',
+    '..kBW..',
+  ], { B: '#8a4f2c', k: '#4d2b1c', W: '#e8e0d4' });
+
   it.fiber = gridSprite([
     '..g..g..g',
     '..g.gg..g',
@@ -1357,6 +1377,29 @@ function buildAssets() {
   Assets.mobs.slime = [0, 1, 2].map(makeSlimeFrame);
   Assets.mobs.shadow = [SHADOW_A, SHADOW_B].map(r => scaleSprite(outlineSprite(gridSprite(r, SHADOW_PAL), '#15101f'), CFG.SPR));
   Assets.mobs.bat = [BAT_UP, BAT_DOWN].map(r => scaleSprite(outlineSprite(gridSprite(r, BAT_PAL), '#15101f'), CFG.SPR));
+  // fauna: conejo (2 frames: quieto/salto) y ciervo (quieto/paso)
+  const rabPal = { B: '#c6b8a8', b: '#9a8a78', W: '#e8e0d4', e: '#2a2028', n: '#df84a5' };
+  Assets.mobs.rabbit = [
+    ['..b....', '.bb..bb', '.Bb..Bb', '.BB..BB', 'bBBBBBb', 'BBWeWBB', 'BBBnBBB', '.bBBBb.', '..b.b..'],
+    ['.b.....', 'bb.b...', 'Bb.Bb..', 'BBbBBb.', 'bBBBBBb', 'BBWeWBB', 'BBBnBBB', '.bBBBbb', '..b..b.'],
+  ].map(r => scaleSprite(outlineSprite(gridSprite(r, rabPal), '#3a2e30'), CFG.SPR));
+  const deerPal = { B: '#a87344', b: '#7a4f2c', W: '#e7d5b3', e: '#241812', a: '#cfc0a8', n: '#1a120c' };
+  const deerRows = (step) => [
+    '......aa.aa',
+    '.......aaa.',
+    '......WBBW.',
+    '......BeBB.',
+    '......BBnB.',
+    '.....BBBB..',
+    '..BBBBBBB..',
+    '.BBBBBBBBB.',
+    'bBBBBBBBBBb',
+    'bBBBBBBBBBb',
+    '.BBBBBBBBB.',
+    step ? '.b.bb.bb.b' : '.bb.bb.bb.',
+    step ? '.b..b.b..b' : '.b.b..b.b.',
+  ];
+  Assets.mobs.deer = [deerRows(0), deerRows(1)].map(r => scaleSprite(outlineSprite(gridSprite(r, deerPal), '#2a1c12'), CFG.SPR));
   Assets.boss = [0, 1, 2].map(makeBossFrame);
 
   // flecha de las torres

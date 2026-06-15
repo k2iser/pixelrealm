@@ -100,6 +100,8 @@ const ITEMS = {
   iron:     { name: 'Lingote de hierro', stack: 99 },
   fiber:    { name: 'Fibra', stack: 99 },
   berry:    { name: 'Bayas', stack: 99, food: 2 },
+  meat:     { name: 'Carne', stack: 99, food: 2 },
+  cooked_meat: { name: 'Carne asada', stack: 99, food: 5 },
   seeds:    { name: 'Semillas', stack: 99, plant: true },
   hoe:      { name: 'Azada', stack: 1, tool: 'hoe', dmg: 1 },
   slime:    { name: 'Baba', stack: 99 },
@@ -169,6 +171,11 @@ const MOBS = {
             drops: [['essence', 1, 1], ['fiber', 1, 0.4]] },
   bat:    { name: 'Murciélago', hp: 2, dmg: 1, ai: 'fly', speed: 3.8, weight: 0.18,
             drops: [['fiber', 1, 0.5]] },
+  // fauna pasiva diurna (weight 0 = nunca aparece como enemigo nocturno)
+  rabbit: { name: 'Conejo', hp: 3, dmg: 0, ai: 'graze', speed: 3.8, weight: 0, passive: true, diurnal: true, fleeR: 6,
+            drops: [['meat', 1, 1]] },
+  deer:   { name: 'Ciervo', hp: 6, dmg: 0, ai: 'graze', speed: 3.2, weight: 0, passive: true, diurnal: true, fleeR: 8,
+            drops: [['meat', 2, 1], ['fiber', 1, 0.4]] },
 };
 
 const BOSS_CFG = {

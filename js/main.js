@@ -21,6 +21,7 @@ const G = {
   saveFailWarned: false,
   spawn: { x: 0.5, y: 0.5 },
   spawnTimer: 0,
+  wildTimer: 0,
   saveTimer: 0,
   minimapTimer: 0,
   beaconT: 0,
@@ -544,17 +545,25 @@ function runCmd(dt) {
   return [0, 0];
 }
 
-// Fundir: por cada mineral de hierro + carbón, un lingote (en lote, al usar el horno)
+// Horno: funde mineral de hierro y cocina carne, usando carbón como combustible
 function smeltAt() {
-  const ore = Inv.count('iron_ore'), coal = Inv.count('coal');
-  const n = Math.min(ore, coal);
-  if (n <= 0) { UI.toast(coal <= 0 ? 'El horno necesita carbón' : 'No tienes mineral de hierro'); return; }
-  Inv.remove('iron_ore', n);
-  Inv.remove('coal', n);
-  Inv.add('iron', n);
+  let coal = Inv.count('coal');
+  const iron = Math.min(Inv.count('iron_ore'), coal); coal -= iron;
+  const cook = Math.min(Inv.count('meat'), coal); coal -= cook;
+  const used = iron + cook;
+  if (used <= 0) {
+    UI.toast(Inv.count('coal') <= 0 ? 'El horno necesita carbón' : 'No tienes mineral ni carne');
+    return;
+  }
+  if (iron) { Inv.remove('iron_ore', iron); Inv.add('iron', iron); }
+  if (cook) { Inv.remove('meat', cook); Inv.add('cooked_meat', cook); }
+  Inv.remove('coal', used);
   Sfx.craft();
   spawnParticles(player.x, player.y, '#ff8c2e', 8);
-  UI.toast('Fundido: ' + n + ' lingote' + (n > 1 ? 's' : '') + ' de hierro');
+  const parts = [];
+  if (iron) parts.push(iron + ' lingote' + (iron > 1 ? 's' : ''));
+  if (cook) parts.push(cook + ' carne' + (cook > 1 ? 's' : '') + ' asada' + (cook > 1 ? 's' : ''));
+  UI.toast('Horno: ' + parts.join(' y '));
   UI.refreshHotbar();
 }
 
@@ -686,6 +695,24 @@ function update(dt) {
       if (gr !== T.DEEP && gr !== T.WATER && !world.isSolid(tx, ty)) {
         spawnMob(pickMobKind(), x, y);
         break;
+      }
+    }
+  }
+
+  // --- fauna diurna (conejos y ciervos en pradera) ---
+  G.wildTimer -= dt;
+  if (!G.creative && G.darkness < 0.3 && G.wildTimer <= 0 && !player.dead) {
+    G.wildTimer = 4;
+    let passive = 0;
+    for (const m of mobs) if (MOBS[m.kind].passive) passive++;
+    if (passive < 6) {
+      const ang = Math.random() * Math.PI * 2, d = randRange(8, 16);
+      const x = player.x + Math.cos(ang) * d, y = player.y + Math.sin(ang) * d;
+      const ssx = w2sx(x, y) + cam.ox, ssy = w2sy(x, y) + cam.oy;
+      const onScreen = ssx > -64 && ssx < canvas.width + 64 && ssy > -96 && ssy < canvas.height + 64;
+      const tx = Math.floor(x), ty = Math.floor(y);
+      if (!onScreen && world.ground(tx, ty) === T.GRASS && !world.isSolid(tx, ty)) {
+        spawnMob(Math.random() < 0.7 ? 'rabbit' : 'deer', x, y);
       }
     }
   }

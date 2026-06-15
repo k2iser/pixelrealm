@@ -479,13 +479,24 @@ function drawDrawable(g, d, ox, oy) {
       alpha = 0.88;
       yoff = Math.sin(m.t * 2.5) * 3;
       shadow(g, sx, sy, 16);
-    } else {
+    } else if (m.kind === 'bat') {
       img = Assets.mobs.bat[m.frame];
       yoff = 28 + Math.sin(m.t * 3) * 6; // vuela alto
       shadow(g, sx, sy, 12);
+    } else {
+      img = Assets.mobs[m.kind][m.frame];   // fauna (conejo/ciervo)
+      shadow(g, sx, sy, m.kind === 'deer' ? 22 : 14);
     }
     g.globalAlpha = alpha;
-    g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - yoff));
+    if (m.flip) {
+      g.save();
+      g.translate(Math.round(sx), 0);
+      g.scale(-1, 1);
+      g.drawImage(img, -Math.round(img.width / 2), Math.round(sy - img.height + 4 - yoff));
+      g.restore();
+    } else {
+      g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - yoff));
+    }
     g.globalAlpha = 1;
     return;
   }

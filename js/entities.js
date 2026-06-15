@@ -104,7 +104,7 @@ function spawnMob(kind, x, y) {
     kind, x, y, hp: def.hp, maxHp: def.hp,
     vx: 0, vy: 0,
     hopT: randRange(0.5, 1.5), hopping: 0,
-    wanderT: 0, wAng: randRange(0, Math.PI * 2),
+    wanderT: 0, wAng: randRange(0, Math.PI * 2), grazeMove: false, flip: false,
     t: Math.random() * 10,
     hurtT: 0, frame: 0, dead: false,
   });
@@ -125,14 +125,15 @@ function damageMob(m, dmg) {
   m.hurtT = 0.25;
   Sfx.mobHurt();
   addFloater(m.x, m.y - 0.4, '-' + dmg, '#ffd34d');
-  spawnParticles(m.x, m.y, m.kind === 'shadow' ? '#6a5f96' : (m.kind === 'bat' ? '#56487a' : '#6cd44a'), 5);
+  const pc = MOBS[m.kind].passive ? '#cf573c' : (m.kind === 'shadow' ? '#6a5f96' : (m.kind === 'bat' ? '#56487a' : '#6cd44a'));
+  spawnParticles(m.x, m.y, pc, 5);
   const ang = Math.atan2(m.y - player.y, m.x - player.x);
   m.vx = Math.cos(ang) * 5; m.vy = Math.sin(ang) * 5;
   m.hopping = 0.12;
   if (m.hp <= 0) {
     m.dead = true;
     Sfx.poof();
-    spawnParticles(m.x, m.y, m.kind === 'shadow' ? '#6a5f96' : '#6cd44a', 12);
+    spawnParticles(m.x, m.y, pc, 12);
     for (const dr of MOBS[m.kind].drops) {
       if (Math.random() < dr[2]) spawnDrop(m.x, m.y, dr[0], dr[1]);
     }
@@ -210,12 +211,37 @@ function updateMobs(dt) {
         m.y += Math.sin(m.t * 0.9) * def.speed * 0.5 * dt;
       }
       m.frame = Math.floor(m.t * 9) % 2;
+    } else if (def.ai === 'graze') {
+      // --- fauna: pasta tranquila y huye del jugador ---
+      const d2p = dist2(m.x, m.y, player.x, player.y);
+      const fleeR = def.fleeR || 6;
+      let mvx = 0, mvy = 0;
+      if (d2p < fleeR * fleeR && !player.dead) {
+        const ang = Math.atan2(m.y - player.y, m.x - player.x);   // huir en línea recta
+        mvx = Math.cos(ang) * def.speed; mvy = Math.sin(ang) * def.speed;
+        m.frame = Math.floor(m.t * 10) % 2;
+      } else {
+        m.wanderT -= dt;
+        if (m.wanderT <= 0) { m.wanderT = randRange(2, 5); m.grazeMove = Math.random() < 0.5; m.wAng = randRange(0, Math.PI * 2); }
+        if (m.grazeMove) { mvx = Math.cos(m.wAng) * def.speed * 0.4; mvy = Math.sin(m.wAng) * def.speed * 0.4; m.frame = Math.floor(m.t * 5) % 2; }
+        else m.frame = 0;
+      }
+      if (mvx || mvy) {
+        moveEntity(m, mvx * dt, mvy * dt, 0.3);
+        const sdx = mvx - mvy;                                     // mira según el eje X de pantalla
+        if (Math.abs(sdx) > 0.05) m.flip = sdx < 0;
+      }
     }
 
-    mobContact(m, def);
+    if (def.dmg > 0) mobContact(m, def);
 
-    // los nocturnos se evaporan de día (las sombras ya arden antes)
-    if (def.ai !== 'walk' && G.darkness < 0.3 && Math.random() < dt * 0.12) {
+    if (def.passive) {
+      // la fauna duerme de noche: se retira al oscurecer o si está lejísimos
+      if ((G.darkness > 0.5 && Math.random() < dt * 0.2) || dist2(m.x, m.y, player.x, player.y) > 60 * 60) {
+        mobs.splice(i, 1);
+      }
+    } else if (def.ai !== 'walk' && G.darkness < 0.3 && Math.random() < dt * 0.12) {
+      // los nocturnos hostiles se evaporan de día (las sombras ya arden antes)
       spawnParticles(m.x, m.y, '#8be07a', 8);
       Sfx.poof();
       mobs.splice(i, 1);
