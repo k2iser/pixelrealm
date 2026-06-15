@@ -856,6 +856,10 @@ function updateWeather(dt) {
 
   // clima activo
   G.weatherT -= dt;
+  // reconcilia el tipo con el bioma actual si el jugador cruzó de zona durante el episodio
+  const snowyNow = world.snowyAt(Math.floor(player.x), Math.floor(player.y));
+  if (snowyNow && G.weather !== 'snow') G.weather = 'snow';
+  else if (!snowyNow && G.weather === 'snow') G.weather = Math.random() < 0.35 ? 'storm' : 'rain';
   const peak = G.weather === 'storm' ? 1 : G.weather === 'snow' ? 0.85 : 0.9;
   // fundido de salida en los últimos 6 s
   const target = G.weatherT < 6 ? 0 : peak;
@@ -866,9 +870,9 @@ function updateWeather(dt) {
   Sfx.startRain(G.weather === 'snow');
   Sfx.setRainLevel(G.weatherI);
 
-  // relámpagos durante la tormenta
-  if (G.weather === 'storm' && G.weatherI > 0.5 && G.flash <= 0 && Math.random() < dt * 0.35) {
-    G.flash = 1;
+  // relámpagos durante la tormenta (no mientras el jugador está muerto)
+  if (!player.dead && G.weather === 'storm' && G.weatherI > 0.5 && G.flash <= 0 && Math.random() < dt * 0.35) {
+    G.flash = 1.35;   // el exceso sobre 1 se consume como rampa de subida (pico visible 0.42)
     G.shake = Math.max(G.shake, 0.25);
     G.thunderT = randRange(0.3, 1.8);   // la luz viaja más rápido que el sonido
   }

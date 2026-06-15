@@ -221,12 +221,13 @@ class World {
     return ch.ground[(ty - cy * N) * N + (tx - cx * N)];
   }
 
-  // ¿hace frío aquí? (mismas funciones de ruido que genTile): tundra o alta montaña
+  // ¿hay nieve en el suelo aquí? Mismas funciones y umbrales que genTile produce
+  // T.SNOW: ni agua/arena (e<0.44) ni montaña (e>0.76), y temperatura baja (tp<0.36).
   snowyAt(tx, ty) {
     const s = this.seed;
     const e = fbm(tx * 0.016, ty * 0.016, s, 4);
     const tp = fbm(tx * 0.007 - 905, ty * 0.007 + 422, s + 3333, 3);
-    return tp < 0.40 || e > 0.78;
+    return e >= 0.44 && e <= 0.76 && tp < 0.36;
   }
 
   object(tx, ty) {

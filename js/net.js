@@ -296,6 +296,7 @@ const Net = {
       // y machacaría la partida local de un jugador con el mundo del servidor
       Save.writeMp();
       G.running = false;
+      Sfx.stopRain();   // el bucle de lluvia/nieve no se detendría solo al congelar el update
       UI.hideChat();
       UI.showTitleAgain('Se perdió la conexión con el mundo compartido');
     }

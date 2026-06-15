@@ -42,6 +42,46 @@ function lightLayer(W, H) {
   return _lightG;
 }
 
+// Sprites de degradado radial precocinados: evitan crear un createRadialGradient
+// (y rasterizar el degradado) por cada luz y cada frame. Se hornean a radio fijo
+// y se escalan con drawImage; el círculo (arc) ahorra el relleno inútil de esquinas.
+const GLOW_R = 256;
+function _bakeGlow(stops) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = GLOW_R * 2;
+  const c = cv.getContext('2d');
+  const grad = c.createRadialGradient(GLOW_R, GLOW_R, 1, GLOW_R, GLOW_R, GLOW_R);
+  for (const s of stops) grad.addColorStop(s[0], s[1]);
+  c.fillStyle = grad;
+  c.beginPath(); c.arc(GLOW_R, GLOW_R, GLOW_R, 0, Math.PI * 2); c.fill();
+  return cv;
+}
+let _veilGlow = null;            // agujero de luz para el velo (destination-out)
+function veilGlow() {
+  if (!_veilGlow) _veilGlow = _bakeGlow([[0, 'rgba(0,0,0,0.95)'], [0.55, 'rgba(0,0,0,0.65)'], [1, 'rgba(0,0,0,0)']]);
+  return _veilGlow;
+}
+const _haloGlow = {};            // halo cálido/místico (alpha horneado a 1; se modula con globalAlpha)
+function haloGlow(rgb) {
+  if (!_haloGlow[rgb]) _haloGlow[rgb] = _bakeGlow([[0, 'rgba(' + rgb + ',1)'], [1, 'rgba(' + rgb + ',0)']]);
+  return _haloGlow[rgb];
+}
+let _fireflyGlow = null;         // resplandor de luciérnaga (radio fijo, sin escala)
+function fireflyGlow() {
+  if (!_fireflyGlow) {
+    const r = 5; _fireflyGlow = document.createElement('canvas');
+    _fireflyGlow.width = _fireflyGlow.height = r * 2;
+    const c = _fireflyGlow.getContext('2d');
+    const grad = c.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(190,255,130,0.5)');   // centro a 0.5 (= a*0.5 con globalAlpha=a)
+    grad.addColorStop(1, 'rgba(190,255,130,0)');
+    c.fillStyle = grad; c.fillRect(0, 0, r * 2, r * 2);
+  }
+  return _fireflyGlow;
+}
+// Viñeta: el degradado solo depende de W,H y la oscuridad (cuantizada); se cachea.
+let _vigGrad = null, _vigW = 0, _vigH = 0, _vigDk = -1;
+
 // Sprite de un objeto del mundo (resuelve variantes y frames de animación)
 function objSprite(id, tx, ty) {
   let img = Assets.obj[id];
@@ -259,14 +299,10 @@ function render(g, W, H) {
     lg.fillRect(0, 0, W, H);
     lg.globalCompositeOperation = 'destination-out';
     const flick = 1 + Math.sin(G.elapsed * 9) * 0.05 + Math.sin(G.elapsed * 23) * 0.03;
+    const vsp = veilGlow();
     for (const l of lights) {
       const r = l.r * (l.warm ? flick : 1);
-      const grad = lg.createRadialGradient(l.x, l.y, 2, l.x, l.y, r);
-      grad.addColorStop(0, 'rgba(0,0,0,0.95)');
-      grad.addColorStop(0.55, 'rgba(0,0,0,0.65)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      lg.fillStyle = grad;
-      lg.fillRect(l.x - r, l.y - r, r * 2, r * 2);
+      lg.drawImage(vsp, l.x - r, l.y - r, r * 2, r * 2);
     }
     g.drawImage(_lightCv, 0, 0);
     // estrellas titilando en la noche cerrada (fijas a pantalla, como un cielo)
@@ -288,25 +324,30 @@ function render(g, W, H) {
     drawEmbers(g, lights);
     // halo cálido (naranja) o místico (violeta del altar)
     g.globalCompositeOperation = 'lighter';
+    const prevSmooth = g.imageSmoothingEnabled;
+    g.imageSmoothingEnabled = true;           // el halo es suave: el sprite escala sin pixelar
+    g.globalAlpha = 0.13 * G.darkness;        // modula el alpha horneado (1) del sprite
     for (const l of lights) {
       if (!l.warm && !l.color) continue;
       const r = l.r * 0.8 * flick;
       const rgb = l.color === '#a070ff' ? '160,112,255' : '255,140,40';
-      const grad = g.createRadialGradient(l.x, l.y, 1, l.x, l.y, r);
-      grad.addColorStop(0, 'rgba(' + rgb + ',' + (0.13 * G.darkness).toFixed(3) + ')');
-      grad.addColorStop(1, 'rgba(' + rgb + ',0)');
-      g.fillStyle = grad;
-      g.fillRect(l.x - r, l.y - r, r * 2, r * 2);
+      g.drawImage(haloGlow(rgb), l.x - r, l.y - r, r * 2, r * 2);
     }
+    g.globalAlpha = 1;
+    g.imageSmoothingEnabled = prevSmooth;
     g.globalCompositeOperation = 'source-over';
   }
 
   // --- viñeta cinematográfica (oscurece bordes, más marcada de noche) ---
   {
-    const vg = g.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.40, W / 2, H * 0.46, Math.max(W, H) * 0.72);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,' + (0.26 + 0.22 * G.darkness).toFixed(3) + ')');
-    g.fillStyle = vg;
+    const dk = Math.round(G.darkness * 50) / 50;   // cuantiza a pasos de 0.02
+    if (!_vigGrad || _vigW !== W || _vigH !== H || _vigDk !== dk) {
+      _vigGrad = g.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.40, W / 2, H * 0.46, Math.max(W, H) * 0.72);
+      _vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      _vigGrad.addColorStop(1, 'rgba(0,0,0,' + (0.26 + 0.22 * dk).toFixed(3) + ')');
+      _vigW = W; _vigH = H; _vigDk = dk;
+    }
+    g.fillStyle = _vigGrad;
     g.fillRect(0, 0, W, H);
   }
 
@@ -462,7 +503,8 @@ function drawDrawable(g, d, ox, oy) {
     const swayAmp = breakingThis ? 0 : (SWAY_AMP[d.id] || 0);
     if (swayAmp) {
       const sway = swayAmp * (1 + (G.windBoost || 0)) * windAt(d.tx, d.ty);
-      const bx = cx + shakeX, by = cy + lift;
+      // pivote redondeado: la base queda clavada al suelo (sin jitter sub-píxel vs la sombra)
+      const bx = Math.round(cx) + shakeX, by = Math.round(cy + lift);
       g.save();
       g.translate(bx, by);
       g.transform(1, 0, -sway / img.height, 1, 0, 0);
@@ -697,11 +739,9 @@ function drawFireflies(g, W, H, sa) {
     const a = sa * blink * 0.8;
     if (a < 0.02) continue;
     const r = 5;
-    const grad = g.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, 'rgba(190,255,130,' + (a * 0.5).toFixed(3) + ')');
-    grad.addColorStop(1, 'rgba(190,255,130,0)');
-    g.fillStyle = grad;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
+    g.globalAlpha = a;                        // el sprite trae el centro a 0.5: a*0.5 al modular
+    g.drawImage(fireflyGlow(), x - r, y - r);
+    g.globalAlpha = 1;
     g.fillStyle = 'rgba(222,255,170,' + a.toFixed(3) + ')';
     g.fillRect(x | 0, y | 0, 1, 1);
   }
@@ -715,7 +755,8 @@ function drawEmbers(g, lights) {
     if (!l.warm) continue;
     for (let k = 0; k < 4; k++) {
       const ph = ((G.elapsed * (0.5 + hash2(k, 1, 3) * 0.4) + hash2(k, 5, 3)) % 1);
-      const ex = l.x + Math.sin(G.elapsed * 2.2 + k * 1.7 + (l.x | 0)) * 6;
+      // fase por índice k + radio de la luz (estable): NO usar l.x (deriva con la cámara)
+      const ex = l.x + Math.sin(G.elapsed * 2.2 + k * 1.7 + l.r * 0.13) * 6;
       const ey = l.y - 6 - ph * 28;
       const a = (1 - ph) * 0.5 * G.darkness;
       if (a < 0.02) continue;
@@ -739,7 +780,8 @@ function drawWeather(g, W, H) {
     }
   }
   if (G.flash > 0.01) {
-    g.fillStyle = 'rgba(222,228,255,' + (0.6 * G.flash).toFixed(3) + ')';
+    // pico saturado a 1 (el exceso del disparo a 1.35 actúa como rampa de subida)
+    g.fillStyle = 'rgba(222,228,255,' + (0.42 * Math.min(1, G.flash)).toFixed(3) + ')';
     g.fillRect(0, 0, W, H);
   }
 }

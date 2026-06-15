@@ -633,6 +633,7 @@ const UI = {
   showTitleAgain(msg) {
     this.el('title-overlay').classList.remove('hidden');
     this.hideBossBar();
+    if (typeof Sfx !== 'undefined') Sfx.stopRain();   // corta el bucle de lluvia al volver al título
     if (msg) this.toast(msg);
   },
 
