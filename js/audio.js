@@ -71,4 +71,24 @@ const Sfx = {
   bossSlam()  { this.noise(0.25, 0.6, 250); this.tone(60, 0.3, 'sine', 0.5, -30); },
   bossDie()   { this.tone(70, 1.4, 'sawtooth', 0.5, -50); setTimeout(() => this.tone(523, 0.15, 'triangle', 0.4), 500); setTimeout(() => this.tone(659, 0.15, 'triangle', 0.4), 680); setTimeout(() => this.tone(784, 0.3, 'triangle', 0.4), 860); },
   chatPing()  { this.tone(880, 0.05, 'sine', 0.15); },
+
+  // Ambiente sutil: pájaros de día, viento de noche. Se autogestiona el ritmo.
+  _ambT: 0,
+  ambient(dt, dark) {
+    if (!this.ctx || this.muted) return;
+    this._ambT -= dt;
+    if (this._ambT > 0) return;
+    if (dark > 0.6) {
+      this._ambT = 5 + Math.random() * 5;
+      this.noise(1.4, 0.05, 220);                       // viento grave y suave
+    } else if (dark < 0.35) {
+      this._ambT = 4 + Math.random() * 6;
+      const base = 1500 + Math.random() * 900;          // trino de pájaro
+      this.tone(base, 0.07, 'sine', 0.045, 140);
+      setTimeout(() => this.tone(base * 1.2, 0.06, 'sine', 0.045, -90), 85);
+      if (Math.random() < 0.5) setTimeout(() => this.tone(base * 0.92, 0.08, 'sine', 0.035, 70), 190);
+    } else {
+      this._ambT = 4;                                    // crepúsculo: silencio
+    }
+  },
 };

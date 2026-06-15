@@ -188,6 +188,7 @@ function finishStart(msg) {
   UI.renderMinimap();
   UI.updateQuestHud();
   UI.toast(msg);
+  if (!G.online) UI.maybeShowHint();
 }
 
 /* ---------- ciclo día/noche ---------- */
@@ -589,6 +590,7 @@ function update(dt) {
     }
   }
   computeLight();
+  Sfx.ambient(dt, G.darkness);
   world.center.x = player.x;
   world.center.y = player.y;
 

@@ -273,6 +273,21 @@ html, body {
 #npc-quest button:hover:not(:disabled) { background: #e8c14d; }
 #npc-quest button:disabled { background: #4a4036; color: #847661; cursor: not-allowed; }
 
+#firsthint {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel-bg);
+  color: var(--parchment);
+  padding: 24px 28px;
+  max-width: 460px;
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--wood), 0 0 0 6px var(--ink);
+  z-index: 12;
+}
+#firsthint h3 { font-size: 13px; color: var(--accent); text-shadow: 2px 2px 0 #000; }
+#firsthint p { font-size: 9px; line-height: 2; color: #cfc2a0; }
+
 #questhud {
   background: var(--panel-bg);
   padding: 6px 10px;

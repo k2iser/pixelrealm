@@ -94,6 +94,12 @@ const UI = {
     this.el('npc-trade-btn').addEventListener('click', () => this.toggleTrade());
     this.el('npc-close').addEventListener('click', () => this.closeNpc());
 
+    // pista de bienvenida
+    this.el('btn-hint-ok').addEventListener('click', () => {
+      this.el('firsthint').classList.add('hidden');
+      try { localStorage.setItem('pixelrealm.seenHint', '1'); } catch (e) { /* da igual */ }
+    });
+
     // corazones
     const hearts = this.el('hearts');
     for (let i = 0; i < 5; i++) {
@@ -630,4 +636,10 @@ const UI = {
 
   showDeath() { this.el('death-overlay').classList.remove('hidden'); },
   hideDeath() { this.el('death-overlay').classList.add('hidden'); },
+
+  maybeShowHint() {
+    let seen = false;
+    try { seen = !!localStorage.getItem('pixelrealm.seenHint'); } catch (e) { /* sin storage */ }
+    if (!seen) this.el('firsthint').classList.remove('hidden');
+  },
 };
