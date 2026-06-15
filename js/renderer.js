@@ -82,6 +82,51 @@ function fireflyGlow() {
 // Viñeta: el degradado solo depende de W,H y la oscuridad (cuantizada); se cachea.
 let _vigGrad = null, _vigW = 0, _vigH = 0, _vigDk = -1;
 
+// --- Oclusión de contacto + sombras direccionales (Diorama iluminado) ---
+// Elipse de AO blanda horneada una vez; se escala con drawImage bajo cada entidad.
+let _aoSprite = null;
+function aoSprite() {
+  if (!_aoSprite) _aoSprite = _bakeGlow([[0, 'rgba(0,0,0,0.55)'], [0.5, 'rgba(0,0,0,0.30)'], [1, 'rgba(0,0,0,0)']]);
+  return _aoSprite;
+}
+// Silueta negra de un sprite (para la sombra proyectada). Cacheada por sprite.
+const _silCache = new WeakMap();
+function silhouette(img) {
+  let s = _silCache.get(img);
+  if (!s) {
+    s = document.createElement('canvas');
+    s.width = img.width; s.height = img.height;
+    const cg = s.getContext('2d');
+    cg.drawImage(img, 0, 0);
+    cg.globalCompositeOperation = 'source-in';
+    cg.fillStyle = '#000';
+    cg.fillRect(0, 0, img.width, img.height);
+    _silCache.set(img, s);
+  }
+  return s;
+}
+// Vector de sombra según el sol del ciclo día/noche (null de noche).
+// shear = desplazamiento horizontal por unidad de altura; flat = aplastado vertical.
+function sunShadow() {
+  if (G.darkness > 0.55) return null;
+  const dt2 = (((G.time - 0.95) % 1) + 1) % 1;   // 0 = amanecer, 0.5 = ocaso
+  if (dt2 >= 0.5) return null;
+  const ph = (dt2 / 0.5) * Math.PI;              // 0..π a lo largo del día
+  const elev = Math.sin(ph);                     // 0 horizonte, 1 mediodía
+  const az = Math.cos(ph);                        // +1 amanecer (este), -1 ocaso (oeste)
+  const len = clamp(0.85 / (elev + 0.4), 0.35, 1.9);
+  return { shear: -az * len, flat: 0.42 + 0.13 * (1 - elev), alpha: 0.22 * clamp(1 - G.darkness, 0, 1) };
+}
+function castShadow(g, img, bx, by, ss) {
+  g.save();
+  g.globalAlpha = ss.alpha;
+  g.translate(bx, by);
+  g.transform(1, 0, ss.shear, ss.flat, 0, 0);   // cizalla por altura + aplasta en Y (base anclada)
+  g.drawImage(silhouette(img), Math.round(-img.width / 2), -img.height);
+  g.globalAlpha = 1;
+  g.restore();
+}
+
 // Sprite de un objeto del mundo (resuelve variantes y frames de animación)
 function objSprite(id, tx, ty) {
   let img = Assets.obj[id];
@@ -452,9 +497,9 @@ function drawDiamond(g, tx, ty, ox, oy, color) {
 }
 
 function shadow(g, sx, sy, w) {
-  g.fillStyle = 'rgba(0,0,0,0.28)';
-  g.fillRect(Math.round(sx - w / 2), Math.round(sy - 2), w, 6);
-  g.fillRect(Math.round(sx - w / 2) + 4, Math.round(sy - 4), w - 8, 10);
+  // oclusión de contacto: elipse radial blanda que "asienta" la entidad en el suelo
+  const hw = w * 0.92, hh = Math.max(4, w * 0.42);
+  g.drawImage(aoSprite(), Math.round(sx - hw), Math.round(sy + 2 - hh), Math.round(hw * 2), Math.round(hh * 2));
 }
 
 // Dibuja un héroe (propio o remoto) con su herramienta al golpear.
@@ -475,6 +520,8 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
     return;
   }
   shadow(g, sx, sy, 20);
+  const hss = CFG.GFX >= 1 ? sunShadow() : null;
+  if (hss && hss.alpha > 0.02) castShadow(g, img, Math.round(sx), Math.round(sy + 2), hss);
   g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
@@ -506,6 +553,9 @@ function drawDrawable(g, d, ox, oy) {
     else if (size === 2) lift = 28;
     else if (def.size === 1) lift = 14;  // torre, brasero
     else lift = 12;                      // vegetación
+    // sombra proyectada del sol para objetos altos sólidos (árbol, torre, casa…)
+    const ss = (CFG.GFX >= 1 && def.solid && d.id !== O.WALLW && d.id !== O.WALLS && img.height >= 20) ? sunShadow() : null;
+    if (ss && ss.alpha > 0.02) castShadow(g, img, Math.round(cx), Math.round(cy + lift), ss);
     // tiembla mientras lo estás talando/picando
     const breakingThis = player.breaking && player.breaking.tx === d.tx && player.breaking.ty === d.ty;
     const shakeX = breakingThis ? Math.round(Math.sin(G.elapsed * 42) * 2) : 0;
