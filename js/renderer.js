@@ -226,18 +226,19 @@ function render(g, W, H) {
     });
   }
 
-  // --- atardecer cálido ---
-  if (G.warm > 0.02) {
-    g.fillStyle = 'rgba(255,120,40,' + (0.13 * G.warm).toFixed(3) + ')';
+  // --- gradación de color del cielo (amanecer/mediodía/atardecer/noche) ---
+  if (G.grade && G.grade[3] > 0.01) {
+    g.fillStyle = 'rgba(' + (G.grade[0] | 0) + ',' + (G.grade[1] | 0) + ',' + (G.grade[2] | 0) + ',' + G.grade[3].toFixed(3) + ')';
     g.fillRect(0, 0, W, H);
   }
 
   // --- oscuridad nocturna con agujeros de luz ---
   if (G.darkness > 0.02) {
+    const v = G.veil || [10, 14, 40];
     const lg = lightLayer(W, H);
     lg.globalCompositeOperation = 'source-over';
     lg.clearRect(0, 0, W, H);
-    lg.fillStyle = 'rgba(8,10,34,' + (0.87 * G.darkness).toFixed(3) + ')';
+    lg.fillStyle = 'rgba(' + (v[0] | 0) + ',' + (v[1] | 0) + ',' + (v[2] | 0) + ',' + (0.87 * G.darkness).toFixed(3) + ')';
     lg.fillRect(0, 0, W, H);
     lg.globalCompositeOperation = 'destination-out';
     const flick = 1 + Math.sin(G.elapsed * 9) * 0.05 + Math.sin(G.elapsed * 23) * 0.03;
@@ -251,6 +252,19 @@ function render(g, W, H) {
       lg.fillRect(l.x - r, l.y - r, r * 2, r * 2);
     }
     g.drawImage(_lightCv, 0, 0);
+    // estrellas titilando en la noche cerrada (fijas a pantalla, como un cielo)
+    if (G.darkness > 0.55) {
+      const sa = (G.darkness - 0.55) / 0.45;
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 70; i++) {
+        const sx = hash2(i, 1, 7) * W, sy = hash2(i, 2, 7) * H * 0.92;
+        const tw = 0.45 + 0.55 * Math.abs(Math.sin(G.elapsed * (0.6 + hash2(i, 3, 7)) + i));
+        g.fillStyle = 'rgba(220,228,255,' + (sa * tw * 0.7).toFixed(3) + ')';
+        const s = hash2(i, 4, 7) < 0.2 ? 2 : 1;
+        g.fillRect(sx | 0, sy | 0, s, s);
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
     // halo cálido (naranja) o místico (violeta del altar)
     g.globalCompositeOperation = 'lighter';
     for (const l of lights) {

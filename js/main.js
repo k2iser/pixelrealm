@@ -14,6 +14,8 @@ const G = {
   elapsed: 0,
   darkness: 0,
   warm: 0,
+  grade: [0, 0, 0, 0],
+  veil: [10, 14, 40],
   shake: 0,
   boss: null,
   bossWarned: false,
@@ -195,6 +197,32 @@ function finishStart(msg) {
 
 /* ---------- ciclo día/noche ---------- */
 
+// Paleta del cielo por momento del día: [hora, grade rgba (tinte de pantalla), veil rgb (color de la noche)]
+const SKY_KEYS = [
+  { t: 0.00, grade: [38, 52, 120, 0.10], veil: [10, 14, 40] },   // noche cerrada
+  { t: 0.05, grade: [150, 92, 96, 0.16], veil: [42, 30, 60] },   // pre-amanecer (violáceo)
+  { t: 0.10, grade: [255, 196, 120, 0.13], veil: [34, 30, 58] }, // hora dorada
+  { t: 0.20, grade: [255, 240, 205, 0.05], veil: [22, 30, 58] }, // mañana
+  { t: 0.42, grade: [255, 250, 235, 0.02], veil: [20, 28, 56] }, // mediodía (casi sin tinte)
+  { t: 0.50, grade: [255, 120, 40, 0.22], veil: [54, 28, 48] },  // atardecer ámbar
+  { t: 0.56, grade: [60, 60, 130, 0.14], veil: [20, 18, 48] },   // anochecer
+  { t: 0.90, grade: [40, 52, 120, 0.12], veil: [10, 14, 40] },   // noche
+  { t: 1.00, grade: [38, 52, 120, 0.10], veil: [10, 14, 40] },
+];
+
+function sampleSky(t) {
+  let a = SKY_KEYS[0], b = SKY_KEYS[SKY_KEYS.length - 1];
+  for (let i = 0; i < SKY_KEYS.length - 1; i++) {
+    if (t >= SKY_KEYS[i].t && t <= SKY_KEYS[i + 1].t) { a = SKY_KEYS[i]; b = SKY_KEYS[i + 1]; break; }
+  }
+  const f = b.t === a.t ? 0 : (t - a.t) / (b.t - a.t);
+  const mix = (i, n) => a[n][i] + (b[n][i] - a[n][i]) * f;
+  return {
+    grade: [mix(0, 'grade'), mix(1, 'grade'), mix(2, 'grade'), mix(3, 'grade')],
+    veil: [mix(0, 'veil'), mix(1, 'veil'), mix(2, 'veil')],
+  };
+}
+
 function computeLight() {
   const t = G.time;
   let dark = 0, warm = 0;
@@ -204,6 +232,9 @@ function computeLight() {
   else { const p = (t - 0.90) / 0.1; dark = 1 - p; warm = Math.sin(p * Math.PI); }
   G.darkness = dark;
   G.warm = warm;
+  const s = sampleSky(t);
+  G.grade = s.grade;
+  G.veil = s.veil;
 }
 
 /* ---------- interacciones (click-to-move estilo LoL) ---------- */
