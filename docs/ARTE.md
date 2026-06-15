@@ -39,3 +39,16 @@ El engine casero ya resuelve lo difícil del isométrico 2:1 (orden de profundid
 - No usar Kenney/CraftPix para esto (estilo flat/vector, choca con el pixel art)
 - No adaptar terreno top-down a isométrico (equivale a redibujar)
 - [Tiled](https://www.mapeditor.org/) solo como fase posterior para estampar zonas diseñadas a mano (pueblos) sobre el mundo procedural
+
+## Atmósfera v7 — post-procesado sin assets (junio 2026)
+
+Mejoras puramente de código (cero arte nuevo): el mismo truco que da a Stardew/Eastward su "ambiente" sin tocar los sprites.
+
+- **Ciclo de color del cielo** (`SKY_KEYS` + `sampleSky` en main.js): keyframes por fracción del día que interpolan un tinte a pantalla completa (`G.grade`, rgba) y el color del velo nocturno (`G.veil`). El render aplica `grade` como capa de color y `veil` como base del agujereado de luz. Amanecer dorado → mediodía neutro → atardecer ámbar → noche azul.
+- **Estrellas** fijas a pantalla (posición por `hash2`, titileo por seno, mezcla `lighter`) cuando `G.darkness > 0.55`.
+- **Viento** (`SWAY_AMP` + `windAt` en renderer.js): la vegetación se inclina cizallando el sprite con `g.transform` (base anclada, cima desplazada). Ráfaga global (envolvente lenta) + onda local desfasada por casilla. `G.windBoost` lo intensifica con el clima.
+- **Partículas ambientales**: motas de polen a contraluz de día (parallax suave con la cámara), luciérnagas que vagan y parpadean de noche, ascuas que ascienden de las luces cálidas. Todo derivado de `hash2(i,...)` + `G.elapsed`, sin estado persistente.
+- **Viñeta**: gradiente radial que oscurece bordes, más marcado de noche.
+- **Clima** (`updateWeather` en main.js, `drawWeather`/`drawRain`/`drawSnow` en renderer.js): programador local de lluvia/tormenta/nieve con intensidad por fundido; nieve si `world.snowyAt()` (ruido de temperatura/elevación). Relámpago = destello + sacudida + trueno con retardo luz→sonido. Audio de lluvia en bucle (ruido marrón filtrado, WebAudio). La lluvia riega los cultivos.
+
+Coste: todo es overlay 2D y aritmética por píxel/partícula; sin allocations por frame salvo los gradientes radiales de luces/viñeta (pocas decenas).

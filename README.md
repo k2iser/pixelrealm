@@ -26,6 +26,9 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 - **Cámara cercana estilo Stardew** con tres niveles de zoom (`+`/`−`) y suelos a doble resolución de píxel.
 - **Editor de personaje**: piel, peinado, color de pelo, camiseta y pantalón — tu héroe te representa también online.
 - **Héroe en alta definición**: cuádruple densidad de píxel, ciclo de andar de 4 pasos con aceleración real, pose de ataque con la herramienta en la mano, medio cuerpo sumergido al vadear y polvillo en los pies.
+- **Ciclo día/noche cinematográfico**: el cielo vira de color a lo largo del día —amanecer dorado, mediodía neutro, atardecer ámbar, anochecer violáceo y noche azul profunda con estrellas que titilan—, y el velo de oscuridad se tiñe según la hora.
+- **Atmósfera viva**: la vegetación (árboles, hierba, flores, cultivos) se mece con ráfagas de viento; motas de polen flotan a contraluz de día; luciérnagas vagan y parpadean de noche; ascuas ascienden de fuegos, hornos y antorchas; y una viñeta cinematográfica enmarca la escena.
+- **Clima dinámico**: lluvia, **tormentas** con relámpagos y truenos, y **nieve** en los biomas fríos (tundra y alta montaña). La lluvia encapota el cielo, arrecia el viento y **riega tus cultivos** para que crezcan más rápido.
 - **Ruinas antiguas**: anillos de muros derruidos con una antorcha eterna, esperando a quien explore lejos.
 - **Recolección y crafteo**: hacha, pico y espada; tablones, antorchas, fogatas, muros.
 - **Construcciones prefab estilo SimCity** (pestaña «Construcciones» del panel):
@@ -103,6 +106,9 @@ Sin build, sin framework, sin `npm install`. Nada de dependencias: ni en el clie
 - [x] Granja (arar, plantar, cosechar)
 - [x] Minerales (carbón, hierro), horno y herramientas de hierro
 - [x] Modo creativo
+- [x] Fauna pasiva (conejos y ciervos), carne y cocinar
+- [x] Atmósfera: ciclo de color día/noche, viento, partículas ambientales y viñeta
+- [x] Clima dinámico (lluvia, tormentas con relámpagos, nieve por bioma)
 - [ ] Cuentas Google (Firebase) y partidas en la nube — ver [DEPLOY.md](DEPLOY.md)
 - [ ] Reintroducir el jefe como evento opcional
 - [ ] Soporte táctil para móvil
