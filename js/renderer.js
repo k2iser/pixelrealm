@@ -42,6 +42,55 @@ function lightLayer(W, H) {
   return _lightG;
 }
 
+// --- Buffer de escena + cadena de post (bloom). El mundo se dibuja a sceneCv
+// (resolución de dispositivo), luego composite() lo vuelca a pantalla con un
+// bloom de altas luces; los overlays de UI se pintan DESPUÉS, nítidos. ---
+let _sceneCv = null, _sceneG = null;
+function sceneLayer(W, H) {
+  if (!_sceneCv || _sceneCv.width !== W || _sceneCv.height !== H) {
+    _sceneCv = document.createElement('canvas');
+    _sceneCv.width = W; _sceneCv.height = H;
+    _sceneG = _sceneCv.getContext('2d');
+  }
+  return _sceneG;
+}
+let _bloomCv = null, _bloomG = null;
+function bloomLayer(W, H) {
+  if (!_bloomCv || _bloomCv.width !== W || _bloomCv.height !== H) {
+    _bloomCv = document.createElement('canvas');
+    _bloomCv.width = W; _bloomCv.height = H;
+    _bloomG = _bloomCv.getContext('2d');
+  }
+  return _bloomG;
+}
+// Vuelca la escena a pantalla y suma un bloom de altas luces (sin shaders):
+// downscale a 1/4 (= desenfoque de caja) + multiply consigo mismo (aísla brillos)
+// + suma aditiva reescalada. Da el "sangrado" de luz de fuegos, agua y atardecer.
+function composite(g, scene, dW, dH, strength) {
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.imageSmoothingEnabled = true;
+  g.drawImage(scene, 0, 0);
+  if (strength <= 0) return;
+  const bw = Math.max(2, dW >> 2), bh = Math.max(2, dH >> 2);
+  const bg = bloomLayer(bw, bh);
+  bg.setTransform(1, 0, 0, 1, 0, 0);
+  bg.globalAlpha = 1;
+  bg.globalCompositeOperation = 'source-over';
+  bg.imageSmoothingEnabled = true;
+  bg.clearRect(0, 0, bw, bh);
+  bg.drawImage(scene, 0, 0, bw, bh);            // 1/4 res = desenfoque barato
+  bg.globalCompositeOperation = 'multiply';
+  bg.drawImage(_bloomCv, 0, 0, bw, bh);          // x sí mismo: suprime medios tonos, deja brillos
+  bg.globalCompositeOperation = 'source-over';
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = strength;
+  g.drawImage(_bloomCv, 0, 0, dW, dH);           // reescala y suma
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+}
+
 // Sprites de degradado radial precocinados: evitan crear un createRadialGradient
 // (y rasterizar el degradado) por cada luz y cada frame. Se hornean a radio fijo
 // y se escalan con drawImage; el círculo (arc) ahorra el relleno inútil de esquinas.
@@ -156,6 +205,13 @@ function windAt(tx, ty) {
 }
 
 function render(g, W, H) {
+  // Post-proceso (bloom): el mundo se dibuja a un buffer de escena y luego se
+  // compone a pantalla; los overlays de UI van después, nítidos. Sin bloom
+  // (GFX<2) se dibuja directo a pantalla.
+  const screen = g;
+  const dW = canvas.width, dH = canvas.height;
+  const useBuffer = CFG.GFX >= 2;
+  if (useBuffer) g = sceneLayer(dW, dH);
   // El zoom es una escala de mundo: dibujamos en píxeles lógicos (W,H) y la
   // transformada amplía al backing-store nativo con suavizado. setTransform
   // reemplaza cualquier transformada previa, así que es seguro al inicio del frame.
@@ -393,6 +449,14 @@ function render(g, W, H) {
     g.globalAlpha = 1;
     g.imageSmoothingEnabled = prevSmooth;
     g.globalCompositeOperation = 'source-over';
+  }
+
+  // --- componer la escena a pantalla con bloom; los overlays van después, nítidos ---
+  if (useBuffer) {
+    // menos bloom de día (escena nítida), más de noche (fuegos/agua/altar florecen)
+    composite(screen, _sceneCv, dW, dH, 0.4 + 0.24 * G.darkness);
+    g = screen;
+    g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
   }
 
   // --- viñeta cinematográfica (oscurece bordes, más marcada de noche) ---
