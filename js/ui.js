@@ -343,6 +343,8 @@ const UI = {
 
   renderNpcQuest(npc) {
     const el = this.el('npc-quest');
+    // los recados son por mundo local: en el mundo compartido no se ofrecen aún
+    if (typeof Net !== 'undefined' && Net.online) { el.classList.add('hidden'); return; }
     el.innerHTML = '';
     const q = G.quest;
     const txt = document.createElement('div');

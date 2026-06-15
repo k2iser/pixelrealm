@@ -110,7 +110,8 @@ function startWorld(seed, data) {
     Inv.add('coin', 12);   // unas monedas para estrenar el comercio
     drops.length = 0;
   }
-  G.quest = (data && data.quest && NPC_ROLES[data.quest.role | 0] && ITEMS[data.quest.item]) ? data.quest : null;
+  G.quest = (data && data.quest && NPC_ROLES[data.quest.role | 0] && ITEMS[data.quest.item] &&
+    (!data.quest.rewardItem || ITEMS[data.quest.rewardItem])) ? data.quest : null;
   world.center = { x: player.x, y: player.y };
   finishStart(data ? 'Partida cargada' : (G.creative ? 'Modo creativo: clic para moverte, recursos infinitos' : 'Clic izquierdo para moverte y recolectar · busca una aldea'));
 }
@@ -350,6 +351,7 @@ function useHeldAt(tx, ty) {
 }
 
 function tillAt(tx, ty) {
+  if (_online()) { UI.toast('La granja llega pronto al mundo compartido'); return; }
   const gr = world.ground(tx, ty);
   if ((gr === T.GRASS || gr === T.DIRT || gr === T.SAND) && world.object(tx, ty) === O.NONE) {
     world.setGround(tx, ty, T.TILLED);
@@ -363,6 +365,7 @@ function tillAt(tx, ty) {
 }
 
 function plantAt(tx, ty) {
+  if (_online()) { UI.toast('La granja llega pronto al mundo compartido'); return; }
   const gr = world.ground(tx, ty);
   if ((gr === T.TILLED || gr === T.DIRT) && world.object(tx, ty) === O.NONE) {
     world.setObject(tx, ty, O.CROP0);
