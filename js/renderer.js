@@ -204,6 +204,50 @@ function windAt(tx, ty) {
   return (Math.sin(G.elapsed * 1.5 + phase) + 0.34 * Math.sin(G.elapsed * 3.0 + phase * 1.7)) * gust;
 }
 
+// Reflejo del cielo + destello especular sobre una casilla de agua (rombo).
+function drawWaterTile(g, sx, sy, tx, ty, wp) {
+  const HW = CFG.HW, HH = CFG.HH, TH = CFG.TH;
+  // 1) tinte de reflejo del cielo (más cálido al atardecer, oscuro de noche)
+  g.fillStyle = wp.tint;
+  g.beginPath();
+  g.moveTo(sx, sy); g.lineTo(sx + HW, sy + HH); g.lineTo(sx, sy + TH); g.lineTo(sx - HW, sy + HH);
+  g.closePath();
+  g.fill();
+  // 2) banda especular que se desplaza despacio (parpadeo desfasado por casilla)
+  const ph = G.elapsed * 0.7 + tx * 0.5 + ty * 0.8;
+  const a = wp.specA * (0.45 + 0.55 * Math.sin(ph));
+  if (a > 0.02) {
+    const cy = sy + HH + Math.sin(ph * 0.8) * 5;
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = a;
+    g.fillStyle = wp.spec;
+    g.beginPath();
+    g.moveTo(sx, cy - 2.5); g.lineTo(sx + HW * 0.55, cy); g.lineTo(sx, cy + 2.5); g.lineTo(sx - HW * 0.55, cy);
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+  }
+}
+// Espuma blanca animada en el borde del rombo que da a tierra (e: 0 NO·1 NE·2 SE·3 SO).
+function drawFoamEdge(g, sx, sy, e, alpha) {
+  const HW = CFG.HW, HH = CFG.HH, TH = CFG.TH;
+  let x1, y1, x2, y2;
+  if (e === 0) { x1 = sx - HW; y1 = sy + HH; x2 = sx; y2 = sy; }
+  else if (e === 1) { x1 = sx; y1 = sy; x2 = sx + HW; y2 = sy + HH; }
+  else if (e === 2) { x1 = sx + HW; y1 = sy + HH; x2 = sx; y2 = sy + TH; }
+  else { x1 = sx; y1 = sy + TH; x2 = sx - HW; y2 = sy + HH; }
+  g.globalCompositeOperation = 'lighter';
+  g.lineCap = 'round';
+  g.strokeStyle = 'rgba(226,244,255,' + (alpha * 0.5).toFixed(3) + ')';
+  g.lineWidth = 4;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,' + alpha.toFixed(3) + ')';
+  g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.globalCompositeOperation = 'source-over';
+}
+
 function render(g, W, H) {
   // Post-proceso (bloom): el mundo se dibuja a un buffer de escena y luego se
   // compone a pantalla; los overlays de UI van después, nítidos. Sin bloom
@@ -234,6 +278,16 @@ function render(g, W, H) {
   const drawables = [];
   const labels = [];
   const waterFrame = Math.floor(G.elapsed * 1.6);
+  // parámetros de agua por frame (reflejo del cielo según la hora) — Etapa 3
+  const fancyWater = CFG.GFX >= 1;
+  const _dayl = clamp(1 - G.darkness, 0, 1);
+  const _wm = G.warm || 0;
+  const wp = {
+    tint: 'rgba(' + Math.round(38 + _dayl * 64 + _wm * 130) + ',' + Math.round(66 + _dayl * 104 + _wm * 40) + ',' + Math.round(104 + _dayl * 118 - _wm * 20) + ',0.30)',
+    spec: 'rgb(' + Math.round(200 + _dayl * 55) + ',' + Math.round(225 + _dayl * 30) + ',255)',
+    specA: 0.14 + 0.12 * _dayl,
+  };
+  const foamA = 0.5 + 0.18 * Math.sin(G.elapsed * 2);
 
   // --- pasada de suelo + recogida de objetos ---
   for (let ty = tymin; ty <= tymax; ty++) {
@@ -252,6 +306,9 @@ function render(g, W, H) {
       }
       g.drawImage(img, Math.round(sx - CFG.HW), Math.round(sy));
 
+      const isWater = gr === T.WATER || gr === T.DEEP;
+      if (isWater && fancyWater) drawWaterTile(g, sx, sy, tx, ty, wp);
+
       // transiciones suaves entre biomas: el material dominante derrama
       // su flequillo sobre el borde del rombo vecino
       if (gr !== T.FLOOR) {
@@ -263,6 +320,10 @@ function render(g, W, H) {
                    : world.ground(tx, ty + 1);
           if (ng !== gr && (FRINGE_PRIORITY[ng] || 0) > pr && Assets.fringe[ng]) {
             g.drawImage(Assets.fringe[ng][e], Math.round(sx - CFG.HW), Math.round(sy));
+          }
+          // espuma de orilla: en casillas de agua que lindan con tierra
+          if (isWater && fancyWater && ng !== T.WATER && ng !== T.DEEP && (FRINGE_PRIORITY[ng] || 0) >= 0 && ng !== gr) {
+            drawFoamEdge(g, sx, sy, e, foamA);
           }
         }
       }
@@ -578,9 +639,17 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
     g.drawImage(img, 0, 0, img.width, img.height - cut,
       Math.round(sx - img.width / 2), Math.round(sy + 2 - (img.height - cut) + bobw),
       img.width, img.height - cut);
-    g.fillStyle = 'rgba(214,234,255,0.45)';
-    g.fillRect(Math.round(sx - 12), Math.round(sy - 1), 24, 3);
-    g.fillRect(Math.round(sx - 8 + Math.sin(G.elapsed * 4) * 4), Math.round(sy + 3), 16, 2);
+    // ondas concéntricas que se expanden alrededor del vadeador
+    g.strokeStyle = 'rgba(226,244,255,1)';
+    g.lineWidth = 1.5;
+    for (let k = 0; k < 2; k++) {
+      const t = ((G.elapsed * 0.9 + k * 0.5) % 1);
+      g.globalAlpha = (1 - t) * 0.6;
+      g.beginPath();
+      g.ellipse(sx, sy + 2, 6 + t * 15, 3 + t * 7.5, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
     return;
   }
   shadow(g, sx, sy, 20);
