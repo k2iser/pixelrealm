@@ -310,6 +310,9 @@ function render(g, W, H) {
     g.fillRect(0, 0, W, H);
   }
 
+  // --- clima: lluvia/tormenta/nieve + destello de relámpago ---
+  drawWeather(g, W, H);
+
   // --- textos flotantes y nombres (encima de la iluminación) ---
   g.textAlign = 'center';
   g.font = '10px "Press Start 2P", monospace';
@@ -721,6 +724,57 @@ function drawEmbers(g, lights) {
     }
   }
   g.globalCompositeOperation = 'source-over';
+}
+
+// Lluvia/nieve a pantalla completa + velo de cielo encapotado + relámpago.
+function drawWeather(g, W, H) {
+  const I = G.weatherI;
+  if (I > 0.01) {
+    if (G.weather === 'snow') {
+      drawSnow(g, W, H, I);
+    } else {
+      g.fillStyle = 'rgba(58,68,92,' + (0.20 * I * (1 - G.darkness * 0.7)).toFixed(3) + ')';
+      g.fillRect(0, 0, W, H);
+      drawRain(g, W, H, I, G.weather === 'storm');
+    }
+  }
+  if (G.flash > 0.01) {
+    g.fillStyle = 'rgba(222,228,255,' + (0.6 * G.flash).toFixed(3) + ')';
+    g.fillRect(0, 0, W, H);
+  }
+}
+
+function drawRain(g, W, H, I, storm) {
+  const n = Math.floor((storm ? 330 : 215) * I);
+  const len = storm ? 17 : 13, slant = storm ? 7 : 4, fall = storm ? 1.35 : 1.05;
+  g.strokeStyle = storm ? 'rgba(182,202,238,0.62)' : 'rgba(192,212,240,0.52)';
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const sp = 0.8 + hash2(i, 5, 4) * 0.5;
+    const p = (((G.elapsed * fall * sp + hash2(i, 3, 4)) % 1) + 1) % 1;
+    const y = p * (H + 30) - 15;
+    let x = (hash2(i, 2, 4) * W + p * slant * 6) % W;
+    if (x < 0) x += W;
+    g.moveTo(x, y);
+    g.lineTo(x - slant, y + len);
+  }
+  g.stroke();
+}
+
+function drawSnow(g, W, H, I) {
+  const n = Math.floor(130 * I);
+  g.fillStyle = 'rgba(248,251,255,' + (0.85 * I).toFixed(3) + ')';
+  for (let i = 0; i < n; i++) {
+    const s = 0.4 + hash2(i, 5, 6) * 0.5;
+    const p = (((G.elapsed * 0.11 * s + hash2(i, 3, 6)) % 1) + 1) % 1;
+    const y = p * (H + 20) - 10;
+    const sway = Math.sin(G.elapsed * (0.5 + s) + i * 1.3) * 13;
+    let x = (hash2(i, 2, 6) * W + sway) % W;
+    if (x < 0) x += W;
+    const sz = hash2(i, 4, 6) < 0.28 ? 2 : 1;
+    g.fillRect(x | 0, y | 0, sz, sz);
+  }
 }
 
 function fillDiamond(g, tx, ty, ox, oy) {

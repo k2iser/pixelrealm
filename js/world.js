@@ -221,6 +221,14 @@ class World {
     return ch.ground[(ty - cy * N) * N + (tx - cx * N)];
   }
 
+  // ¿hace frío aquí? (mismas funciones de ruido que genTile): tundra o alta montaña
+  snowyAt(tx, ty) {
+    const s = this.seed;
+    const e = fbm(tx * 0.016, ty * 0.016, s, 4);
+    const tp = fbm(tx * 0.007 - 905, ty * 0.007 + 422, s + 3333, 3);
+    return tp < 0.40 || e > 0.78;
+  }
+
   object(tx, ty) {
     const N = CFG.CHUNK;
     const cx = Math.floor(tx / N), cy = Math.floor(ty / N);

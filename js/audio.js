@@ -72,6 +72,48 @@ const Sfx = {
   bossDie()   { this.tone(70, 1.4, 'sawtooth', 0.5, -50); setTimeout(() => this.tone(523, 0.15, 'triangle', 0.4), 500); setTimeout(() => this.tone(659, 0.15, 'triangle', 0.4), 680); setTimeout(() => this.tone(784, 0.3, 'triangle', 0.4), 860); },
   chatPing()  { this.tone(880, 0.05, 'sine', 0.15); },
 
+  // trueno: estruendo grave con cola de ruido
+  thunder() {
+    if (!this.ctx || this.muted) return;
+    this.noise(1.0, 0.6, 320);
+    this.tone(70, 1.3, 'sine', 0.5, -42);
+    this.tone(46, 1.6, 'square', 0.24, -14);
+  },
+
+  // --- lluvia/nieve en bucle (ruido marrón filtrado, ganancia por intensidad) ---
+  _rain: null,
+  startRain(snow) {
+    if (!this.ctx) return;
+    if (this._rain) {
+      if (this._rain.snow === !!snow) return;
+      this.stopRain();          // cambió de tipo: rehaz el bucle
+    }
+    const n = Math.floor(this.ctx.sampleRate * 2);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < n; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const f = this.ctx.createBiquadFilter();
+    f.type = snow ? 'lowpass' : 'bandpass';
+    f.frequency.value = snow ? 480 : 1500; f.Q.value = snow ? 0.6 : 0.4;
+    const g = this.ctx.createGain(); g.gain.value = 0;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start();
+    this._rain = { src, g, snow: !!snow };
+  },
+  setRainLevel(v) {
+    if (!this._rain) return;
+    const cap = this._rain.snow ? 0.05 : 0.14;
+    this._rain.g.gain.value = cap * Math.max(0, Math.min(1, v));
+  },
+  stopRain() {
+    if (!this._rain) return;
+    try { this._rain.src.stop(); } catch (e) { /* ya parado */ }
+    this._rain = null;
+  },
+
   // Ambiente sutil: pájaros de día, viento de noche. Se autogestiona el ritmo.
   _ambT: 0,
   ambient(dt, dark) {

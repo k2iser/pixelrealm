@@ -29,6 +29,14 @@ const G = {
   beaconT: 0,
   nearestVillage: null,   // { x, y, d } para la brújula
   quest: null,            // recado activo { role, item, need, reward, rewardItem? }
+  // --- clima (local a cada cliente; cosmético + acelera cultivos) ---
+  weather: 'clear',       // clear | rain | storm | snow
+  weatherT: 0,            // tiempo restante del estado activo
+  weatherI: 0,            // intensidad [0,1] con fundido
+  weatherCD: 30,          // cuenta atrás hasta la próxima tirada de clima
+  windBoost: 0,           // viento extra que mece la vegetación (lo lee el renderer)
+  flash: 0,               // destello de relámpago [0,1]
+  thunderT: -1,           // retardo luz→trueno (-1 = sin trueno pendiente)
 };
 
 const _towerCd = new Map();   // "tx,ty" -> cooldown restante
@@ -163,6 +171,10 @@ function startOnlineWorld(w) {
 }
 
 function finishStart(msg) {
+  // clima en reposo al (re)entrar al mundo
+  G.weather = 'clear'; G.weatherI = 0; G.weatherT = 0; G.weatherCD = randRange(25, 55);
+  G.windBoost = 0; G.flash = 0; G.thunderT = -1;
+  Sfx.stopRain();
   player.dead = false;
   player.breaking = null;
   player.velX = 0;
@@ -699,6 +711,7 @@ function update(dt) {
   updateProjectiles(dt);
   updateBuildings(dt);
   updateCrops(dt);
+  updateWeather(dt);
   NPC.update(dt);
   if (typeof Net !== 'undefined') Net.update(dt);
 
@@ -799,14 +812,70 @@ function update(dt) {
 // Crecimiento de cultivos (las casillas con cultivo están en chunks modificados,
 // así que nunca se purgan y conservan su id de fase)
 function updateCrops(dt) {
+  // la lluvia riega: los cultivos crecen ~60% más rápido (la nieve no)
+  const rain = (G.weather === 'rain' || G.weather === 'storm') ? 0.6 * G.weatherI : 0;
+  const grow = dt * (1 + rain);
   for (const [key, c] of world.crops) {
     const i = key.indexOf(',');
     const tx = +key.slice(0, i), ty = +key.slice(i + 1);
     const ob = world.object(tx, ty);
     if (ob < O.CROP0 || ob > O.CROP3) { world.crops.delete(key); continue; }  // cosechado o destruido
-    c.t += dt;
+    c.t += grow;
     const want = O.CROP0 + Math.min(3, Math.floor(c.t / CROP_SECS));
     if (ob !== want) world.setObject(tx, ty, want);
+  }
+}
+
+// Clima: programa estados (despejado/lluvia/tormenta/nieve), gestiona intensidad
+// con fundido, relámpagos+truenos en tormenta y el audio de lluvia en bucle.
+function updateWeather(dt) {
+  // destello de relámpago se apaga rápido; el trueno llega tras el retardo de la luz
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.2);
+  if (G.thunderT >= 0) {
+    G.thunderT -= dt;
+    if (G.thunderT < 0) Sfx.thunder();
+  }
+
+  if (G.weather === 'clear') {
+    G.weatherI = Math.max(0, G.weatherI - dt * 0.5);
+    if (G.weatherI <= 0) Sfx.stopRain();
+    G.windBoost = G.weatherI * 0.3;
+    G.weatherCD -= dt;
+    if (G.weatherCD <= 0 && G.running && !player.dead) {
+      // empieza un episodio de clima
+      const snowy = world.snowyAt(Math.floor(player.x), Math.floor(player.y));
+      if (snowy) G.weather = 'snow';
+      else G.weather = Math.random() < 0.35 ? 'storm' : 'rain';
+      G.weatherT = randRange(38, 78);
+      UI.toast(G.weather === 'snow' ? '❄ Comienza a nevar'
+             : G.weather === 'storm' ? '⛈ Se desata una tormenta'
+             : '🌧 Empieza a llover');
+    }
+    return;
+  }
+
+  // clima activo
+  G.weatherT -= dt;
+  const peak = G.weather === 'storm' ? 1 : G.weather === 'snow' ? 0.85 : 0.9;
+  // fundido de salida en los últimos 6 s
+  const target = G.weatherT < 6 ? 0 : peak;
+  G.weatherI += (target - G.weatherI) * (1 - Math.pow(0.05, dt));
+  G.windBoost = (G.weather === 'storm' ? 1.0 : G.weather === 'snow' ? 0.25 : 0.5) * G.weatherI;
+
+  // audio en bucle (idempotente: arranca cuando exista el AudioContext)
+  Sfx.startRain(G.weather === 'snow');
+  Sfx.setRainLevel(G.weatherI);
+
+  // relámpagos durante la tormenta
+  if (G.weather === 'storm' && G.weatherI > 0.5 && G.flash <= 0 && Math.random() < dt * 0.35) {
+    G.flash = 1;
+    G.shake = Math.max(G.shake, 0.25);
+    G.thunderT = randRange(0.3, 1.8);   // la luz viaja más rápido que el sonido
+  }
+
+  if (G.weatherT <= 0) {
+    G.weather = 'clear';
+    G.weatherCD = randRange(55, 130);
   }
 }
 
