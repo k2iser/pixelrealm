@@ -63,16 +63,64 @@ function bloomLayer(W, H) {
   }
   return _bloomG;
 }
+let _blurCv = null, _blurG = null;
+function blurLayer(W, H) {
+  if (!_blurCv || _blurCv.width !== W || _blurCv.height !== H) {
+    _blurCv = document.createElement('canvas');
+    _blurCv.width = W; _blurCv.height = H;
+    _blurG = _blurCv.getContext('2d');
+  }
+  return _blurG;
+}
+let _tiltCv = null, _tiltG = null;
+function tiltLayer(W, H) {
+  if (!_tiltCv || _tiltCv.width !== W || _tiltCv.height !== H) {
+    _tiltCv = document.createElement('canvas');
+    _tiltCv.width = W; _tiltCv.height = H;
+    _tiltG = _tiltCv.getContext('2d');
+  }
+  return _tiltG;
+}
+// Tilt-shift de diorama: desenfoca arriba y abajo manteniendo nítida una banda
+// horizontal centrada en el jugador. El mundo parece una maqueta de juguete.
+function tiltShift(g, scene, dW, dH, focusY) {
+  const bw = Math.max(2, dW >> 1), bh = Math.max(2, dH >> 1);
+  const bg = blurLayer(bw, bh);
+  bg.setTransform(1, 0, 0, 1, 0, 0);
+  bg.globalAlpha = 1; bg.globalCompositeOperation = 'source-over'; bg.imageSmoothingEnabled = true;
+  bg.clearRect(0, 0, bw, bh);
+  bg.drawImage(scene, 0, 0, bw, bh);                 // 1/2 res = desenfoque
+  const mg = tiltLayer(dW, dH);
+  mg.setTransform(1, 0, 0, 1, 0, 0);
+  mg.globalAlpha = 1; mg.globalCompositeOperation = 'source-over'; mg.imageSmoothingEnabled = true;
+  mg.clearRect(0, 0, dW, dH);
+  mg.drawImage(_blurCv, 0, 0, dW, dH);               // reescala el desenfoque a pantalla
+  // máscara vertical: el desenfoque solo se conserva lejos de la banda de foco
+  mg.globalCompositeOperation = 'destination-in';
+  const f = clamp(focusY / dH, 0.16, 0.84), band = 0.14;
+  const grad = mg.createLinearGradient(0, 0, 0, dH);
+  grad.addColorStop(0, 'rgba(0,0,0,0.82)');
+  grad.addColorStop(Math.max(0.001, f - band), 'rgba(0,0,0,0.82)');
+  grad.addColorStop(f, 'rgba(0,0,0,0)');
+  grad.addColorStop(Math.min(0.999, f + band), 'rgba(0,0,0,0.82)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.82)');
+  mg.fillStyle = grad;
+  mg.fillRect(0, 0, dW, dH);
+  mg.globalCompositeOperation = 'source-over';
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  g.drawImage(_tiltCv, 0, 0);
+}
 // Vuelca la escena a pantalla y suma un bloom de altas luces (sin shaders):
 // downscale a 1/4 (= desenfoque de caja) + multiply consigo mismo (aísla brillos)
 // + suma aditiva reescalada. Da el "sangrado" de luz de fuegos, agua y atardecer.
-function composite(g, scene, dW, dH, strength) {
+function composite(g, scene, dW, dH, strength, focusY) {
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
   g.imageSmoothingEnabled = true;
   g.drawImage(scene, 0, 0);
-  if (strength <= 0) return;
+  if (strength <= 0) { if (focusY != null) tiltShift(g, scene, dW, dH, focusY); return; }
   const bw = Math.max(2, dW >> 2), bh = Math.max(2, dH >> 2);
   const bg = bloomLayer(bw, bh);
   bg.setTransform(1, 0, 0, 1, 0, 0);
@@ -89,6 +137,8 @@ function composite(g, scene, dW, dH, strength) {
   g.drawImage(_bloomCv, 0, 0, dW, dH);           // reescala y suma
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
+  // tilt-shift al final: las bandas desenfocadas también atenúan el bloom
+  if (focusY != null) tiltShift(g, scene, dW, dH, focusY);
 }
 
 // Sprites de degradado radial precocinados: evitan crear un createRadialGradient
@@ -174,6 +224,33 @@ function castShadow(g, img, bx, by, ss) {
   g.drawImage(silhouette(img), Math.round(-img.width / 2), -img.height);
   g.globalAlpha = 1;
   g.restore();
+}
+// Silueta teñida de un sprite (para el rim light). Cacheada por sprite y color.
+const _rimCache = new WeakMap();
+function silTinted(img, color) {
+  let m = _rimCache.get(img);
+  if (!m) { m = {}; _rimCache.set(img, m); }
+  if (!m[color]) {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const cg = c.getContext('2d');
+    cg.drawImage(img, 0, 0);
+    cg.globalCompositeOperation = 'source-in';
+    cg.fillStyle = color;
+    cg.fillRect(0, 0, img.width, img.height);
+    m[color] = c;
+  }
+  return m[color];
+}
+// Rim light frío de luna: dibuja la silueta teñida desplazada arriba-izq y la
+// tapa el sprite real (dibujado después), dejando un filo luminoso en el borde.
+function rimLight(g, img, dx, dy, intensity) {
+  if (intensity <= 0.02) return;
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = intensity;
+  g.drawImage(silTinted(img, '#bcd0ff'), dx - 1, dy - 2);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
 }
 
 // Sprite de un objeto del mundo (resuelve variantes y frames de animación)
@@ -515,7 +592,9 @@ function render(g, W, H) {
   // --- componer la escena a pantalla con bloom; los overlays van después, nítidos ---
   if (useBuffer) {
     // menos bloom de día (escena nítida), más de noche (fuegos/agua/altar florecen)
-    composite(screen, _sceneCv, dW, dH, 0.4 + 0.24 * G.darkness);
+    // foco del tilt-shift centrado en el jugador (en px de dispositivo)
+    const fY = player.dead ? dH * 0.5 : (w2sy(player.x, player.y) + cam.oy) * G.renderScale;
+    composite(screen, _sceneCv, dW, dH, 0.4 + 0.24 * G.darkness, fY);
     g = screen;
     g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
   }
@@ -655,7 +734,9 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
   shadow(g, sx, sy, 20);
   const hss = CFG.GFX >= 1 ? sunShadow() : null;
   if (hss && hss.alpha > 0.02) castShadow(g, img, Math.round(sx), Math.round(sy + 2), hss);
-  g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 2));
+  const hdx = Math.round(sx - img.width / 2), hdy = Math.round(sy - img.height + 2);
+  if (CFG.GFX >= 2) rimLight(g, img, hdx, hdy, 0.32 * clamp((G.darkness - 0.4) / 0.6, 0, 1));
+  g.drawImage(img, hdx, hdy);
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
     const prog = 1 - swingT / 0.18;
@@ -694,6 +775,10 @@ function drawDrawable(g, d, ox, oy) {
     const shakeX = breakingThis ? Math.round(Math.sin(G.elapsed * 42) * 2) : 0;
     const dx = Math.round(cx - img.width / 2) + shakeX;
     const dy = Math.round(cy + lift - img.height);
+    // rim light frío de luna en objetos altos sólidos (separa del fondo de noche)
+    if (CFG.GFX >= 2 && def.solid && d.id !== O.WALLW && d.id !== O.WALLS && img.height >= 20) {
+      rimLight(g, img, dx, dy, 0.3 * clamp((G.darkness - 0.4) / 0.6, 0, 1));
+    }
     // viento: la copa se inclina cizallando el sprite (base fija, cima mecida)
     const swayAmp = breakingThis ? 0 : (SWAY_AMP[d.id] || 0);
     if (swayAmp) {
