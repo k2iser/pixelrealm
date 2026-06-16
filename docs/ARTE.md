@@ -52,3 +52,15 @@ Mejoras puramente de código (cero arte nuevo): el mismo truco que da a Stardew/
 - **Clima** (`updateWeather` en main.js, `drawWeather`/`drawRain`/`drawSnow` en renderer.js): programador local de lluvia/tormenta/nieve con intensidad por fundido; nieve si `world.snowyAt()` (ruido de temperatura/elevación). Relámpago = destello + sacudida + trueno con retardo luz→sonido. Audio de lluvia en bucle (ruido marrón filtrado, WebAudio). La lluvia riega los cultivos.
 
 Coste: todo es overlay 2D y aritmética por píxel/partícula; sin allocations por frame salvo los gradientes radiales de luces/viñeta (pocas decenas).
+
+## Overhaul "Diorama iluminado" — render HD sin dejar Canvas 2D (junio 2026)
+
+Decisión tras un panel de diseño multiagente: el 80% del salto viene de (1) matar el upscale pixelado y (2) una cadena de post sobre un buffer de escena. Se descartó WebGL, normal-maps horneados, redibujo total del arte, aberración cromática/god-rays y blur a pantalla completa por frame. Implementado por etapas (cada una detrás de `CFG.GFX` 0/1/2):
+
+- **Render nativo** (`main.js` resize/setZoom, `css/style.css`, `renderer.js`): el backing-store va a `innerW·dpr` (tope `CFG.MAX_DPR`) con `imageSmoothingEnabled=true`; el zoom es escala de mundo vía `g.setTransform(G.renderScale)` y se dibuja en px lógicos (`G.viewW/viewH=innerW/zoom`). `w2sx/w2sy/CFG.HW/HH` intactos → el orden de profundidad es inmune. Cursor y culling pasan a px lógicos.
+- **Oclusión de contacto + sombras** (`renderer.js`): `shadow()` es una elipse radial horneada; sombra proyectada = silueta negra cacheada por sprite (WeakMap), cizallada por `sunShadow()` según `G.time` (larga con sol bajo, nula de noche).
+- **Buffer de escena + bloom** (`renderer.js`): el mundo se dibuja a `sceneCv` y `composite()` lo vuelca con bloom de altas luces (downscale 1/4 + multiply consigo mismo para aislar brillos + suma `lighter`, intensidad por `G.darkness`). Los overlays de UI se pintan **después**, nítidos.
+- **Agua reflectante** (`renderer.js`): tinte de cielo por hora + banda especular por rombo, espuma de orilla reutilizando el sistema de fringe, y ondas concéntricas al vadear.
+- **Tilt-shift + rim light** (`renderer.js`): desenfoque (1/2 res) arriba/abajo con banda nítida en el jugador (máscara vertical `destination-in`); rim light de luna con silueta teñida cacheada para separar figuras del fondo de noche.
+
+Buffers offscreen: `sceneLayer` (nativo), `bloomLayer` (1/4), `blurLayer` (1/2), `tiltLayer` (nativo) — recreados solo al cambiar de tamaño. `CFG.GFX<2` cae al render directo (sin buffer ni bloom/tilt); `CFG.GFX=0` también sin sombras/agua avanzada.

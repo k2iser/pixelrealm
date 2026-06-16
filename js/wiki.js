@@ -176,7 +176,7 @@ function build() {
 
   /* ---- cielo y clima ---- */
   section(root, 'clima', '🌦 Cielo y clima');
-  root.appendChild($('<p class="meta">· El <b>cielo cambia de color</b> con la hora: amanecer dorado, mediodía neutro, atardecer ámbar, anochecer violáceo y noche azul con estrellas titilantes.<br>· La vegetación se <b>mece con el viento</b>; de día flotan motas a contraluz y de noche vagan luciérnagas. De los fuegos y antorchas suben ascuas.<br>· A veces <b>llueve</b>, se desata una <b>tormenta</b> con relámpagos y truenos, o <b>nieva</b> en los biomas fríos (tundra y alta montaña).<br>· La lluvia encapota el cielo, arrecia el viento y <b>riega tus cultivos</b>: crecen más rápido mientras llueve.</p>'));
+  root.appendChild($('<p class="meta">· El mundo se dibuja como una <b>maqueta iluminada</b>: luz nítida en HD, oclusión de contacto, sombras que siguen al sol, fuegos y agua que irradian con <i>bloom</i>, y un <i>tilt-shift</i> que enfoca a tu alrededor.<br>· El <b>cielo cambia de color</b> con la hora: amanecer dorado, mediodía neutro, atardecer ámbar, anochecer violáceo y noche azul con estrellas titilantes.<br>· La vegetación se <b>mece con el viento</b>; de día flotan motas a contraluz y de noche vagan luciérnagas. De los fuegos y antorchas suben ascuas.<br>· A veces <b>llueve</b>, se desata una <b>tormenta</b> con relámpagos y truenos, o <b>nieva</b> en los biomas fríos (tundra y alta montaña).<br>· La lluvia encapota el cielo, arrecia el viento y <b>riega tus cultivos</b>: crecen más rápido mientras llueve.</p>'));
 
   /* ---- multijugador ---- */
   section(root, 'multi', '🤝 Jugar juntos');

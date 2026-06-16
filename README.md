@@ -22,7 +22,8 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 ## ✨ Características
 
 - **Mundo infinito por chunks** con biomas de ruido fractal determinista: océanos, praderas, bosques (con árboles frutales), desiertos, tundras y montañas. La misma semilla genera siempre el mismo mundo.
-- **Vista isométrica 2:1** con orden de profundidad, cámara suave, iluminación nocturna real (las luces abren agujeros en la oscuridad) y render a baja resolución reescalado.
+- **Render HD "Diorama iluminado"**: el mundo se dibuja a resolución nativa y suavizada (adiós al escalado pixelado) y pasa por una cadena de post sobre Canvas 2D — **bloom** de altas luces (fuegos, horno, altar, agua y atardecer "sangran" luz), **oclusión de contacto** y **sombras direccionales** que siguen al sol, **agua reflectante** (refleja el cielo, especular animado y espuma de orilla), **rim light** de luna y **tilt-shift** que convierte la escena en una maqueta. Todo procedural, sin dependencias, con tres niveles de calidad (`CFG.GFX`).
+- **Vista isométrica 2:1** con orden de profundidad, cámara suave e iluminación nocturna real (las luces abren agujeros en la oscuridad).
 - **Cámara cercana estilo Stardew** con tres niveles de zoom (`+`/`−`) y suelos a doble resolución de píxel.
 - **Editor de personaje**: piel, peinado, color de pelo, camiseta y pantalón — tu héroe te representa también online.
 - **Héroe en alta definición**: cuádruple densidad de píxel, ciclo de andar de 4 pasos con aceleración real, pose de ataque con la herramienta en la mano, medio cuerpo sumergido al vadear y polvillo en los pies.
