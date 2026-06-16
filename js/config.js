@@ -24,7 +24,9 @@ const CFG = {
   ARRIVE_DIST: 0.22,       // distancia para considerar alcanzado un punto del camino
   NPC_TALK_R: 2.2,         // radio para hablar con un comerciante
   MAX_DPR: 2,              // tope de densidad de píxel del render HD (limita el fill-rate)
+  MAX_PIXELS: 3500000,     // presupuesto de píxeles del backing-store (acota fill-rate en 4K/HiDPI)
   GFX: 2,                  // calidad gráfica: 0 básico · 1 medio · 2 alto (bloom, tilt-shift, agua avanzada)
+  TILT: true,              // tilt-shift de maqueta (requiere GFX>=2; false = bloom sin maqueta)
 };
 
 // --- Suelos ---

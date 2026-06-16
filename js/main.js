@@ -51,27 +51,31 @@ function resize() {
   // y el zoom se aplica como escala de mundo vía ctx.setTransform en render().
   // Las dimensiones LÓGICAS (viewW/viewH = innerW/zoom) son idénticas al pipeline
   // anterior, así que el rango de casillas visible, la cámara y el culling no cambian.
-  const dpr = Math.min(window.devicePixelRatio || 1, CFG.MAX_DPR);
-  G.renderScale = G.zoom * dpr;
+  const oldVW = G.viewW || 0, oldVH = G.viewH || 0;
   const iw = window.innerWidth || document.documentElement.clientWidth || 1280;
   const ih = window.innerHeight || document.documentElement.clientHeight || 720;
+  // GFX modula la densidad de píxel: 0 = barato (dpr 1, sin suavizado de mundo),
+  // 1 = medio (≤1.5), 2 = nativo. Además un presupuesto absoluto acota el
+  // fill-rate en pantallas grandes/HiDPI (bajando el dpr sin tocar la vista).
+  const cap = CFG.GFX >= 2 ? CFG.MAX_DPR : (CFG.GFX === 1 ? Math.min(CFG.MAX_DPR, 1.5) : 1);
+  let dpr = Math.min(window.devicePixelRatio || 1, cap);
+  if (iw * ih * dpr * dpr > CFG.MAX_PIXELS) dpr = Math.max(1, Math.sqrt(CFG.MAX_PIXELS / (iw * ih)));
+  G.renderScale = G.zoom * dpr;
   canvas.width = Math.max(1, Math.round(iw * dpr));
   canvas.height = Math.max(1, Math.round(ih * dpr));
   G.viewW = canvas.width / G.renderScale;
   G.viewH = canvas.height / G.renderScale;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+  // reescala el cursor al nuevo espacio lógico (cubre resize de ventana y zoom)
+  if (oldVW && oldVH) { Input.mx *= G.viewW / oldVW; Input.my *= G.viewH / oldVH; }
 }
 window.addEventListener('resize', resize);
 
 function setZoom(z) {
   G.zoom = clamp(z | 0, 1, 3);
   try { localStorage.setItem('pixelrealm.zoom', G.zoom); } catch (e) { /* da igual */ }
-  const oldVW = G.viewW || 1, oldVH = G.viewH || 1;
-  resize();
-  // reescala el cursor al nuevo espacio lógico (hasta el próximo mousemove)
-  Input.mx *= G.viewW / oldVW;
-  Input.my *= G.viewH / oldVH;
+  resize();   // resize() ya reescala Input.mx/my al nuevo espacio lógico
   UI.toast('Zoom: ' + ['lejos', 'cerca', 'muy cerca'][G.zoom - 1]);
 }
 

@@ -72,44 +72,37 @@ function blurLayer(W, H) {
   }
   return _blurG;
 }
-let _tiltCv = null, _tiltG = null;
-function tiltLayer(W, H) {
-  if (!_tiltCv || _tiltCv.width !== W || _tiltCv.height !== H) {
-    _tiltCv = document.createElement('canvas');
-    _tiltCv.width = W; _tiltCv.height = H;
-    _tiltG = _tiltCv.getContext('2d');
-  }
-  return _tiltG;
-}
 // Tilt-shift de diorama: desenfoca arriba y abajo manteniendo nítida una banda
 // horizontal centrada en el jugador. El mundo parece una maqueta de juguete.
-function tiltShift(g, scene, dW, dH, focusY) {
+// Muestrea la PANTALLA ya compuesta (escena + bloom) y trabaja a 1/2 resolución
+// (la máscara se aplica sobre el propio buffer de desenfoque, sin buffer extra).
+let _tiltGrad = null, _tiltGH = 0, _tiltGF = -1;
+function tiltShift(g, dW, dH, focusY) {
   const bw = Math.max(2, dW >> 1), bh = Math.max(2, dH >> 1);
   const bg = blurLayer(bw, bh);
   bg.setTransform(1, 0, 0, 1, 0, 0);
   bg.globalAlpha = 1; bg.globalCompositeOperation = 'source-over'; bg.imageSmoothingEnabled = true;
   bg.clearRect(0, 0, bw, bh);
-  bg.drawImage(scene, 0, 0, bw, bh);                 // 1/2 res = desenfoque
-  const mg = tiltLayer(dW, dH);
-  mg.setTransform(1, 0, 0, 1, 0, 0);
-  mg.globalAlpha = 1; mg.globalCompositeOperation = 'source-over'; mg.imageSmoothingEnabled = true;
-  mg.clearRect(0, 0, dW, dH);
-  mg.drawImage(_blurCv, 0, 0, dW, dH);               // reescala el desenfoque a pantalla
+  bg.drawImage(g.canvas, 0, 0, bw, bh);             // muestrea la pantalla (con bloom) → desenfoque
   // máscara vertical: el desenfoque solo se conserva lejos de la banda de foco
-  mg.globalCompositeOperation = 'destination-in';
-  const f = clamp(focusY / dH, 0.16, 0.84), band = 0.14;
-  const grad = mg.createLinearGradient(0, 0, 0, dH);
-  grad.addColorStop(0, 'rgba(0,0,0,0.82)');
-  grad.addColorStop(Math.max(0.001, f - band), 'rgba(0,0,0,0.82)');
-  grad.addColorStop(f, 'rgba(0,0,0,0)');
-  grad.addColorStop(Math.min(0.999, f + band), 'rgba(0,0,0,0.82)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.82)');
-  mg.fillStyle = grad;
-  mg.fillRect(0, 0, dW, dH);
-  mg.globalCompositeOperation = 'source-over';
+  bg.globalCompositeOperation = 'destination-in';
+  const f = clamp(focusY / dH, 0.16, 0.84), fq = Math.round(f * 100) / 100;
+  if (!_tiltGrad || _tiltGH !== bh || _tiltGF !== fq) {
+    const band = 0.14;
+    _tiltGrad = bg.createLinearGradient(0, 0, 0, bh);
+    _tiltGrad.addColorStop(0, 'rgba(0,0,0,0.82)');
+    _tiltGrad.addColorStop(Math.max(0.001, fq - band), 'rgba(0,0,0,0.82)');
+    _tiltGrad.addColorStop(fq, 'rgba(0,0,0,0)');
+    _tiltGrad.addColorStop(Math.min(0.999, fq + band), 'rgba(0,0,0,0.82)');
+    _tiltGrad.addColorStop(1, 'rgba(0,0,0,0.82)');
+    _tiltGH = bh; _tiltGF = fq;
+  }
+  bg.fillStyle = _tiltGrad;
+  bg.fillRect(0, 0, bw, bh);
+  bg.globalCompositeOperation = 'source-over';
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  g.drawImage(_tiltCv, 0, 0);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = true;
+  g.drawImage(_blurCv, 0, 0, dW, dH);               // vuelca el desenfoque enmascarado, reescalado
 }
 // Vuelca la escena a pantalla y suma un bloom de altas luces (sin shaders):
 // downscale a 1/4 (= desenfoque de caja) + multiply consigo mismo (aísla brillos)
@@ -120,7 +113,7 @@ function composite(g, scene, dW, dH, strength, focusY) {
   g.globalCompositeOperation = 'source-over';
   g.imageSmoothingEnabled = true;
   g.drawImage(scene, 0, 0);
-  if (strength <= 0) { if (focusY != null) tiltShift(g, scene, dW, dH, focusY); return; }
+  if (strength <= 0) { if (focusY != null) tiltShift(g, dW, dH, focusY); return; }
   const bw = Math.max(2, dW >> 2), bh = Math.max(2, dH >> 2);
   const bg = bloomLayer(bw, bh);
   bg.setTransform(1, 0, 0, 1, 0, 0);
@@ -137,8 +130,8 @@ function composite(g, scene, dW, dH, strength, focusY) {
   g.drawImage(_bloomCv, 0, 0, dW, dH);           // reescala y suma
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
-  // tilt-shift al final: las bandas desenfocadas también atenúan el bloom
-  if (focusY != null) tiltShift(g, scene, dW, dH, focusY);
+  // tilt-shift al final: muestrea la pantalla ya con bloom (las bandas lo atenúan)
+  if (focusY != null) tiltShift(g, dW, dH, focusY);
 }
 
 // Sprites de degradado radial precocinados: evitan crear un createRadialGradient
@@ -282,14 +275,15 @@ function windAt(tx, ty) {
 }
 
 // Reflejo del cielo + destello especular sobre una casilla de agua (rombo).
-function drawWaterTile(g, sx, sy, tx, ty, wp) {
+function drawWaterTile(g, sx, sy, tx, ty, wp, detail) {
   const HW = CFG.HW, HH = CFG.HH, TH = CFG.TH;
-  // 1) tinte de reflejo del cielo (más cálido al atardecer, oscuro de noche)
+  // 1) tinte de reflejo del cielo (más cálido al atardecer, oscuro de noche) — barato
   g.fillStyle = wp.tint;
   g.beginPath();
   g.moveTo(sx, sy); g.lineTo(sx + HW, sy + HH); g.lineTo(sx, sy + TH); g.lineTo(sx - HW, sy + HH);
   g.closePath();
   g.fill();
+  if (!detail) return;
   // 2) banda especular que se desplaza despacio (parpadeo desfasado por casilla)
   const ph = G.elapsed * 0.7 + tx * 0.5 + ty * 0.8;
   const a = wp.specA * (0.45 + 0.55 * Math.sin(ph));
@@ -322,6 +316,7 @@ function drawFoamEdge(g, sx, sy, e, alpha) {
   g.strokeStyle = 'rgba(255,255,255,' + alpha.toFixed(3) + ')';
   g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.lineCap = 'butt';   // restaura el valor por defecto (no contaminar trazos posteriores)
   g.globalCompositeOperation = 'source-over';
 }
 
@@ -337,6 +332,8 @@ function render(g, W, H) {
   // transformada amplía al backing-store nativo con suavizado. setTransform
   // reemplaza cualquier transformada previa, así que es seguro al inicio del frame.
   g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
+  // GFX 0 = sin suavizado en el mundo (pixel nítido y barato); 1/2 = suavizado HD
+  g.imageSmoothingEnabled = CFG.GFX >= 1;
   g.fillStyle = '#0b0e1a';
   g.fillRect(0, 0, W, H);
   let ox = cam.ox, oy = cam.oy;
@@ -357,6 +354,9 @@ function render(g, W, H) {
   const waterFrame = Math.floor(G.elapsed * 1.6);
   // parámetros de agua por frame (reflejo del cielo según la hora) — Etapa 3
   const fancyWater = CFG.GFX >= 1;
+  // el detalle caro (especular + espuma por rombo) solo de cerca o en calidad alta;
+  // a zoom lejano hay cientos de casillas de agua y no se aprecia
+  const waterDetail = fancyWater && (CFG.GFX >= 2 || G.zoom >= 2);
   const _dayl = clamp(1 - G.darkness, 0, 1);
   const _wm = G.warm || 0;
   const wp = {
@@ -364,7 +364,6 @@ function render(g, W, H) {
     spec: 'rgb(' + Math.round(200 + _dayl * 55) + ',' + Math.round(225 + _dayl * 30) + ',255)',
     specA: 0.14 + 0.12 * _dayl,
   };
-  const foamA = 0.5 + 0.18 * Math.sin(G.elapsed * 2);
 
   // --- pasada de suelo + recogida de objetos ---
   for (let ty = tymin; ty <= tymax; ty++) {
@@ -384,7 +383,7 @@ function render(g, W, H) {
       g.drawImage(img, Math.round(sx - CFG.HW), Math.round(sy));
 
       const isWater = gr === T.WATER || gr === T.DEEP;
-      if (isWater && fancyWater) drawWaterTile(g, sx, sy, tx, ty, wp);
+      if (isWater && fancyWater) drawWaterTile(g, sx, sy, tx, ty, wp, waterDetail);
 
       // transiciones suaves entre biomas: el material dominante derrama
       // su flequillo sobre el borde del rombo vecino
@@ -398,9 +397,9 @@ function render(g, W, H) {
           if (ng !== gr && (FRINGE_PRIORITY[ng] || 0) > pr && Assets.fringe[ng]) {
             g.drawImage(Assets.fringe[ng][e], Math.round(sx - CFG.HW), Math.round(sy));
           }
-          // espuma de orilla: en casillas de agua que lindan con tierra
-          if (isWater && fancyWater && ng !== T.WATER && ng !== T.DEEP && (FRINGE_PRIORITY[ng] || 0) >= 0 && ng !== gr) {
-            drawFoamEdge(g, sx, sy, e, foamA);
+          // espuma de orilla: en casillas de agua que lindan con tierra (fase por casilla)
+          if (isWater && waterDetail && ng !== T.WATER && ng !== T.DEEP) {
+            drawFoamEdge(g, sx, sy, e, 0.5 + 0.22 * Math.sin(G.elapsed * 2 + tx * 0.6 + ty * 0.9));
           }
         }
       }
@@ -492,35 +491,8 @@ function render(g, W, H) {
   // motas de polen flotando a plena luz del día (ambiente)
   drawDayMotes(g, W, H, ox, oy);
 
-  // marcador de destino del clic (anillo que se expande, estilo MOBA)
-  if (G.running && !player.dead && player.path && player.path.length && !player.drag) {
-    const wp = player.path[player.path.length - 1];
-    const mx = w2sx(wp.x, wp.y) + ox, my = w2sy(wp.x, wp.y) + oy + CFG.HH;
-    const t = (G.elapsed * 2.4) % 1;
-    g.strokeStyle = 'rgba(120,200,255,' + (0.75 * (1 - t)).toFixed(2) + ')';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.ellipse(mx, my, 7 + t * 13, 3.5 + t * 6.5, 0, 0, Math.PI * 2);
-    g.stroke();
-  }
-
+  // vista previa de colocación (dentro del alcance, junto al jugador → en foco)
   ghostPreview(g, hov, inReach, ox, oy);
-
-  // --- barra de progreso al romper ---
-  if (player.breaking) {
-    const b = player.breaking;
-    const def = OBJ[b.id];
-    if (def) {
-      const size = def.size || 1;
-      const cx = w2sx(b.tx + size / 2, b.ty + size / 2) + ox;
-      const cy = w2sy(b.tx + size / 2, b.ty + size / 2) + oy;
-      const prog = clamp(b.dmg / def.hp, 0, 1);
-      g.fillStyle = 'rgba(0,0,0,0.65)';
-      g.fillRect(Math.round(cx - 22), Math.round(cy - 52), 44, 10);
-      g.fillStyle = '#ffd34d';
-      g.fillRect(Math.round(cx - 20), Math.round(cy - 50), Math.round(40 * prog), 6);
-    }
-  }
 
   // --- luz del jugador ---
   if (G.darkness > 0.02 && !player.dead) {
@@ -556,21 +528,6 @@ function render(g, W, H) {
       lg.drawImage(vsp, l.x - r, l.y - r, r * 2, r * 2);
     }
     g.drawImage(_lightCv, 0, 0);
-    // estrellas titilando en la noche cerrada (fijas a pantalla, como un cielo)
-    if (G.darkness > 0.55) {
-      const sa = (G.darkness - 0.55) / 0.45;
-      g.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 70; i++) {
-        const sx = hash2(i, 1, 7) * W, sy = hash2(i, 2, 7) * H * 0.92;
-        const tw = 0.45 + 0.55 * Math.abs(Math.sin(G.elapsed * (0.6 + hash2(i, 3, 7)) + i));
-        g.fillStyle = 'rgba(220,228,255,' + (sa * tw * 0.7).toFixed(3) + ')';
-        const s = hash2(i, 4, 7) < 0.2 ? 2 : 1;
-        g.fillRect(sx | 0, sy | 0, s, s);
-      }
-      g.globalCompositeOperation = 'source-over';
-      // luciérnagas que vagan y parpadean en la noche cerrada
-      drawFireflies(g, W, H, sa);
-    }
     // ascuas que ascienden desde las fuentes de luz cálida
     drawEmbers(g, lights);
     // halo cálido (naranja) o místico (violeta del altar)
@@ -591,12 +548,62 @@ function render(g, W, H) {
 
   // --- componer la escena a pantalla con bloom; los overlays van después, nítidos ---
   if (useBuffer) {
-    // menos bloom de día (escena nítida), más de noche (fuegos/agua/altar florecen)
-    // foco del tilt-shift centrado en el jugador (en px de dispositivo)
-    const fY = player.dead ? dH * 0.5 : (w2sy(player.x, player.y) + cam.oy) * G.renderScale;
-    composite(screen, _sceneCv, dW, dH, 0.4 + 0.24 * G.darkness, fY);
+    if (player.dead) {
+      // la pantalla de muerte (DOM opaco) tapa la escena: evita el coste de post
+      screen.setTransform(1, 0, 0, 1, 0, 0);
+      screen.globalAlpha = 1; screen.globalCompositeOperation = 'source-over'; screen.imageSmoothingEnabled = true;
+      screen.drawImage(_sceneCv, 0, 0);
+    } else {
+      // menos bloom de día (escena nítida), más de noche (fuegos/agua/altar florecen);
+      // tilt-shift enfocado en el jugador (px de dispositivo, con el shake incluido)
+      const fY = (!CFG.TILT) ? null : (w2sy(player.x, player.y) + oy) * G.renderScale;
+      composite(screen, _sceneCv, dW, dH, 0.18 + 0.40 * G.darkness, fY);
+    }
     g = screen;
     g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
+    g.imageSmoothingEnabled = true;
+  }
+
+  // --- overlays de mundo nítidos (no pasan por bloom/tilt-shift) ---
+  // estrellas y luciérnagas (cielo fijo a pantalla: no deben desenfocarse)
+  if (G.darkness > 0.55) {
+    const sa = (G.darkness - 0.55) / 0.45;
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 70; i++) {
+      const sx = hash2(i, 1, 7) * W, sy = hash2(i, 2, 7) * H * 0.92;
+      const tw = 0.45 + 0.55 * Math.abs(Math.sin(G.elapsed * (0.6 + hash2(i, 3, 7)) + i));
+      g.fillStyle = 'rgba(220,228,255,' + (sa * tw * 0.7).toFixed(3) + ')';
+      const s = hash2(i, 4, 7) < 0.2 ? 2 : 1;
+      g.fillRect(sx | 0, sy | 0, s, s);
+    }
+    g.globalCompositeOperation = 'source-over';
+    drawFireflies(g, W, H, sa);
+  }
+  // marcador de destino del clic (anillo que se expande, estilo MOBA)
+  if (G.running && !player.dead && player.path && player.path.length && !player.drag) {
+    const wp = player.path[player.path.length - 1];
+    const mx = w2sx(wp.x, wp.y) + ox, my = w2sy(wp.x, wp.y) + oy + CFG.HH;
+    const t = (G.elapsed * 2.4) % 1;
+    g.strokeStyle = 'rgba(120,200,255,' + (0.75 * (1 - t)).toFixed(2) + ')';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(mx, my, 7 + t * 13, 3.5 + t * 6.5, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
+  // barra de progreso al romper (feedback nítido, sin bloom)
+  if (player.breaking) {
+    const b = player.breaking;
+    const def = OBJ[b.id];
+    if (def) {
+      const size = def.size || 1;
+      const cx = w2sx(b.tx + size / 2, b.ty + size / 2) + ox;
+      const cy = w2sy(b.tx + size / 2, b.ty + size / 2) + oy;
+      const prog = clamp(b.dmg / def.hp, 0, 1);
+      g.fillStyle = 'rgba(0,0,0,0.65)';
+      g.fillRect(Math.round(cx - 22), Math.round(cy - 52), 44, 10);
+      g.fillStyle = '#ffd34d';
+      g.fillRect(Math.round(cx - 20), Math.round(cy - 50), Math.round(40 * prog), 6);
+    }
   }
 
   // --- viñeta cinematográfica (oscurece bordes, más marcada de noche) ---
@@ -775,10 +782,10 @@ function drawDrawable(g, d, ox, oy) {
     const shakeX = breakingThis ? Math.round(Math.sin(G.elapsed * 42) * 2) : 0;
     const dx = Math.round(cx - img.width / 2) + shakeX;
     const dy = Math.round(cy + lift - img.height);
-    // rim light frío de luna en objetos altos sólidos (separa del fondo de noche)
-    if (CFG.GFX >= 2 && def.solid && d.id !== O.WALLW && d.id !== O.WALLS && img.height >= 20) {
-      rimLight(g, img, dx, dy, 0.3 * clamp((G.darkness - 0.4) / 0.6, 0, 1));
-    }
+    // rim light frío de luna en objetos altos sólidos (separa del fondo de noche);
+    // se dibuja DENTRO de la cizalla del viento para que el filo se mueva con la copa
+    const rimI = (CFG.GFX >= 2 && def.solid && d.id !== O.WALLW && d.id !== O.WALLS && img.height >= 20)
+      ? 0.3 * clamp((G.darkness - 0.4) / 0.6, 0, 1) : 0;
     // viento: la copa se inclina cizallando el sprite (base fija, cima mecida)
     const swayAmp = breakingThis ? 0 : (SWAY_AMP[d.id] || 0);
     if (swayAmp) {
@@ -788,9 +795,11 @@ function drawDrawable(g, d, ox, oy) {
       g.save();
       g.translate(bx, by);
       g.transform(1, 0, -sway / img.height, 1, 0, 0);
+      if (rimI) rimLight(g, img, dx - bx, dy - by, rimI);
       g.drawImage(img, dx - bx, dy - by);
       g.restore();
     } else {
+      if (rimI) rimLight(g, img, dx, dy, rimI);
       g.drawImage(img, dx, dy);
     }
 
