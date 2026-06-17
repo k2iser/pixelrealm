@@ -701,6 +701,11 @@ function update(dt) {
     else if (player.moving) player.frameI = 1 + Math.floor(player.animT * 9) % 4;
     else player.frameI = 0;
 
+    // respingo de ancho al cambiar de dirección (secondary action, solo presentación)
+    if (player.dir !== player._lastDir) { player._dirFlash = 0.12; player._lastDir = player.dir; }
+    player._dirFlash = Math.max(0, (player._dirFlash || 0) - dt);
+    player.pickT = Math.max(0, (player.pickT || 0) - dt);  // saltito de recoger (lo arma updateDrops)
+
     player.invuln = Math.max(0, player.invuln - dt);
     player.hurtT = Math.max(0, player.hurtT - dt);
     player.swingT = Math.max(0, player.swingT - dt);

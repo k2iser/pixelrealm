@@ -713,9 +713,55 @@ function shadow(g, sx, sy, w) {
   g.drawImage(aoSprite(), Math.round(sx - hw), Math.round(sy + 2 - hh), Math.round(hw * 2), Math.round(hh * 2));
 }
 
+// Animación procedural ("juice"): deforma el sprite alrededor del pivote en los
+// PIES (la base, donde se ancla la sombra) según el estado de la entidad — sin
+// redibujar nada, solo modula el transform antes del blit. Devuelve
+// {sxScale, syScale, shearX, bobY}: sxScale/syScale = squash&stretch con pies
+// clavados; shearX = inclinación (la cima se mueve, base fija); bobY = bote de
+// TODO el cuerpo (los pies se despegan → rebote/saltito; la sombra queda abajo).
+function computeLivePose(anim, dir) {
+  let sx = 1, sy = 1, shear = 0, bob = 0;
+  const t = anim.t || 0;
+  if (anim.moving) {
+    const at = anim.animT || 0;
+    const step = Math.abs(Math.sin(at * 11));          // 1 en la elevación, 0 al apoyar
+    bob -= step * 2.2;                                  // bote del cuerpo al andar
+    shear += Math.sin(at * 5.5) * 0.05;                 // contoneo
+    sy *= 1 - (1 - step) * 0.05;                        // aplaste al apoyar el pie
+    sx *= 1 + (1 - step) * 0.04;
+    const sdx = (anim.vx || 0) - (anim.vy || 0);        // velocidad mundo → eje x de pantalla
+    shear += clamp(-sdx * 0.02, -0.16, 0.16);           // inclinación hacia el movimiento
+  } else if ((anim.swingT || 0) <= 0) {
+    const breath = Math.sin(t * 2.2) * 0.5 + 0.5;       // respiración (pies clavados)
+    sy *= 1 + 0.04 * breath;
+    sx *= 1 - 0.03 * breath;
+    // gesto ocioso por oficio (NPC), desfasado por su reloj t
+    if (anim.role != null) {
+      if (anim.role === 0) shear += Math.max(0, Math.sin(t * 0.8) - 0.6) * 0.55;                 // herborista: se inclina a oler
+      else if (anim.role === 1) bob += Math.max(0, Math.sin(t * 7)) * Math.max(0, Math.sin(t * 0.5)) * 2.4; // cantero: martillea a ratos
+      else if (anim.role === 2) shear += Math.sin(t * 5) * Math.max(0, Math.sin(t * 0.6)) * 0.07;           // carpintero: cepilla
+      else if (anim.role === 3) sy *= 1 + Math.max(0, Math.sin(t * 3)) * 0.025;                  // mercader: cabeceo (la moneda ya salta)
+    }
+  }
+  // recoil del golpe (anticipación + latigazo) — solo quien tiene swingT>0 (héroe)
+  if ((anim.swingT || 0) > 0) {
+    const prog = clamp(1 - anim.swingT / 0.18, 0, 1);
+    const sgn = (dir === 'up' || dir === 'left') ? -1 : 1;
+    if (prog < 0.3) { shear += sgn * -0.12 * (prog / 0.3); sy *= 0.97; }       // anticipa hacia atrás
+    else { const w = Math.sin(((prog - 0.3) / 0.7) * Math.PI); shear += sgn * 0.18 * w; sy *= 1 + 0.05 * w; } // latigazo
+  }
+  // flinch de daño: aplaste rápido que decae (acompaña al parpadeo)
+  if ((anim.hurtT || 0) > 0) { sx *= 1 + anim.hurtT * 0.5; sy *= 1 - anim.hurtT * 0.3; }
+  // saltito de alegría al recoger
+  if ((anim.pickT || 0) > 0) bob -= Math.sin((0.25 - anim.pickT) / 0.25 * Math.PI) * 4;
+  // respingo de ancho al girar
+  if ((anim.dirFlash || 0) > 0) sx *= 1 + 0.06 * (anim.dirFlash / 0.12);
+  return { sxScale: sx, syScale: sy, shearX: shear, bobY: bob };
+}
+
 // Dibuja un héroe (propio o remoto) con su herramienta al golpear.
 // En el agua se dibuja medio sumergido, con ondas en la superficie.
-function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
+function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater, anim) {
   // a prueba de estados remotos corruptos: dir/frame inválidos caen al defecto
   const frames = set[dir] || set.down;
   const img = frames[frameI] || frames[0];
@@ -742,8 +788,17 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater) {
   const hss = CFG.GFX >= 1 ? sunShadow() : null;
   if (hss && hss.alpha > 0.02) castShadow(g, img, Math.round(sx), Math.round(sy + 2), hss);
   const hdx = Math.round(sx - img.width / 2), hdy = Math.round(sy - img.height + 2);
-  if (CFG.GFX >= 2) rimLight(g, img, hdx, hdy, 0.32 * clamp((G.darkness - 0.4) / 0.6, 0, 1));
-  g.drawImage(img, hdx, hdy);
+  const rimI = CFG.GFX >= 2 ? 0.32 * clamp((G.darkness - 0.4) / 0.6, 0, 1) : 0;
+  // animación procedural: pivote en los pies (mismo punto que la sombra) → el
+  // cuerpo respira/bota/se inclina con la base clavada y la AO nunca se despega
+  const lp = computeLivePose(anim || {}, dir);
+  const bx = Math.round(sx), by = Math.round(sy + 2);
+  g.save();
+  g.translate(bx, by);
+  g.transform(lp.sxScale, 0, lp.shearX, lp.syScale, 0, lp.bobY);
+  if (rimI) rimLight(g, img, hdx - bx, hdy - by, rimI);
+  g.drawImage(img, hdx - bx, hdy - by);
+  g.restore();
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
     const prog = 1 - swingT / 0.18;
@@ -828,8 +883,13 @@ function drawDrawable(g, d, ox, oy) {
     const sy = w2sy(player.x, player.y) + oy;
     const sel = Inv.selected();
     const inWater = world.ground(Math.floor(player.x), Math.floor(player.y)) === T.WATER;
+    const anim = {
+      t: G.elapsed + player.x * 0.13, moving: player.moving, vx: player.velX, vy: player.velY,
+      animT: player.animT, swingT: player.swingT, hurtT: player.hurtT,
+      pickT: player.pickT || 0, dirFlash: player._dirFlash || 0,
+    };
     drawHero(g, Assets.player, player.dir, player.frameI, sx, sy,
-      player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null, inWater);
+      player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null, inWater, anim);
     return;
   }
 
@@ -838,7 +898,11 @@ function drawDrawable(g, d, ox, oy) {
     const sx = w2sx(rp.px, rp.py) + ox;
     const sy = w2sy(rp.px, rp.py) + oy;
     const inWater = world.ground(Math.floor(rp.px), Math.floor(rp.py)) === T.WATER;
-    drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, 0, null, inWater);
+    // estado de animación derivado (sin tocar el protocolo de red): "anda" si el
+    // servidor manda un frame de paso (1-4); fase desincronizada por posición
+    const rmoving = rp.frameI >= 1 && rp.frameI <= 4;
+    const ranim = { t: G.elapsed + rp.px * 0.13, moving: rmoving, animT: G.elapsed };
+    drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, 0, null, inWater, ranim);
     return;
   }
 
@@ -846,7 +910,9 @@ function drawDrawable(g, d, ox, oy) {
     const n = d.n;
     const sx = w2sx(n.x, n.y) + ox;
     const sy = w2sy(n.x, n.y) + oy;
-    drawHero(g, getHeroLookSet(n.look), n.dir, n.frameI, sx, sy, 0, null, false);
+    // gesto ocioso por oficio (role) y respiración, desfasados por su reloj n.t
+    const nanim = { t: n.t, moving: n.moving, animT: n.t, role: n.role };
+    drawHero(g, getHeroLookSet(n.look), n.dir, n.frameI, sx, sy, 0, null, false, nanim);
     // moneda flotante: distingue a los comerciantes
     const coin = Assets.items.coin;
     const bob = Math.sin(G.elapsed * 3 + n.x) * 3;
@@ -877,16 +943,24 @@ function drawDrawable(g, d, ox, oy) {
       img = Assets.mobs[m.kind][m.frame];   // fauna (conejo/ciervo)
       shadow(g, sx, sy, m.kind === 'deer' ? 22 : 14);
     }
-    g.globalAlpha = alpha;
-    if (m.flip) {
-      g.save();
-      g.translate(Math.round(sx), 0);
-      g.scale(-1, 1);
-      g.drawImage(img, -Math.round(img.width / 2), Math.round(sy - img.height + 4 - yoff));
-      g.restore();
+    // squash & stretch por tipo (pivote en la base del sprite): da vida sin arte nuevo
+    let sxs = 1, sys = 1;
+    if (m.kind === 'slime') {
+      if (m.hopping > 0) { const air = Math.sin((0.34 - m.hopping) / 0.34 * Math.PI); sys = 1 + air * 0.16; sxs = 1 - air * 0.13; }
+      else { const j = Math.sin(m.t * 3); sys = 1 + j * 0.06; sxs = 1 - j * 0.06; }   // jelly en reposo
+    } else if (m.kind === 'bat') {
+      sxs = 1 + Math.sin(m.t * 9) * 0.16;                                              // alas que baten ensanchando
+    } else if (m.kind === 'shadow') {
+      sys = 1 + Math.sin(m.t * 2.5) * 0.06; sxs = 1 - Math.sin(m.t * 2.5 + 1) * 0.05;  // ondula como humo
     } else {
-      g.drawImage(img, Math.round(sx - img.width / 2), Math.round(sy - img.height + 4 - yoff));
+      sys = 1 + Math.sin(m.t * 2.2) * 0.03;                                            // fauna: respiración
     }
+    g.globalAlpha = alpha;
+    g.save();
+    g.translate(Math.round(sx), Math.round(sy + 4 - yoff));   // base del sprite (incluye salto/vuelo)
+    g.scale(m.flip ? -sxs : sxs, sys);
+    g.drawImage(img, -Math.round(img.width / 2), -img.height);
+    g.restore();
     g.globalAlpha = 1;
     return;
   }

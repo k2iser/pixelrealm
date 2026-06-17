@@ -491,6 +491,7 @@ function updateDrops(dt) {
       const got = d.n - left;
       if (got > 0) {
         Sfx.pickup();
+        player.pickT = 0.25;   // saltito de alegría (lo anima computeLivePose)
         addFloater(player.x, player.y - 0.7, '+' + got + ' ' + ITEMS[d.id].name, '#ffffff');
         UI.refreshHotbar();
         if (UI.panelOpen) { UI.refreshInv(); UI.refreshCraft(); }
