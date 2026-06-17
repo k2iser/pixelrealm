@@ -304,6 +304,21 @@ function makeHeroFrame(dir, pose, look) {
   else if (pose === 2 || pose === 4) { bob = -2; }
   else if (pose === 6) { lLeg = -7; rLeg = -5; lArm = -4; rArm = -4; bob = -1; }  // salto: piernas recogidas, brazos arriba
 
+  // --- capa/manto (detrás del cuerpo; se mece con el shear de la animación y el salto) ---
+  const cape = shade(shirt, 0.5), capeD = shade(shirt, 0.34), capeL = shade(shirt, 0.64);
+  if (dir === 'up') {
+    R(15, 28 + bob, 26, 42, cape);                 // de espaldas: capa prominente
+    R(15, 28 + bob, 4, 42, capeD); R(37, 28 + bob, 4, 42, capeD);
+    R(21, 30 + bob, 6, 32, capeL);                 // pliegue iluminado
+    R(15, 68 + bob, 5, 4, capeD); R(25, 70 + bob, 6, 3, capeD); R(35, 68 + bob, 5, 4, capeD); // bajo raído
+  } else {
+    R(16, 30 + bob, 24, 7, cape);                  // capa sobre los hombros
+    R(16, 30 + bob, 4, 7, capeD); R(36, 30 + bob, 4, 7, capeD);
+    R(13, 50 + bob, 6, 24, cape); R(37, 50 + bob, 6, 24, cape);   // faldón flanqueando las piernas
+    R(13, 50 + bob, 2, 24, capeD); R(41, 50 + bob, 2, 24, capeD);
+    R(13, 70 + bob, 6, 4, capeD); R(37, 70 + bob, 6, 4, capeD);   // bajo raído
+  }
+
   // --- piernas y botas ---
   R(18, 56 + lLeg, 8, 14, pants); R(18, 56 + lLeg, 2, 14, pantsD);
   R(18, 68 + lLeg, 8, 8, boots); R(18, 74 + lLeg, 8, 2, bootsD); R(19, 69 + lLeg, 3, 1, '#7a5e3a');
@@ -344,51 +359,42 @@ function makeHeroFrame(dir, pose, look) {
     R(42, 44 + bob + rArm, 6, 1, darken(shirt, 0.6));
   }
 
-  // --- cabeza ---
-  const hairTop = look.style === 2 ? 4 : 0;       // rapado: nacimiento más alto
-  R(18, bob, 20, 2, hair);
-  R(16, 2 + bob, 24, 10 - hairTop, hair);
-  R(16, 2 + bob, 24, 2, hairD);                   // raíz con sombra
-  R(18, 3 + bob, 10, 2, hairL);                   // brillo
-  R(20, 6 + bob, 4, 1, hairL);                    // mechón
-  R(31, 7 + bob, 3, 1, hairD);                    // mechón oscuro
-  R(16, 12 + bob - hairTop, 24, 14 + hairTop, skin); // cara (rapado: frente más alta, sin hueco)
-  R(17, 13 + bob, 4, 6, skinL);                   // luz en el pómulo
-  R(18, 24 + bob, 20, 2, skinD);                  // mandíbula
-  R(24, 26 + bob, 8, 2, skinD);                   // cuello
-  if (look.style === 0) {                          // corto: patillas
-    R(16, 12 + bob, 2, 5, hair); R(38, 12 + bob, 2, 5, hair);
-  } else if (look.style === 1) {                   // melena hasta los hombros
-    R(14, 8 + bob, 3, 24, hair); R(39, 8 + bob, 3, 24, hair);   // sin tapar la cara
-    R(14, 8 + bob, 1, 20, hairD); R(41, 8 + bob, 1, 20, hairD);
-    R(14, 30 + bob, 3, 2, hairD); R(39, 30 + bob, 3, 2, hairD);
-  }
-
+  // --- cabeza ENCAPUCHADA (silueta Dead Cells: capucha + ojos cian emisivos) ---
+  // El color de "pelo" del editor pasa a teñir la CAPUCHA. Los ojos no son editables:
+  // cian brillante que enciende el bloom HD de noche.
+  const hood = hair, hoodD = hairD, hoodL = hairL;
+  const faceSh = shade(skin, 0.55);               // cara en penumbra bajo la capucha
+  const EYE = '#79e0ff', EYEC = '#ecffff';        // ojo cian + núcleo casi blanco
   if (dir === 'up') {
-    R(16, 12 + bob, 24, 8, hair);                  // nuca
-    R(18, 12 + bob, 8, 2, hairL);
-    R(16, 18 + bob, 24, 2, hairD);
-    if (look.style === 1) R(16, 20 + bob, 24, 14, hair); // melena por la espalda
+    // de espaldas: solo la capucha y un mechón en la nuca
+    R(16, 2 + bob, 24, 22, hood);
+    R(16, 2 + bob, 24, 3, hoodD);
+    R(20, 4 + bob, 11, 2, hoodL);                 // brillo superior
+    R(16, 21 + bob, 24, 3, hoodD);                // sombra del borde
+    R(24, 24 + bob, 8, 2, skinD);                 // cuello
   } else {
-    const my = 22 + bob;
+    // base de cara en sombra
+    R(17, 11 + bob, 22, 15, faceSh);
+    R(18, 24 + bob, 18, 2, skinD);                // mandíbula
+    R(24, 26 + bob, 8, 2, skinD);                 // cuello
+    // capucha: copa + laterales que enmarcan la cara, con pico hacia delante
+    R(15, 1 + bob, 26, 11, hood);                 // copa
+    R(15, 1 + bob, 26, 2, hoodL);                 // luz superior
+    R(15, 3 + bob, 3, 22, hood); R(38, 3 + bob, 3, 22, hood);  // laterales
+    R(15, 3 + bob, 2, 22, hoodD); R(39, 3 + bob, 2, 22, hoodD);
+    R(16, 11 + bob, 24, 2, hoodD);                // sombra del borde sobre la frente
     if (dir === 'down') {
-      R(20, 14 + bob, 5, 1, hairD); R(31, 14 + bob, 5, 1, hairD); // cejas
-      R(20, 16 + bob, 4, 4, eyeW); R(21, 17 + bob, 2, 3, eye); R(20, 16 + bob, 1, 1, '#ffffff');
-      R(32, 16 + bob, 4, 4, eyeW); R(33, 17 + bob, 2, 3, eye); R(32, 16 + bob, 1, 1, '#ffffff');
-      R(26, my, 4, 1, skinD);                      // boca
-      R(27, my + 1, 2, 1, shade(skin, 0.7));       // sonrisilla
+      R(37, 9 + bob, 4, 5, hoodD);                // pico/sombra lateral
+      R(20, 15 + bob, 4, 3, EYE); R(21, 15 + bob, 2, 2, EYEC);
+      R(32, 15 + bob, 4, 3, EYE); R(33, 15 + bob, 2, 2, EYEC);
     } else if (dir === 'left') {
-      R(16, 14 + bob, 5, 1, hairD); R(26, 14 + bob, 5, 1, hairD);
-      R(16, 16 + bob, 4, 4, eyeW); R(16, 17 + bob, 2, 3, eye); R(18, 16 + bob, 1, 1, '#ffffff');
-      R(26, 16 + bob, 4, 4, eyeW); R(26, 17 + bob, 2, 3, eye); R(28, 16 + bob, 1, 1, '#ffffff');
-      R(34, 12 + bob, 6, 6, hair);                 // pelo de perfil
-      R(20, my, 3, 1, skinD);
-    } else {
-      R(35, 14 + bob, 5, 1, hairD); R(25, 14 + bob, 5, 1, hairD);
-      R(36, 16 + bob, 4, 4, eyeW); R(38, 17 + bob, 2, 3, eye); R(36, 16 + bob, 1, 1, '#ffffff');
-      R(26, 16 + bob, 4, 4, eyeW); R(28, 17 + bob, 2, 3, eye); R(26, 16 + bob, 1, 1, '#ffffff');
-      R(16, 12 + bob, 6, 6, hair);
-      R(33, my, 3, 1, skinD);
+      R(15, 5 + bob, 9, 6, hood);                 // la capucha de perfil tapa el lado lejano
+      R(15, 5 + bob, 9, 2, hoodL);
+      R(18, 15 + bob, 4, 3, EYE); R(19, 15 + bob, 2, 2, EYEC);
+    } else { // right
+      R(32, 5 + bob, 9, 6, hood);
+      R(32, 5 + bob, 9, 2, hoodL);
+      R(34, 15 + bob, 4, 3, EYE); R(35, 15 + bob, 2, 2, EYEC);
     }
   }
 
