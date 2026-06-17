@@ -287,7 +287,7 @@ function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeE
    Poses: 0 quieto, 1-4 ciclo de andar (contacto, paso, contacto, paso), 5 ataque. */
 
 function makeHeroFrame(dir, pose, look) {
-  const [hi, g] = cv(56, 80);
+  const [hi, g] = cv(56, 96);   // +16px de cabecera (capa al viento, pelo, pose de salto, estelas)
   // sombras con matiz desplazado al azul y brillos cálidos (pixel art clásico)
   const skin = HERO_SKINS[look.skin], skinD = shade(skin, 0.85), skinL = glow(skin, 1.08),
         hair = HERO_HAIRC[look.hair], hairL = glow(hair, 1.3), hairD = shade(hair, 0.72),
@@ -295,13 +295,14 @@ function makeHeroFrame(dir, pose, look) {
         pants = HERO_PANTS[look.pants], pantsD = shade(pants, 0.76),
         boots = '#5d4427', bootsD = shade('#5d4427', 0.74), belt = '#2a2018',
         buckle = '#e8c14d', eyeW = '#f4f4f8', eye = '#20202e';
-  g.translate(0, 2); // margen superior: la coronilla con bob=-2 no se sale del lienzo
+  g.translate(0, 18); // baja el contenido para dejar 16px de cabecera y mantener los pies abajo
   const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
 
   let lLeg = 0, rLeg = 0, lArm = 0, rArm = 0, bob = 0;
   if (pose === 1) { lLeg = -4; lArm = 4; rArm = -4; }
   else if (pose === 3) { rLeg = -4; lArm = -4; rArm = 4; }
   else if (pose === 2 || pose === 4) { bob = -2; }
+  else if (pose === 6) { lLeg = -7; rLeg = -5; lArm = -4; rArm = -4; bob = -1; }  // salto: piernas recogidas, brazos arriba
 
   // --- piernas y botas ---
   R(18, 56 + lLeg, 8, 14, pants); R(18, 56 + lLeg, 2, 14, pantsD);
@@ -393,7 +394,7 @@ function makeHeroFrame(dir, pose, look) {
 
   // contorno violáceo oscuro alrededor de toda la silueta
   outlineSprite(hi, '#241a2e');
-  return scaleSmooth(hi, 28, 40);
+  return scaleSmooth(hi, 28, 48);
 }
 
 // Set completo del héroe para un look (cacheado; los looks vienen saneados)
@@ -403,7 +404,7 @@ function getHeroLookSet(rawLook) {
   if (Assets.heroSets[key]) return Assets.heroSets[key];
   const set = {};
   for (const dir of ['down', 'up', 'left', 'right']) {
-    set[dir] = [0, 1, 2, 3, 4, 5].map(p => makeHeroFrame(dir, p, look));
+    set[dir] = [0, 1, 2, 3, 4, 5, 6].map(p => makeHeroFrame(dir, p, look));
   }
   Assets.heroSets[key] = set;
   return set;

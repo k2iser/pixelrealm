@@ -646,6 +646,57 @@ function collectBuilding(anchor) {
   return true;
 }
 
+/* ---------- salto (eje z de altura) ---------- */
+
+// Pulsar saltar: salta si está en suelo (o en margen "coyote"); si no, bufferea.
+function tryJump() {
+  if (!G.running) return;
+  if (player.grounded || player.coyoteT > 0) {
+    player.vz = CFG.JUMP_V0;
+    player.grounded = false;
+    player.coyoteT = 0;
+    Sfx.jump();
+  } else {
+    player.jumpBufferT = CFG.JUMP_BUFFER;   // recuerda la pulsación si aterriza pronto
+  }
+}
+
+function onLand() {
+  const impact = Math.min(1, Math.abs(player.vz) / CFG.JUMP_V0);
+  player.z = 0; player.vz = 0; player.grounded = true;
+  player.landT = 0.14 * impact;             // aplaste de aterrizaje (lo lee computeLivePose)
+  G.shake = Math.max(G.shake, 0.18 * impact);
+  Sfx.land();
+  // polvo en círculo al posarse (reusa el patrón de partículas del andar)
+  const onWater = world.ground(Math.floor(player.x), Math.floor(player.y)) === T.WATER;
+  const n = 6 + Math.round(impact * 4);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + randRange(-0.2, 0.2), s = randRange(1.2, 2.6) * (0.5 + impact);
+    particles.push({
+      x: player.x + Math.cos(a) * 0.15, y: player.y + Math.sin(a) * 0.15,
+      vx: Math.cos(a) * s, vy: Math.sin(a) * s, z: 0.04, vz: randRange(0.6, 1.6),
+      life: 0.4, maxLife: 0.4,
+      color: onWater ? 'rgba(214,234,255,0.7)' : 'rgba(196,182,150,0.75)',
+    });
+  }
+}
+
+function updatePlayerJump(dt) {
+  player.coyoteT = Math.max(0, player.coyoteT - dt);
+  player.jumpBufferT = Math.max(0, player.jumpBufferT - dt);
+  player.landT = Math.max(0, player.landT - dt);
+  if (player.grounded) {
+    player.coyoteT = CFG.COYOTE;             // ventana de coyote mientras está en suelo
+    return;
+  }
+  player.vz -= CFG.GRAV * dt;
+  player.z += player.vz * dt;
+  if (player.z <= 0) {
+    onLand();
+    if (player.jumpBufferT > 0) { player.jumpBufferT = 0; tryJump(); }  // salto bufferado
+  }
+}
+
 /* ---------- actualización por frame ---------- */
 
 function update(dt) {
@@ -694,10 +745,12 @@ function update(dt) {
         });
       }
     }
+    updatePlayerJump(dt);
     if (player.moving) player.animT += dt; else player.animT = 0;
 
-    // pose del héroe: 0 quieto, 1-4 andar, 5 ataque
-    if (player.swingT > 0) player.frameI = 5;
+    // pose del héroe: 6 en el aire, 5 ataque, 1-4 andar, 0 quieto
+    if (!player.grounded) player.frameI = 6;
+    else if (player.swingT > 0) player.frameI = 5;
     else if (player.moving) player.frameI = 1 + Math.floor(player.animT * 9) % 4;
     else player.frameI = 0;
 

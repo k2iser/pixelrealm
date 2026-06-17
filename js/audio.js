@@ -71,6 +71,8 @@ const Sfx = {
   bossSlam()  { this.noise(0.25, 0.6, 250); this.tone(60, 0.3, 'sine', 0.5, -30); },
   bossDie()   { this.tone(70, 1.4, 'sawtooth', 0.5, -50); setTimeout(() => this.tone(523, 0.15, 'triangle', 0.4), 500); setTimeout(() => this.tone(659, 0.15, 'triangle', 0.4), 680); setTimeout(() => this.tone(784, 0.3, 'triangle', 0.4), 860); },
   chatPing()  { this.tone(880, 0.05, 'sine', 0.15); },
+  jump()      { this.tone(300, 0.13, 'square', 0.16, 240); this.noise(0.05, 0.1, 2200); },
+  land()      { this.noise(0.12, 0.4, 420); this.tone(130, 0.1, 'sine', 0.28, -70); },
 
   // trueno: estruendo grave con cola de ruido
   thunder() {

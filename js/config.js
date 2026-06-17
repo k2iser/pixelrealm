@@ -27,6 +27,13 @@ const CFG = {
   MAX_PIXELS: 3500000,     // presupuesto de píxeles del backing-store (acota fill-rate en 4K/HiDPI)
   GFX: 2,                  // calidad gráfica: 0 básico · 1 medio · 2 alto (bloom, tilt-shift, agua avanzada)
   TILT: true,              // tilt-shift de maqueta (requiere GFX>=2; false = bloom sin maqueta)
+  // --- salto (eje z de altura, estilo action-platformer) ---
+  JUMP_V0: 10.5,           // velocidad inicial del salto (unidades/s en el eje z)
+  GRAV: 34,                // gravedad del eje z (unidades/s²) → vuelo ~0.6 s, ápice ~1.6 ud
+  ZK: 20,                  // px de pantalla por unidad de altura z (igual que los drops)
+  COYOTE: 0.08,            // margen para saltar justo tras dejar el suelo
+  JUMP_BUFFER: 0.10,       // margen para bufferar el salto pulsado antes de aterrizar
+  JUMP_REACH_Z: 0.35,      // altura mínima para sobrevolar agua/huecos (traversal)
 };
 
 // --- Suelos ---

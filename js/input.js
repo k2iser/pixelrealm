@@ -41,6 +41,8 @@ function setupInput(canvas) {
       setZoom(G.zoom + 1);
     } else if (k === '-') {
       setZoom(G.zoom - 1);
+    } else if (k === ' ') {
+      if (!UI.panelOpen && !UI.dialogOpen && !UI.chatOpen && !player.dead) tryJump();
     }
   });
 

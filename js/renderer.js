@@ -756,6 +756,10 @@ function computeLivePose(anim, dir) {
   if ((anim.pickT || 0) > 0) bob -= Math.sin((0.25 - anim.pickT) / 0.25 * Math.PI) * 4;
   // respingo de ancho al girar
   if ((anim.dirFlash || 0) > 0) sx *= 1 + 0.06 * (anim.dirFlash / 0.12);
+  // salto: eleva el cuerpo (la sombra queda en el suelo); estira al subir, encoge al caer
+  if (anim.z) bob -= anim.z * CFG.ZK;
+  if (anim.vz) { const st = clamp(anim.vz * 0.012, -0.07, 0.12); sy *= 1 + st; sx *= 1 - st * 0.7; }
+  if (anim.landT) { const l = anim.landT / 0.14; sy *= 1 - 0.18 * l; sx *= 1 + 0.16 * l; }   // aplaste de impacto
   return { sxScale: sx, syScale: sy, shearX: shear, bobY: bob };
 }
 
@@ -784,7 +788,8 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater, anim) {
     g.globalAlpha = 1;
     return;
   }
-  shadow(g, sx, sy, 20);
+  // la sombra/AO se queda en el suelo y se encoge con la altura del salto
+  shadow(g, sx, sy, 20 / (1 + ((anim && anim.z) || 0) * 0.5));
   const hss = CFG.GFX >= 1 ? sunShadow() : null;
   if (hss && hss.alpha > 0.02) castShadow(g, img, Math.round(sx), Math.round(sy + 2), hss);
   const hdx = Math.round(sx - img.width / 2), hdy = Math.round(sy - img.height + 2);
@@ -887,6 +892,7 @@ function drawDrawable(g, d, ox, oy) {
       t: G.elapsed + player.x * 0.13, moving: player.moving, vx: player.velX, vy: player.velY,
       animT: player.animT, swingT: player.swingT, hurtT: player.hurtT,
       pickT: player.pickT || 0, dirFlash: player._dirFlash || 0,
+      z: player.z || 0, vz: player.vz || 0, landT: player.landT || 0,
     };
     drawHero(g, Assets.player, player.dir, player.frameI, sx, sy,
       player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null, inWater, anim);

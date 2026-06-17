@@ -5,6 +5,8 @@ const player = {
   x: 0, y: 0,
   dir: 'down', frameI: 0, animT: 0, moving: false,
   _lastDir: 'down', _dirFlash: 0, pickT: 0,  // animación procedural (respingo de giro / saltito)
+  z: 0, vz: 0, grounded: true, coyoteT: 0, jumpBufferT: 0, landT: 0,  // salto (eje z)
+  _trail: [],     // estelas (afterimages) del salto/ataque
   hp: CFG.PLAYER_MAXHP, maxHp: CFG.PLAYER_MAXHP,
   hitT: 0,        // tiempo hasta el próximo golpe
   swingT: 0,      // animación de golpe
