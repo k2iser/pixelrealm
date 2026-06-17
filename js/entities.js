@@ -31,12 +31,19 @@ const projectiles = [];
 
 /* ---------- colisión ---------- */
 
-function blockedAt(x, y, r) {
+function blockedAt(x, y, r, airborne) {
   const x0 = Math.floor(x - r), x1 = Math.floor(x + r);
   const y0 = Math.floor(y - r), y1 = Math.floor(y + r);
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
-      if (world.isSolid(tx, ty)) return true;
+      if (airborne) {
+        // en vuelo se sobrevuela el agua profunda y los huecos; los sólidos
+        // de objeto (muros, árboles, rocas) siguen bloqueando
+        const ob = world.object(tx, ty);
+        if (ob !== O.NONE && OBJ[ob] && OBJ[ob].solid) return true;
+      } else if (world.isSolid(tx, ty)) {
+        return true;
+      }
     }
   }
   return false;
@@ -51,9 +58,9 @@ function overlapsTile(e, r, tx, ty) {
 }
 
 // Mueve por ejes separados: permite deslizarse a lo largo de los muros
-function moveEntity(e, dx, dy, r) {
-  if (dx !== 0 && !blockedAt(e.x + dx, e.y, r)) e.x += dx;
-  if (dy !== 0 && !blockedAt(e.x, e.y + dy, r)) e.y += dy;
+function moveEntity(e, dx, dy, r, airborne) {
+  if (dx !== 0 && !blockedAt(e.x + dx, e.y, r, airborne)) e.x += dx;
+  if (dy !== 0 && !blockedAt(e.x, e.y + dy, r, airborne)) e.y += dy;
 }
 
 // Punto de aparición garantizado: si el destino quedó bloqueado (un muro,

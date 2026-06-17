@@ -747,8 +747,8 @@ function computeLivePose(anim, dir) {
   if ((anim.swingT || 0) > 0) {
     const prog = clamp(1 - anim.swingT / 0.18, 0, 1);
     const sgn = (dir === 'up' || dir === 'left') ? -1 : 1;
-    if (prog < 0.3) { shear += sgn * -0.12 * (prog / 0.3); sy *= 0.97; }       // anticipa hacia atrás
-    else { const w = Math.sin(((prog - 0.3) / 0.7) * Math.PI); shear += sgn * 0.18 * w; sy *= 1 + 0.05 * w; } // latigazo
+    if (prog < 0.3) { shear += sgn * -0.13 * (prog / 0.3); sy *= 0.96; }        // anticipa hacia atrás
+    else { const w = Math.sin(((prog - 0.3) / 0.7) * Math.PI); shear += sgn * 0.26 * w; sy *= 1 + 0.06 * w; sx *= 1 + 0.05 * w; } // latigazo (smear)
   }
   // flinch de daño: aplaste rápido que decae (acompaña al parpadeo)
   if ((anim.hurtT || 0) > 0) { sx *= 1 + anim.hurtT * 0.5; sy *= 1 - anim.hurtT * 0.3; }
@@ -894,6 +894,21 @@ function drawDrawable(g, d, ox, oy) {
       pickT: player.pickT || 0, dirFlash: player._dirFlash || 0,
       z: player.z || 0, vz: player.vz || 0, landT: player.landT || 0,
     };
+    // estelas (afterimages) cian en salto/ataque/carrera — siluetas cacheadas, mezcla aditiva
+    if (player._trail && player._trail.length && CFG.GFX >= 1 && !inWater) {
+      const tset = Assets.player;
+      g.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < player._trail.length; i++) {
+        const tr = player._trail[i];
+        const tf = (tset[tr.dir] || tset.down)[tr.frameI] || tset.down[0];
+        const tsx = w2sx(tr.x, tr.y) + ox, tsy = w2sy(tr.x, tr.y) + oy;
+        g.globalAlpha = 0.03 + 0.10 * (i / player._trail.length);
+        g.drawImage(silTinted(tf, '#8ce6ff'),
+          Math.round(tsx - tf.width / 2), Math.round(tsy - tf.height + 2 - (tr.z || 0) * CFG.ZK));
+      }
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+    }
     drawHero(g, Assets.player, player.dir, player.frameI, sx, sy,
       player.swingT, sel && ITEMS[sel.id].tool ? sel.id : null, inWater, anim);
     return;

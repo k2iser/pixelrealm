@@ -523,7 +523,7 @@ function desiredVelocity(dt) {
   return runCmd(dt);
 }
 
-function playerSpeed() { return CFG.PLAYER_SPEED * world.speedAt(Math.floor(player.x), Math.floor(player.y)); }
+function playerSpeed() { return CFG.PLAYER_SPEED * (player.grounded ? world.speedAt(Math.floor(player.x), Math.floor(player.y)) : 1); }
 
 function steerWorld(gx, gy, stop) {
   const dx = gx - player.x, dy = gy - player.y, len = Math.hypot(dx, dy);
@@ -664,6 +664,8 @@ function tryJump() {
 function onLand() {
   const impact = Math.min(1, Math.abs(player.vz) / CFG.JUMP_V0);
   player.z = 0; player.vz = 0; player.grounded = true;
+  // ancla de seguridad: si cayó en agua profunda o sobre un sólido, a tierra firme
+  if (blockedAt(player.x, player.y, 0.3)) { const s = safeSpawn(player.x, player.y); player.x = s.x; player.y = s.y; }
   player.landT = 0.14 * impact;             // aplaste de aterrizaje (lo lee computeLivePose)
   G.shake = Math.max(G.shake, 0.18 * impact);
   Sfx.land();
@@ -734,7 +736,8 @@ function update(dt) {
     player.velX += (twx - player.velX) * accK;
     player.velY += (twy - player.velY) * accK;
     if (Math.abs(player.velX) > 0.02 || Math.abs(player.velY) > 0.02) {
-      moveEntity(player, player.velX * dt, player.velY * dt, 0.3);
+      const airborne = !player.grounded && player.z > CFG.JUMP_REACH_Z;   // sobrevuela agua/huecos
+      moveEntity(player, player.velX * dt, player.velY * dt, 0.3, airborne);
       player.dustT -= dt;
       if (player.moving && player.dustT <= 0 && world.ground(Math.floor(player.x), Math.floor(player.y)) !== T.WATER) {
         player.dustT = 0.22;
@@ -753,6 +756,19 @@ function update(dt) {
     else if (player.swingT > 0) player.frameI = 5;
     else if (player.moving) player.frameI = 1 + Math.floor(player.animT * 9) % 4;
     else player.frameI = 0;
+
+    // estela (afterimages) en salto, ataque o carrera rápida — solo presentación
+    const spd2 = player.velX * player.velX + player.velY * player.velY;
+    if (!player.grounded || player.swingT > 0 || spd2 > 9) {
+      player._trailT = (player._trailT || 0) - dt;
+      if (player._trailT <= 0) {
+        player._trailT = 0.045;
+        player._trail.push({ x: player.x, y: player.y, z: player.z, dir: player.dir, frameI: player.frameI });
+        if (player._trail.length > 5) player._trail.shift();
+      }
+    } else if (player._trail.length) {
+      player._trail.shift();   // se drena suave al volver a idle/andar
+    }
 
     // respingo de ancho al cambiar de dirección (secondary action, solo presentación)
     if (player.dir !== player._lastDir) { player._dirFlash = 0.12; player._lastDir = player.dir; }
