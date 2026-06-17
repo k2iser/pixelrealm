@@ -898,11 +898,20 @@ function drawDrawable(g, d, ox, oy) {
     const sx = w2sx(rp.px, rp.py) + ox;
     const sy = w2sy(rp.px, rp.py) + oy;
     const inWater = world.ground(Math.floor(rp.px), Math.floor(rp.py)) === T.WATER;
-    // estado de animación derivado (sin tocar el protocolo de red): "anda" si el
-    // servidor manda un frame de paso (1-4); fase desincronizada por posición
-    const rmoving = rp.frameI >= 1 && rp.frameI <= 4;
-    const ranim = { t: G.elapsed + rp.px * 0.13, moving: rmoving, animT: G.elapsed };
-    drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, 0, null, inWater, ranim);
+    // estado de animación derivado de la posición INTERPOLADA (sin tocar el
+    // protocolo): velocidad ≈ delta de posición → "anda" continuo (sin parpadeo
+    // por paquete) e inclinación; el frame 5 sintetiza un swingT para el recoil.
+    const pvx = (rp._ppx === undefined ? rp.px : rp.px - rp._ppx);
+    const pvy = (rp._ppy === undefined ? rp.py : rp.py - rp._ppy);
+    rp._ppx = rp.px; rp._ppy = rp.py;
+    const rmoving = (pvx * pvx + pvy * pvy) > 2.5e-6 || (rp.frameI >= 1 && rp.frameI <= 4);
+    const ranim = {
+      t: G.elapsed + rp.px * 0.13,
+      moving: rmoving, animT: G.elapsed + rp.px * 0.37 + rp.py * 0.21,  // fase por jugador
+      vx: pvx * 60, vy: pvy * 60,
+      swingT: rp.frameI === 5 ? 0.1 : 0,
+    };
+    drawHero(g, getHeroLookSet(rp.look), rp.dir, rp.frameI, sx, sy, ranim.swingT, null, inWater, ranim);
     return;
   }
 
@@ -910,8 +919,9 @@ function drawDrawable(g, d, ox, oy) {
     const n = d.n;
     const sx = w2sx(n.x, n.y) + ox;
     const sy = w2sy(n.x, n.y) + oy;
-    // gesto ocioso por oficio (role) y respiración, desfasados por su reloj n.t
-    const nanim = { t: n.t, moving: n.moving, animT: n.t, role: n.role };
+    // gesto ocioso por oficio (role) y respiración por su reloj n.t; el bote del
+    // andar usa n.animT (mismo reloj que el frame de piernas) para ir en fase
+    const nanim = { t: n.t, moving: n.moving, animT: n.animT, role: n.role };
     drawHero(g, getHeroLookSet(n.look), n.dir, n.frameI, sx, sy, 0, null, false, nanim);
     // moneda flotante: distingue a los comerciantes
     const coin = Assets.items.coin;
