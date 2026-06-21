@@ -118,8 +118,9 @@ function exitToTitle() {
 function startWorld(seed, data) {
   world = (G.mode === 'side') ? new World2D(seed) : new World(seed);
   if (data && G.mode === 'side') {
-    // carga de mundo 2D (solo terreno editado; sin edificios/cultivos)
+    // carga de mundo 2D (terreno editado + árboles talados)
     world.applyModified(data.chunks || {});
+    if (world.applyTrees) world.applyTrees(data.chopped);
     G.time = data.time; G.day = data.day || 1;
     G.spawn = data.spawn || world.findSurfaceSpawn(0);
     player.x = data.player.x; player.y = data.player.y;

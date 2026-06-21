@@ -34,6 +34,7 @@ const Save = {
       inv: Inv.slots,
       sel: Inv.sel,
       chunks: world.modifiedChunks(),
+      chopped: world.treesData ? world.treesData() : undefined,   // árboles talados (modo 2D)
       // edificios y cultivos solo existen en el modo isométrico
       buildings: world.buildingsData ? world.buildingsData() : {},
       crops: world.cropsData ? world.cropsData() : {},

@@ -182,6 +182,26 @@ function updateBreaking2d(dt) {
   const h = hoveredTile2d();
   // mira hacia el cursor ANTES de comprobar el alcance, para poder picar de pie a cualquier lado
   if (Math.abs(h.wx - player.x) > 0.15) player.dir = h.wx >= player.x ? 'right' : 'left';
+  // --- talar árbol (segundo plano, no sólido): si el cursor cae sobre un árbol contiguo ---
+  const th = world.treeHeightAt(h.tx);
+  if (th > 0) {
+    const surf = world.surfaceY(h.tx), top = surf - th, baseRow = surf - 1;
+    if (world.ground(h.tx, h.ty) === T.AIR && h.ty >= top && h.ty <= baseRow && Math.abs(h.tx - Math.floor(player.x)) <= 1) {
+      const key = 'tree:' + h.tx;
+      if (!player.breaking || player.breaking.key !== key) player.breaking = { key, tx: h.tx, ty: baseRow, id: 'tree', dmg: 0, hp: 5 };
+      const isAxe = Inv.selected() && ITEMS[Inv.selected().id] && ITEMS[Inv.selected().id].tool === 'axe';
+      player.breaking.dmg += dt * (G.creative ? 99 : (isAxe ? 2.6 : 1.1));
+      player.swingT = 0.18;
+      if (player.breaking.dmg >= player.breaking.hp) {
+        world.chopTree(h.tx);
+        if (!G.creative) Inv.add('wood', 3 + (hash2(h.tx, 2, 9) * 3 | 0));
+        Sfx.mine();
+        for (let i = 0; i < 10; i++) particles.push({ x: h.tx + 0.5 + randRange(-0.4, 0.4), y: top + randRange(0, th), vx: randRange(-1.5, 1.5), vy: randRange(-1, 1), z: 0, vz: 0, life: 0.5, maxLife: 0.5, color: 'rgba(70,140,70,0.85)', flat2d: true });
+        player.breaking = null; if (UI.refreshHotbar) UI.refreshHotbar();
+      }
+      return;
+    }
+  }
   if (!canMine2d(h)) { player.breaking = null; return; }
   const mat = world.ground(h.tx, h.ty), def = TDEF[mat];
   // se pueden picar materiales con dureza finita (incluida la antorcha, que no es sólida)
@@ -332,6 +352,24 @@ function caveBackdrop2d(g, W, H, ox, cy0) {
     g.beginPath(); g.moveTo(x, cy0); g.lineTo(x + TS * 0.5, cy0 + h); g.lineTo(x + TS, cy0); g.closePath(); g.fill();
   }
 }
+// árbol de superficie (segundo plano, pixel, no colisiona): tronco + copa por bloques
+function drawTree2d(g, sx, baseY, h, biome) {
+  const TS = CFG.TS;
+  const trunkW = Math.max(3, Math.round(TS * 0.22)), trunkH = Math.round(h * TS * 0.5);
+  const tx = Math.round(sx - trunkW / 2), ty = Math.round(baseY - trunkH);
+  g.fillStyle = '#6b4a2a'; g.fillRect(tx, ty, trunkW, trunkH);
+  g.fillStyle = '#523823'; g.fillRect(tx, ty, Math.max(1, (trunkW * 0.38) | 0), trunkH);
+  const cy = ty, R = Math.round(h * TS * 0.4);
+  const dark = biome === 'forest' ? '#2f6b34' : biome === 'jungle' ? '#27773a' : '#3c8540';
+  const lite = biome === 'forest' ? '#43914a' : biome === 'jungle' ? '#3aa052' : '#5aa850';
+  const cw = R * 1.8, ch = R * 1.5;
+  g.fillStyle = dark;
+  g.fillRect(Math.round(sx - cw / 2), Math.round(cy - ch), Math.round(cw), Math.round(ch));
+  g.fillRect(Math.round(sx - cw * 0.34), Math.round(cy - ch * 1.35), Math.round(cw * 0.68), Math.round(ch * 0.55));
+  g.fillStyle = lite;
+  g.fillRect(Math.round(sx - cw * 0.32), Math.round(cy - ch * 0.95), Math.round(cw * 0.36), Math.round(ch * 0.4));
+  g.fillRect(Math.round(sx + cw * 0.05), Math.round(cy - ch * 1.15), Math.round(cw * 0.22), Math.round(ch * 0.3));
+}
 function bg2d(g, W, H, ox, oy) {
   const TS = CFG.TS;
   // muestreo continuo del centro: crossfade de bioma y horizonte entre columnas vecinas (sin saltos)
@@ -428,6 +466,11 @@ function render2d(g, W, H) {
       if (m === T.TORCH) torches.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS]);
     }
   }
+  // árboles de superficie (segundo plano: detrás del jugador, no colisionan)
+  for (let tx = col0; tx <= col1; tx++) {
+    const th = world.treeHeightAt(tx);
+    if (th > 0) drawTree2d(g, (tx + 0.5 - ox) * TS, (world.surfaceY(tx) - oy) * TS, th, world.biomeAt(tx));
+  }
   // partículas (polvo)
   for (const p of particles) {
     if (!p.flat2d) continue;
@@ -453,12 +496,13 @@ function render2d(g, W, H) {
     g.strokeStyle = ok ? 'rgba(120,255,140,0.7)' : 'rgba(255,90,90,0.45)';
     g.lineWidth = 1;
     g.strokeRect(Math.round((h.tx - ox) * TS) + 0.5, Math.round((h.ty - oy) * TS) + 0.5, TS - 1, TS - 1);
-    // grietas progresivas + barra de progreso sobre el bloque que se pica
+    // grietas progresivas + barra de progreso sobre el bloque/árbol que se pica
     if (player.breaking) {
       const b = player.breaking, def = TDEF[b.id];
+      const hp = def ? def.hp : (b.hp || 1);
       const bx = Math.round((b.tx - ox) * TS), by = Math.round((b.ty - oy) * TS);
-      const prog = clamp(b.dmg / def.hp, 0, 1);
-      drawCracks2d(g, bx, by, TS, prog);
+      const prog = clamp(b.dmg / hp, 0, 1);
+      if (def) drawCracks2d(g, bx, by, TS, prog);   // grietas solo en bloques (no en árboles)
       g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(bx + 1, by - 6, TS - 2, 4);
       g.fillStyle = '#ffd34d'; g.fillRect(bx + 2, by - 5, Math.round((TS - 4) * prog), 2);
     }

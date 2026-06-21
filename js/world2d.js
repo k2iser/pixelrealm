@@ -13,6 +13,7 @@ class World2D {
     this._lastKey = null; this._lastChunk = null;
     this.SEA = 70;          // fila media de la superficie
     this.BOTTOM = 320;      // fondo del mundo (lecho de roca)
+    this.chopped = new Set();   // columnas con el árbol ya talado
   }
 
   // altura de la superficie en la columna tx (ruido 1D = fbm con y constante)
@@ -44,6 +45,20 @@ class World2D {
     if (depth > 8 && cl > 0.58 && h < 0.10) return T.COAL_ORE;
     return T.STONE;
   }
+
+  // --- árboles de superficie (segundo plano, no sólidos, picables para madera) ---
+  treeHeightAt(tx) {
+    if (this.chopped && this.chopped.has(tx)) return 0;
+    const b = this.biomeAt(tx);
+    if (b !== 'plains' && b !== 'forest' && b !== 'jungle') return 0;
+    const s = (this.seed + 909) >>> 0;
+    if (hash2(tx, 0, s) >= (b === 'forest' || b === 'jungle' ? 0.26 : 0.12)) return 0;
+    if (hash2(tx - 1, 0, s) < 0.26 || hash2(tx - 2, 0, s) < 0.26) return 0;   // espaciado
+    return 4 + (hash2(tx, 1, s) * 3 | 0);
+  }
+  chopTree(tx) { (this.chopped || (this.chopped = new Set())).add(tx); }
+  treesData() { return this.chopped ? Array.from(this.chopped) : []; }
+  applyTrees(arr) { this.chopped = new Set(arr || []); }
 
   // bioma de superficie (solo afecta al fondo; el terreno es común en el MVP)
   biomeAt(tx) {
