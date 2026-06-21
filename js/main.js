@@ -100,6 +100,7 @@ function continueGame() {
   const data = Save.read();
   if (!data) { newGame(''); return; }
   G.creative = !!data.creative;
+  G.mode = data.mode || 'iso';   // restaurar el modo antes de instanciar el mundo
   startWorld(data.seed, data);
 }
 

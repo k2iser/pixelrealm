@@ -24,6 +24,7 @@ const Save = {
     const data = {
       v: 1,
       seed: world.seed,
+      mode: G.mode,
       creative: G.creative,
       quest: G.quest,
       time: G.time,
@@ -33,8 +34,9 @@ const Save = {
       inv: Inv.slots,
       sel: Inv.sel,
       chunks: world.modifiedChunks(),
-      buildings: world.buildingsData(),
-      crops: world.cropsData(),
+      // edificios y cultivos solo existen en el modo isométrico
+      buildings: world.buildingsData ? world.buildingsData() : {},
+      crops: world.cropsData ? world.cropsData() : {},
       drops: drops.slice(0, 80).map(d => ({ x: +d.x.toFixed(2), y: +d.y.toFixed(2), id: d.id, n: d.n })),
     };
     try {
