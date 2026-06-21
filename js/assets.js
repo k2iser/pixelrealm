@@ -1556,7 +1556,11 @@ function applyTexturePack(pack, img) {
 function iconURL(id) {
   if (!Assets._icons[id]) {
     const src = Assets.items[id];
-    if (!src) return '';
+    if (!src) {
+      // items propios del modo 2D (sin icono iso): generarlo desde las texturas 2D
+      if (typeof icon2dURL === 'function') { const u = icon2dURL(id); if (u) { Assets._icons[id] = u; return u; } }
+      return '';
+    }
     Assets._icons[id] = src.toDataURL();
   }
   return Assets._icons[id];

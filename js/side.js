@@ -8,6 +8,22 @@ const SIDE = { HW: 0.34, BODY: 1.72 };   // medio ancho y alto de la caja del ju
 
 /* ---------- arte: tiles (atlas externo CC0 + fallback procedural) ---------- */
 const _tile2dCache = {};
+// iconos de hotbar para items del modo 2D que no tienen icono iso (se usa como fallback de iconURL)
+const ICON2D_MAT = { dirt: T.DIRT, stone: T.STONE, walls: T.BRICK, wallw: T.WOOD, plank: T.WOOD, wood: T.WOOD, torch: T.TORCH, gate: T.GATE, crystal: T.CRYSTAL, coal: T.COAL_ORE, iron_ore: T.IRON_ORE };
+function icon2dURL(id) {
+  const TS = CFG.TS;
+  const mat = ICON2D_MAT[id];
+  if (mat != null && typeof tile2d === 'function') {
+    const [c, g] = cv(32, 32); g.imageSmoothingEnabled = false;
+    g.drawImage(tile2d(mat, 0), 0, 0, TS, TS, 2, 2, 28, 28);
+    return c.toDataURL();
+  }
+  const blob = (col, hi) => { const [c, g] = cv(32, 32); g.fillStyle = col; g.beginPath(); g.ellipse(16, 18, 11, 9, 0, 0, 7); g.fill(); g.fillStyle = hi; g.fillRect(11, 12, 5, 3); return c.toDataURL(); };
+  if (id === 'meat') return blob('#b8473a', '#e89a7a');
+  if (id === 'leather') return blob('#8a5a32', '#b07d4a');
+  if (id === 'bone') { const [c, g] = cv(32, 32); g.fillStyle = '#ece4cc'; g.fillRect(9, 14, 14, 4); g.beginPath(); g.arc(9, 13, 3, 0, 7); g.arc(9, 19, 3, 0, 7); g.arc(23, 13, 3, 0, 7); g.arc(23, 19, 3, 0, 7); g.fill(); return c.toDataURL(); }
+  return '';
+}
 // se llama cuando terminan de cargar los assets externos: descarta los tiles
 // procedurales cacheados para regenerarlos desde el atlas CC0.
 function invalidate2dTiles() { for (const k in _tile2dCache) delete _tile2dCache[k]; }
