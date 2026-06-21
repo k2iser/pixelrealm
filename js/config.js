@@ -34,10 +34,30 @@ const CFG = {
   COYOTE: 0.08,            // margen para saltar justo tras dejar el suelo
   JUMP_BUFFER: 0.10,       // margen para bufferar el salto pulsado antes de aterrizar
   JUMP_REACH_Z: 0.35,      // altura mínima para sobrevolar agua/huecos (traversal)
+  // --- modo 2D lateral (tipo Terraria) ---
+  TS: 22,                  // tamaño de tile en px de pantalla (modo 2D)
+  G2D_GRAV: 46,            // gravedad lateral (tiles/s²)
+  G2D_JUMP: 15.5,          // impulso de salto lateral (tiles/s)
+  G2D_MAXFALL: 26,         // velocidad de caída máxima
+  G2D_ACCEL: 60, G2D_FRIC: 50,  // aceleración / frenado horizontal (tiles/s²)
 };
 
-// --- Suelos ---
-const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8 };
+// --- Suelos --- (AIR/COAL_ORE/IRON_ORE/BEDROCK son del modo 2D)
+const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12 };
+
+// Materiales del modo 2D: sólido, dureza, herramienta y drops (reusa ITEMS)
+const TDEF = {
+  [T.AIR]:      { solid: false },
+  [T.GRASS]:    { solid: true, hp: 3, tool: null, drops: [['dirt', 1, 1]] },
+  [T.DIRT]:     { solid: true, hp: 3, tool: null, drops: [['dirt', 1, 1]] },
+  [T.STONE]:    { solid: true, hp: 7, tool: 'pick', drops: [['stone', 1, 1]] },
+  [T.COAL_ORE]: { solid: true, hp: 8, tool: 'pick', drops: [['coal', 1, 1], ['stone', 1, 0.3]] },
+  [T.IRON_ORE]: { solid: true, hp: 10, tool: 'pick', drops: [['iron_ore', 1, 1], ['stone', 1, 0.3]] },
+  [T.SAND]:     { solid: true, hp: 2, tool: null, drops: [['dirt', 1, 1]] },
+  [T.BEDROCK]:  { solid: true, hp: Infinity, tool: 'pick', drops: [] },
+};
+// item -> material que coloca (para construir en 2D con el clic derecho)
+const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.STONE };
 
 // --- Objetos del mundo ---
 const O = {
@@ -105,6 +125,7 @@ const OBJ = {
 // --- Objetos de inventario ---
 const ITEMS = {
   wood:     { name: 'Madera', stack: 99 },
+  dirt:     { name: 'Tierra', stack: 99 },
   stone:    { name: 'Piedra', stack: 99 },
   coal:     { name: 'Carbón', stack: 99 },
   iron_ore: { name: 'Mineral de hierro', stack: 99 },

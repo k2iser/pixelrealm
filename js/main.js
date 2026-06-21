@@ -5,6 +5,7 @@ let world = null;
 
 const G = {
   running: false,
+  mode: 'iso',      // 'iso' (isométrico) | 'side' (2D lateral tipo Terraria)
   online: false,    // espejo de Net.online para módulos que cargan antes
   zoom: 2,          // 1 lejos · 2 cerca (Stardew) · 3 muy cerca
   renderScale: 2,   // escala lógico→dispositivo (zoom·dpr); el render dibuja en px lógicos
@@ -81,7 +82,7 @@ function setZoom(z) {
 
 /* ---------- arranque de partidas ---------- */
 
-function newGame(seedText, creative) {
+function newGame(seedText, creative, mode) {
   Save.clear();
   let seed;
   if (seedText && seedText.trim()) {
@@ -91,6 +92,7 @@ function newGame(seedText, creative) {
     seed = (Math.random() * 0x7fffffff) | 0;
   }
   G.creative = !!creative;
+  G.mode = mode || 'iso';
   startWorld(seed, null);
 }
 
@@ -102,7 +104,23 @@ function continueGame() {
 }
 
 function startWorld(seed, data) {
-  world = new World(seed);
+  world = (G.mode === 'side') ? new World2D(seed) : new World(seed);
+  if (data && G.mode === 'side') {
+    // carga de mundo 2D (solo terreno editado; sin edificios/cultivos)
+    world.applyModified(data.chunks || {});
+    G.time = data.time; G.day = data.day || 1;
+    G.spawn = data.spawn || world.findSurfaceSpawn(0);
+    player.x = data.player.x; player.y = data.player.y;
+    player.hp = clamp(data.player.hp | 0, 1, player.maxHp);
+    player.vx2 = 0; player.vy2 = 0; player.grounded = false;
+    Inv.slots = (data.inv || []).map(s => (s && ITEMS[s.id]) ? { id: s.id, n: s.n } : null);
+    while (Inv.slots.length < 36) Inv.slots.push(null);
+    Inv.slots.length = 36; Inv.sel = data.sel || 0; drops.length = 0;
+    G.quest = null; cam.init = false;
+    world.center = { x: player.x, y: player.y };
+    finishStart('Mundo 2D cargado');
+    return;
+  }
   if (data) {
     world.applyModified(data.chunks || {});
     world.applyBuildings(data.buildings || {});
@@ -125,6 +143,14 @@ function startWorld(seed, data) {
     for (const d of (data.drops || [])) {
       if (ITEMS[d.id]) drops.push({ x: d.x, y: d.y, id: d.id, n: d.n, vx: 0, vy: 0, z: 0, vz: 0, age: 1, ttl: 0 });
     }
+  } else if (G.mode === 'side') {
+    G.time = 0.15; G.day = 1;
+    G.spawn = world.findSurfaceSpawn(0);
+    player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp;
+    player.vx2 = 0; player.vy2 = 0; player.grounded = false;
+    Inv.slots = new Array(36).fill(null); Inv.sel = 0;
+    Inv.add('pick', 1); Inv.add('axe', 1); Inv.add('dirt', 40); Inv.add('stone', 20); Inv.add('torch', 12);
+    drops.length = 0;
   } else {
     G.time = 0.08;
     G.day = 1;
@@ -138,10 +164,13 @@ function startWorld(seed, data) {
     Inv.add('coin', 12);   // unas monedas para estrenar el comercio
     drops.length = 0;
   }
-  G.quest = (data && data.quest && NPC_ROLES[data.quest.role | 0] && ITEMS[data.quest.item] &&
+  G.quest = (G.mode !== 'side' && data && data.quest && NPC_ROLES[data.quest.role | 0] && ITEMS[data.quest.item] &&
     (!data.quest.rewardItem || ITEMS[data.quest.rewardItem])) ? data.quest : null;
   world.center = { x: player.x, y: player.y };
-  finishStart(data ? 'Partida cargada' : (G.creative ? 'Modo creativo: clic para moverte, recursos infinitos' : 'Clic izquierdo para moverte y recolectar · busca una aldea'));
+  cam.init = false;
+  finishStart(G.mode === 'side'
+    ? 'Mundo 2D: A/D para moverte, Espacio para saltar, clic para picar/colocar'
+    : (data ? 'Partida cargada' : (G.creative ? 'Modo creativo: clic para moverte, recursos infinitos' : 'Clic izquierdo para moverte y recolectar · busca una aldea')));
 }
 
 // Entrada en el mundo compartido: la semilla, el reloj y las ediciones vienen del servidor
@@ -1030,15 +1059,21 @@ function updateBuildings(dt) {
 /* ---------- bucle ---------- */
 
 let _last = performance.now();
+// despacho de modo: el iso usa update/updateCamera/render; el 2D sus variantes (side.js)
+const MODES = {
+  iso: { update: update, camera: updateCamera, render: render },
+  side: { update: update2d, camera: updateCamera2d, render: render2d },
+};
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = (now - _last) / 1000;
   _last = now;
   if (dt > 0.05) dt = 0.05;
   if (!G.running || !world) return;
-  update(dt);
-  updateCamera(dt, G.viewW, G.viewH);
-  render(ctx, G.viewW, G.viewH);
+  const M = MODES[G.mode] || MODES.iso;
+  M.update(dt);
+  M.camera(dt, G.viewW, G.viewH);
+  M.render(ctx, G.viewW, G.viewH);
 }
 
 /* ---------- inicio ---------- */
@@ -1075,6 +1110,12 @@ function boot() {
     Sfx.init(); Sfx.resume();
     if (Save.exists() && !confirm('Se borrará la partida guardada local. ¿Continuar?')) return;
     newGame(document.getElementById('seed-input').value, true);
+  });
+  const b2d = document.getElementById('btn-new-2d');
+  if (b2d) b2d.addEventListener('click', () => {
+    Sfx.init(); Sfx.resume();
+    if (Save.exists() && !confirm('Se borrará la partida guardada local. ¿Continuar?')) return;
+    newGame(document.getElementById('seed-input').value, false, 'side');
   });
   document.getElementById('btn-online').addEventListener('click', () => {
     Sfx.init(); Sfx.resume();

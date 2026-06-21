@@ -545,6 +545,7 @@ const UI = {
 
   renderMinimap() {
     if (!G.running || !world) return;
+    if (G.mode === 'side') { this.el('minimap').classList.add('hidden'); return; }   // sin minimapa en 2D
     const c = this.el('minimap');
     const g = c.getContext('2d');
     const size = 132, px = 2, span = size / px;

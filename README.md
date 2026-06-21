@@ -1,6 +1,6 @@
 # ⛏ PixelRealm
 
-**Mundo abierto infinito estilo Minecraft · Vista isométrica tipo Diablo/Warcraft · Pixel art 100 % procedural · Cooperativo online**
+**Dos modos de juego · Mundo abierto isométrico (tipo Diablo/Warcraft) + Mundo 2D lateral (tipo Terraria) · Pixel art 100 % procedural · Cooperativo online**
 
 Un juego de supervivencia, construcción y cooperación para navegador hecho **solo con JavaScript vanilla**: cero dependencias, cero assets externos. Cada sprite — tiles, árboles, el héroe, los monstruos, los edificios — se dibuja píxel a píxel por código al arrancar. El sonido se sintetiza con WebAudio. Y el multijugador corre sobre un **WebSocket implementado a mano** (handshake SHA-1 y frames RFC 6455 sobre `net`/`http` de Node).
 
@@ -21,6 +21,9 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 
 ## ✨ Características
 
+- **Dos modos de juego seleccionables desde el menú**:
+  - 🏔 **Isométrico** — el mundo abierto cooperativo de siempre (vista 2:1, exploración, aldeas, construcción, multijugador).
+  - ⛏ **2D lateral (tipo Terraria)** — un mundo de columnas con gravedad real: cavas hacia abajo, descubres **cuevas** y **vetas de carbón y hierro**, construyes y saltas por plataformas. El héroe se dibuja con el **rig articulado de perfil** (camina con zancada, salta con pose fetal), y el subsuelo se oscurece con un **halo de visión** alrededor de ti. Comparte inventario, items, crafteo, audio y guardado con el modo iso. (Single-player en esta primera versión.)
 - **Mundo infinito por chunks** con biomas de ruido fractal determinista: océanos, praderas, bosques (con árboles frutales), desiertos, tundras y montañas. La misma semilla genera siempre el mismo mundo.
 - **Render HD "Diorama iluminado"**: el mundo se dibuja a resolución nativa y suavizada (adiós al escalado pixelado) y pasa por una cadena de post sobre Canvas 2D — **bloom** de altas luces (fuegos, horno, altar, agua y atardecer "sangran" luz), **oclusión de contacto** y **sombras direccionales** que siguen al sol, **agua reflectante** (refleja el cielo, especular animado y espuma de orilla), **rim light** de luna y **tilt-shift** que convierte la escena en una maqueta. Todo procedural, sin dependencias, con tres niveles de calidad (`CFG.GFX`).
 - **Vista isométrica 2:1** con orden de profundidad, cámara suave e iluminación nocturna real (las luces abren agujeros en la oscuridad).
@@ -63,8 +66,9 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 | **Clic izquierdo** | Ir ahí · talar/picar · atacar · hablar con comerciantes (estilo MOBA) |
 | Clic izquierdo (mantener) | Arrastrar para moverte |
 | **Clic derecho** | Colocar · comer · recoger producción |
-| **`Espacio`** | **Saltar** (arco con peso; sobrevuela charcos y huecos de 1 casilla) |
-| `WASD` / flechas | Moverse a mano (alternativa) |
+| **`Espacio`** | **Saltar** (iso: arco con peso, sobrevuela charcos; 2D: salto de plataformas con altura variable) |
+| `WASD` / flechas | Moverse a mano (en el modo 2D, `A`/`D` para correr) |
+| **Clic (modo 2D)** | Izquierdo: **picar** el tile apuntado · Derecho: **colocar** el material seleccionado |
 | `1–9` / rueda | Seleccionar en la barra rápida |
 | `E` | Inventario, fabricación y construcciones |
 | `T` | Chat (online) |
@@ -81,13 +85,15 @@ js/
   config.js          datos: tiles, objetos, items, recetas, enemigos, jefe
   assets.js          TODO el pixel art, generado en canvas al vuelo
   audio.js           sintetizador WebAudio
-  world.js           chunks infinitos + biomas + edificios + ruinas + aldeas
+  world.js           chunks infinitos + biomas + edificios + ruinas + aldeas (modo iso)
+  world2d.js         mundo 2D por columnas: superficie, cuevas y vetas (modo Terraria)
   path.js            pathfinding A* acotado para el click-to-move
   inventory.js       inventario y crafteo
   entities.js        jugador, enemigos (3 IAs), jefe, flechas, drops
   npc.js             comerciantes: aparición por aldea, diálogo (LLM/procedural), comercio
   input.js           teclado, ratón y chat
   renderer.js        proyección isométrica, culling, luces, jugadores remotos
+  side.js            modo 2D: física de plataformas (gravedad/AABB), cámara y render laterales, picar/colocar
   ui.js              HUD, paneles, minimapa, chat, barra del jefe
   save.js            persistencia local (un jugador y por-mundo online)
   net.js             cliente multijugador
@@ -112,6 +118,7 @@ Sin build, sin framework, sin `npm install`. Nada de dependencias: ni en el clie
 - [x] Fauna pasiva (conejos y ciervos), carne y cocinar
 - [x] Atmósfera: ciclo de color día/noche, viento, partículas ambientales y viñeta
 - [x] Clima dinámico (lluvia, tormentas con relámpagos, nieve por bioma)
+- [x] Modo 2D lateral tipo Terraria (mundo por columnas, gravedad, cuevas, minerales, picar/colocar)
 - [ ] Cuentas Google (Firebase) y partidas en la nube — ver [DEPLOY.md](DEPLOY.md)
 - [ ] Reintroducir el jefe como evento opcional
 - [ ] Soporte táctil para móvil

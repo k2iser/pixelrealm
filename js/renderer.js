@@ -15,6 +15,7 @@ function s2w(sx, sy) {
 }
 
 function hoveredTile() {
+  if (G.mode === 'side') return hoveredTile2d();
   const w = s2w(Input.mx - cam.ox, Input.my - cam.oy);
   return { tx: Math.floor(w.x), ty: Math.floor(w.y), wx: w.x, wy: w.y };
 }

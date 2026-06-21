@@ -42,7 +42,8 @@ function setupInput(canvas) {
     } else if (k === '-') {
       setZoom(G.zoom - 1);
     } else if (k === ' ') {
-      if (!UI.panelOpen && !UI.dialogOpen && !UI.chatOpen && !player.dead) tryJump();
+      // en modo 2D el salto lo gestiona update2d leyendo Input.keys[' ']
+      if (G.mode !== 'side' && !UI.panelOpen && !UI.dialogOpen && !UI.chatOpen && !player.dead) tryJump();
     }
   });
 
@@ -70,8 +71,10 @@ function setupInput(canvas) {
     if (e.button === 0) {
       Input.mdown = true;
       Input.mdownT = 0;
+      if (G.mode === 'side') return;      // 2D: picar se gestiona mientras mdown en update2d
       issueClickCommand(hoveredTile());   // mover / interactuar (estilo LoL)
     } else if (e.button === 2) {
+      if (G.mode === 'side') { placeAt2d(); return; }   // 2D: clic derecho coloca tile
       tryUseItem();                       // usar / colocar lo que llevas en la mano
     }
   });
