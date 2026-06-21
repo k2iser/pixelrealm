@@ -86,7 +86,59 @@ class World2D {
     for (let ly = 0; ly < N; ly++) {
       for (let lx = 0; lx < N; lx++) ground[ly * N + lx] = this.genCell(cx * N + lx, cy * N + ly);
     }
+    this.stampStructures(cx, cy, ground, N);   // casas/pueblos + salas de cueva
     return { cx, cy, ground, modified: false, _b64: null };
+  }
+
+  // ¿hay una casa anclada (esquina izq) en la columna gx? (terreno plano, biomas habitables)
+  houseAnchor(gx) {
+    const s = (this.seed + 4242) >>> 0, HW = 7, GAP = 7;
+    if (hash2(gx, 0, s) >= 0.055) return false;
+    for (let k = 1; k < HW + GAP; k++) if (hash2(gx - k, 0, s) < 0.055) return false;   // espaciado
+    const base = this.surfaceY(gx);
+    for (let k = 1; k < HW; k++) if (Math.abs(this.surfaceY(gx + k) - base) > 1) return false;  // terreno plano
+    const b = this.biomeAt(gx);
+    return b === 'plains' || b === 'forest' || b === 'jungle' || b === 'snow';
+  }
+  // ¿hay una sala de cueva anclada (esquina sup-izq) en (gx,gy)? (lattice profundo)
+  roomAnchor(gx, gy) {
+    if (gx % 11 !== 0 || gy % 8 !== 0) return false;
+    const surf = this.surfaceY(gx);
+    if (gy < surf + 14 || gy > this.BOTTOM - 12) return false;     // solo en cuevas, no muy al fondo
+    return hash2(gx, gy, (this.seed + 7777) >>> 0) < 0.16;
+  }
+  stampStructures(cx, cy, ground, N) {
+    const baseX = cx * N, baseY = cy * N;
+    const set = (gx, gy, mat) => { const lx = gx - baseX, ly = gy - baseY; if (lx >= 0 && lx < N && ly >= 0 && ly < N) ground[ly * N + lx] = mat; };
+    // --- casas de superficie (y pueblos por agrupación) ---
+    for (let gx = baseX - 8; gx < baseX + N + 8; gx++) {
+      if (!this.houseAnchor(gx)) continue;
+      const HW = 7, HH = 5, base = this.surfaceY(gx), top = base - HH, floor = base - 1;
+      const roof = this.biomeAt(gx) === 'snow' ? T.STONE : T.WOOD;
+      for (let lx = 0; lx < HW; lx++) for (let ry = top; ry <= floor; ry++) {
+        const ly = ry - top, perim = (lx === 0 || lx === HW - 1 || ly === 0 || ly === HH - 1);
+        const door = (lx === 1 && (ly === HH - 1 || ly === HH - 2));
+        if (door) set(gx + lx, ry, T.AIR);
+        else if (perim) set(gx + lx, ry, ly === 0 ? roof : T.WOOD);
+        else set(gx + lx, ry, T.AIR);
+      }
+      set(gx + HW - 2, floor - 1, T.TORCH);                          // antorcha interior
+      for (let lx = 1; lx < HW - 1; lx++) set(gx + lx, base, T.WOOD); // refuerzo del suelo sobre la hierba
+    }
+    // --- salas/viviendas de cueva (dwarf-holds sepultados) ---
+    for (let gx = baseX - 12; gx < baseX + N + 12; gx++) {
+      for (let gy = baseY - 10; gy < baseY + N + 10; gy++) {
+        if (!this.roomAnchor(gx, gy)) continue;
+        const RW = 9, RH = 6;
+        for (let lx = 0; lx < RW; lx++) for (let ly = 0; ly < RH; ly++) {
+          const perim = (lx === 0 || lx === RW - 1 || ly === 0 || ly === RH - 1);
+          set(gx + lx, gy + ly, perim ? T.BRICK : T.AIR);
+        }
+        set(gx + 1, gy + RH - 2, T.TORCH); set(gx + RW - 2, gy + RH - 2, T.TORCH);  // antorchas
+        const doorY = gy + RH - 2;                                                   // puerta lateral
+        set(gx, doorY, T.AIR); set(gx, doorY - 1, T.AIR);
+      }
+    }
   }
 
   evict() {

@@ -70,6 +70,28 @@ function tile2d(mat, variant) {
     _tile2dCache[key] = c;
     return c;
   }
+  if (mat === T.WOOD || mat === T.PLATFORM) {
+    // tablones de madera (estructuras y construcciones)
+    const step = Math.max(4, (TS / 4) | 0);
+    g.fillStyle = '#7a5230'; g.fillRect(0, 0, TS, TS);
+    g.fillStyle = '#5e3f24'; for (let y = 0; y < TS; y += step) g.fillRect(0, y, TS, 1);
+    g.fillStyle = '#8a6238'; for (let y = 1; y < TS; y += step) g.fillRect(0, y, TS, 1);
+    g.fillStyle = '#4e3320'; for (let i = 0; i < 6; i++) { const x = hash2(i, 1, variant * 5 + 2) * TS | 0, y = hash2(i, 2, variant * 5 + 2) * TS | 0; g.fillRect(x, y, 1, 1); }
+    _tile2dCache[key] = c; return c;
+  }
+  if (mat === T.BRICK) {
+    // ladrillo de piedra (dwarf-holds / viviendas de cueva)
+    const bh = Math.max(3, (TS / 4) | 0);
+    g.fillStyle = '#585463'; g.fillRect(0, 0, TS, TS);
+    g.strokeStyle = '#3a3744'; g.lineWidth = 1;
+    for (let y = 0; y < TS; y += bh) {
+      g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(TS, y + 0.5); g.stroke();
+      const off = ((y / bh) & 1) ? (TS / 2) : 0;
+      for (let x = off; x <= TS; x += TS / 2) { g.beginPath(); g.moveTo(x + 0.5, y); g.lineTo(x + 0.5, y + bh); g.stroke(); }
+    }
+    g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, 0, TS, 1);
+    _tile2dCache[key] = c; return c;
+  }
   // piedra y vetas: rocosa procedural con variantes (evita el bandeado del atlas)
   if (mat === T.STONE || mat === T.COAL_ORE || mat === T.IRON_ORE || mat === T.CRYSTAL) {
     rockyStone(g, TS, variant);
