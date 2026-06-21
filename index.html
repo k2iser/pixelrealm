@@ -149,8 +149,7 @@
   <div id="title-overlay" class="overlay">
     <div class="title-wrap">
       <div class="cover-col">
-        <img id="cover-art" class="cover-art" src="assets/cover.webp" alt="Pixel Realms"
-             onerror="this.style.display='none';var f=document.getElementById('cover-fallback');if(f)f.style.display='flex';">
+        <canvas id="cover-art" class="cover-art" width="380" height="400" role="img" aria-label="Pixel Realms"></canvas>
         <div id="cover-fallback" class="cover-fallback"><h1 class="logo">PIXEL<span>REALMS</span></h1></div>
       </div>
       <div class="panel-col">
@@ -204,5 +203,6 @@
 <script src="js/save.js"></script>
 <script src="js/net.js"></script>
 <script src="js/main.js"></script>
+<script src="js/titlecover.js"></script>
 </body>
 </html>
