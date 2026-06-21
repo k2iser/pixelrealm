@@ -286,121 +286,129 @@ function makeCube(topCols, leftCol, leftDark, rightCol, rightDark, seed, stripeE
    { skin, hair (color), style (peinado), shirt, pants }.
    Poses: 0 quieto, 1-4 ciclo de andar (contacto, paso, contacto, paso), 5 ataque. */
 
+// Paleta del héroe derivada del look (centralizada para frames planos y rig)
+function heroPal(look) {
+  const skin = HERO_SKINS[look.skin], hair = HERO_HAIRC[look.hair],
+        shirt = HERO_COLORS[look.shirt], pants = HERO_PANTS[look.pants];
+  return {
+    skin, skinD: shade(skin, 0.85), skinL: glow(skin, 1.08),
+    hair, hairL: glow(hair, 1.3), hairD: shade(hair, 0.72),
+    shirt, shirtD: shade(shirt, 0.74), shirtL: glow(shirt, 1.14),
+    pants, pantsD: shade(pants, 0.76),
+    boots: '#5d4427', bootsD: shade('#5d4427', 0.74), belt: '#2a2018', buckle: '#e8c14d',
+    cape: shade(shirt, 0.5), capeD: shade(shirt, 0.34), capeL: shade(shirt, 0.64),
+    hood: hair, hoodD: shade(hair, 0.72), hoodL: glow(hair, 1.3),
+    faceSh: shade(skin, 0.55),
+    cuff: darken(shirt, 0.6),
+  };
+}
+// Helpers de dibujo por PARTE (mismas R(...) de siempre). 'g' ya trae translate(0,18).
+function _R(g, x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
+function hpCape(g, dir, P, bob) {
+  if (dir === 'up') {
+    _R(g, 15, 28 + bob, 26, 42, P.cape); _R(g, 15, 28 + bob, 4, 42, P.capeD); _R(g, 37, 28 + bob, 4, 42, P.capeD);
+    _R(g, 21, 30 + bob, 6, 32, P.capeL); _R(g, 15, 68 + bob, 5, 4, P.capeD); _R(g, 25, 70 + bob, 6, 3, P.capeD); _R(g, 35, 68 + bob, 5, 4, P.capeD);
+  } else {
+    _R(g, 16, 30 + bob, 24, 7, P.cape); _R(g, 16, 30 + bob, 4, 7, P.capeD); _R(g, 36, 30 + bob, 4, 7, P.capeD);
+    _R(g, 13, 50 + bob, 6, 24, P.cape); _R(g, 37, 50 + bob, 6, 24, P.cape);
+    _R(g, 13, 50 + bob, 2, 24, P.capeD); _R(g, 41, 50 + bob, 2, 24, P.capeD);
+    _R(g, 13, 70 + bob, 6, 4, P.capeD); _R(g, 37, 70 + bob, 6, 4, P.capeD);
+  }
+}
+function hpLeg(g, P, x, off) {   // una pierna (pantalón + bota) en columna x
+  _R(g, x, 56 + off, 8, 14, P.pants); _R(g, x, 56 + off, 2, 14, P.pantsD);
+  _R(g, x, 68 + off, 8, 8, P.boots); _R(g, x, 74 + off, 8, 2, P.bootsD); _R(g, x + 1, 69 + off, 3, 1, '#7a5e3a');
+}
+function hpTorso(g, P, bob) {
+  _R(g, 14, 28 + bob, 28, 26, P.shirt); _R(g, 36, 28 + bob, 6, 26, P.shirtD); _R(g, 15, 29 + bob, 3, 24, P.shirtL);
+  _R(g, 24, 28 + bob, 8, 3, P.shirtD); _R(g, 26, 31 + bob, 4, 2, P.skin); _R(g, 14, 50 + bob, 28, 4, P.shirtD);
+  _R(g, 14, 46 + bob, 28, 2, P.belt); _R(g, 26, 46 + bob, 4, 2, P.buckle); _R(g, 26, 46 + bob, 1, 1, '#fff2b8');
+}
+function hpArm(g, P, x, off) {   // un brazo simple (no ataque) en columna x
+  _R(g, x, 30 + off, 6, 22, P.shirtD); _R(g, x, 46 + off, 6, 6, P.skin); _R(g, x, 44 + off, 6, 1, P.cuff);
+}
+function hpArmsAttack(g, dir, P, bob) {
+  if (dir === 'left') {
+    _R(g, 0, 32 + bob, 16, 6, P.shirtD); _R(g, 0, 32 + bob, 6, 6, P.skin);
+    _R(g, 42, 30 + bob, 6, 18, P.shirtD); _R(g, 42, 42 + bob, 6, 6, P.skin);
+  } else if (dir === 'right') {
+    _R(g, 40, 32 + bob, 16, 6, P.shirtD); _R(g, 50, 32 + bob, 6, 6, P.skin);
+    _R(g, 8, 30 + bob, 6, 18, P.shirtD); _R(g, 8, 42 + bob, 6, 6, P.skin);
+  } else if (dir === 'down') {
+    _R(g, 8, 36 + bob, 6, 18, P.shirtD); _R(g, 8, 48 + bob, 6, 6, P.skin);
+    _R(g, 42, 36 + bob, 6, 18, P.shirtD); _R(g, 42, 48 + bob, 6, 6, P.skin);
+  } else {
+    _R(g, 42, 16 + bob, 6, 18, P.shirtD); _R(g, 42, 16 + bob, 6, 6, P.skin);
+    _R(g, 8, 30 + bob, 6, 18, P.shirtD); _R(g, 8, 42 + bob, 6, 6, P.skin);
+  }
+}
+function hpHead(g, dir, P, bob) {
+  const EYE = '#79e0ff', EYEC = '#ecffff';
+  if (dir === 'up') {
+    _R(g, 16, 2 + bob, 24, 22, P.hood); _R(g, 16, 2 + bob, 24, 3, P.hoodD);
+    _R(g, 20, 4 + bob, 11, 2, P.hoodL); _R(g, 16, 21 + bob, 24, 3, P.hoodD); _R(g, 24, 24 + bob, 8, 2, P.skinD);
+  } else {
+    _R(g, 17, 11 + bob, 22, 15, P.faceSh); _R(g, 18, 24 + bob, 18, 2, P.skinD); _R(g, 24, 26 + bob, 8, 2, P.skinD);
+    _R(g, 15, 1 + bob, 26, 11, P.hood); _R(g, 15, 1 + bob, 26, 2, P.hoodL);
+    _R(g, 15, 3 + bob, 3, 22, P.hood); _R(g, 38, 3 + bob, 3, 22, P.hood);
+    _R(g, 15, 3 + bob, 2, 22, P.hoodD); _R(g, 39, 3 + bob, 2, 22, P.hoodD);
+    _R(g, 16, 11 + bob, 24, 2, P.hoodD);
+    if (dir === 'down') {
+      _R(g, 37, 9 + bob, 4, 5, P.hoodD);
+      _R(g, 20, 15 + bob, 4, 3, EYE); _R(g, 21, 15 + bob, 2, 2, EYEC);
+      _R(g, 32, 15 + bob, 4, 3, EYE); _R(g, 33, 15 + bob, 2, 2, EYEC);
+    } else if (dir === 'left') {
+      _R(g, 15, 5 + bob, 9, 6, P.hood); _R(g, 15, 5 + bob, 9, 2, P.hoodL);
+      _R(g, 18, 15 + bob, 4, 3, EYE); _R(g, 19, 15 + bob, 2, 2, EYEC);
+    } else {
+      _R(g, 32, 5 + bob, 9, 6, P.hood); _R(g, 32, 5 + bob, 9, 2, P.hoodL);
+      _R(g, 34, 15 + bob, 4, 3, EYE); _R(g, 35, 15 + bob, 2, 2, EYEC);
+    }
+  }
+}
+
 function makeHeroFrame(dir, pose, look) {
   const [hi, g] = cv(56, 96);   // +16px de cabecera (capa al viento, pelo, pose de salto, estelas)
-  // sombras con matiz desplazado al azul y brillos cálidos (pixel art clásico)
-  const skin = HERO_SKINS[look.skin], skinD = shade(skin, 0.85), skinL = glow(skin, 1.08),
-        hair = HERO_HAIRC[look.hair], hairL = glow(hair, 1.3), hairD = shade(hair, 0.72),
-        shirt = HERO_COLORS[look.shirt], shirtD = shade(shirt, 0.74), shirtL = glow(shirt, 1.14),
-        pants = HERO_PANTS[look.pants], pantsD = shade(pants, 0.76),
-        boots = '#5d4427', bootsD = shade('#5d4427', 0.74), belt = '#2a2018',
-        buckle = '#e8c14d', eyeW = '#f4f4f8', eye = '#20202e';
+  const P = heroPal(look);
   g.translate(0, 18); // baja el contenido para dejar 16px de cabecera y mantener los pies abajo
-  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
 
   let lLeg = 0, rLeg = 0, lArm = 0, rArm = 0, bob = 0;
   if (pose === 1) { lLeg = -4; lArm = 4; rArm = -4; }
   else if (pose === 3) { rLeg = -4; lArm = -4; rArm = 4; }
   else if (pose === 2 || pose === 4) { bob = -2; }
-  else if (pose === 6) { lLeg = -7; rLeg = -5; lArm = -4; rArm = -4; bob = -1; }  // salto: piernas recogidas, brazos arriba
+  else if (pose === 6) { lLeg = -7; rLeg = -5; lArm = -4; rArm = -4; bob = -1; }  // salto
 
-  // --- capa/manto (detrás del cuerpo; se mece con el shear de la animación y el salto) ---
-  const cape = shade(shirt, 0.5), capeD = shade(shirt, 0.34), capeL = shade(shirt, 0.64);
-  if (dir === 'up') {
-    R(15, 28 + bob, 26, 42, cape);                 // de espaldas: capa prominente
-    R(15, 28 + bob, 4, 42, capeD); R(37, 28 + bob, 4, 42, capeD);
-    R(21, 30 + bob, 6, 32, capeL);                 // pliegue iluminado
-    R(15, 68 + bob, 5, 4, capeD); R(25, 70 + bob, 6, 3, capeD); R(35, 68 + bob, 5, 4, capeD); // bajo raído
-  } else {
-    R(16, 30 + bob, 24, 7, cape);                  // capa sobre los hombros
-    R(16, 30 + bob, 4, 7, capeD); R(36, 30 + bob, 4, 7, capeD);
-    R(13, 50 + bob, 6, 24, cape); R(37, 50 + bob, 6, 24, cape);   // faldón flanqueando las piernas
-    R(13, 50 + bob, 2, 24, capeD); R(41, 50 + bob, 2, 24, capeD);
-    R(13, 70 + bob, 6, 4, capeD); R(37, 70 + bob, 6, 4, capeD);   // bajo raído
-  }
+  hpCape(g, dir, P, bob);
+  hpLeg(g, P, 18, lLeg); hpLeg(g, P, 30, rLeg);
+  hpTorso(g, P, bob);
+  if (pose === 5) hpArmsAttack(g, dir, P, bob);
+  else { hpArm(g, P, 8, bob + lArm); hpArm(g, P, 42, bob + rArm); }
+  hpHead(g, dir, P, bob);
 
-  // --- piernas y botas ---
-  R(18, 56 + lLeg, 8, 14, pants); R(18, 56 + lLeg, 2, 14, pantsD);
-  R(18, 68 + lLeg, 8, 8, boots); R(18, 74 + lLeg, 8, 2, bootsD); R(19, 69 + lLeg, 3, 1, '#7a5e3a');
-  R(30, 56 + rLeg, 8, 14, pants); R(36, 56 + rLeg, 2, 14, pantsD);
-  R(30, 68 + rLeg, 8, 8, boots); R(30, 74 + rLeg, 8, 2, bootsD); R(31, 69 + rLeg, 3, 1, '#7a5e3a');
-
-  // --- torso ---
-  R(14, 28 + bob, 28, 26, shirt);
-  R(36, 28 + bob, 6, 26, shirtD);                 // sombreado lateral (matiz frío)
-  R(15, 29 + bob, 3, 24, shirtL);                 // luz cálida del otro lado
-  R(24, 28 + bob, 8, 3, shirtD);                  // cuello en V
-  R(26, 31 + bob, 4, 2, skin);                    // escote
-  R(14, 50 + bob, 28, 4, shirtD);                 // bajo de la túnica
-  R(14, 46 + bob, 28, 2, belt);
-  R(26, 46 + bob, 4, 2, buckle); R(26, 46 + bob, 1, 1, '#fff2b8');
-
-  // --- brazos ---
-  if (pose === 5) {
-    if (dir === 'left') {
-      R(0, 32 + bob, 16, 6, shirtD); R(0, 32 + bob, 6, 6, skin);
-      R(42, 30 + bob, 6, 18, shirtD); R(42, 42 + bob, 6, 6, skin);
-    } else if (dir === 'right') {
-      R(40, 32 + bob, 16, 6, shirtD); R(50, 32 + bob, 6, 6, skin);
-      R(8, 30 + bob, 6, 18, shirtD); R(8, 42 + bob, 6, 6, skin);
-    } else if (dir === 'down') {
-      R(8, 36 + bob, 6, 18, shirtD); R(8, 48 + bob, 6, 6, skin);
-      R(42, 36 + bob, 6, 18, shirtD); R(42, 48 + bob, 6, 6, skin);
-    } else {
-      R(42, 16 + bob, 6, 18, shirtD); R(42, 16 + bob, 6, 6, skin);
-      R(8, 30 + bob, 6, 18, shirtD); R(8, 42 + bob, 6, 6, skin);
-    }
-  } else {
-    R(8, 30 + bob + lArm, 6, 22, shirtD);
-    R(8, 46 + bob + lArm, 6, 6, skin);
-    R(8, 44 + bob + lArm, 6, 1, darken(shirt, 0.6));   // puño de la manga
-    R(42, 30 + bob + rArm, 6, 22, shirtD);
-    R(42, 46 + bob + rArm, 6, 6, skin);
-    R(42, 44 + bob + rArm, 6, 1, darken(shirt, 0.6));
-  }
-
-  // --- cabeza ENCAPUCHADA (silueta Dead Cells: capucha + ojos cian emisivos) ---
-  // El color de "pelo" del editor pasa a teñir la CAPUCHA. Los ojos no son editables:
-  // cian brillante que enciende el bloom HD de noche.
-  const hood = hair, hoodD = hairD, hoodL = hairL;
-  const faceSh = shade(skin, 0.55);               // cara en penumbra bajo la capucha
-  const EYE = '#79e0ff', EYEC = '#ecffff';        // ojo cian + núcleo casi blanco
-  if (dir === 'up') {
-    // de espaldas: solo la capucha y un mechón en la nuca
-    R(16, 2 + bob, 24, 22, hood);
-    R(16, 2 + bob, 24, 3, hoodD);
-    R(20, 4 + bob, 11, 2, hoodL);                 // brillo superior
-    R(16, 21 + bob, 24, 3, hoodD);                // sombra del borde
-    R(24, 24 + bob, 8, 2, skinD);                 // cuello
-  } else {
-    // base de cara en sombra
-    R(17, 11 + bob, 22, 15, faceSh);
-    R(18, 24 + bob, 18, 2, skinD);                // mandíbula
-    R(24, 26 + bob, 8, 2, skinD);                 // cuello
-    // capucha: copa + laterales que enmarcan la cara, con pico hacia delante
-    R(15, 1 + bob, 26, 11, hood);                 // copa
-    R(15, 1 + bob, 26, 2, hoodL);                 // luz superior
-    R(15, 3 + bob, 3, 22, hood); R(38, 3 + bob, 3, 22, hood);  // laterales
-    R(15, 3 + bob, 2, 22, hoodD); R(39, 3 + bob, 2, 22, hoodD);
-    R(16, 11 + bob, 24, 2, hoodD);                // sombra del borde sobre la frente
-    if (dir === 'down') {
-      R(37, 9 + bob, 4, 5, hoodD);                // pico/sombra lateral
-      R(20, 15 + bob, 4, 3, EYE); R(21, 15 + bob, 2, 2, EYEC);
-      R(32, 15 + bob, 4, 3, EYE); R(33, 15 + bob, 2, 2, EYEC);
-    } else if (dir === 'left') {
-      R(15, 5 + bob, 9, 6, hood);                 // la capucha de perfil tapa el lado lejano
-      R(15, 5 + bob, 9, 2, hoodL);
-      R(18, 15 + bob, 4, 3, EYE); R(19, 15 + bob, 2, 2, EYEC);
-    } else { // right
-      R(32, 5 + bob, 9, 6, hood);
-      R(32, 5 + bob, 9, 2, hoodL);
-      R(34, 15 + bob, 4, 3, EYE); R(35, 15 + bob, 2, 2, EYEC);
-    }
-  }
-
-  // contorno violáceo oscuro alrededor de toda la silueta
   outlineSprite(hi, '#241a2e');
   return scaleSmooth(hi, 28, 48);
+}
+
+// --- RIG 2D: piezas sueltas del héroe para animación articulada en tiempo real ---
+// Cada pieza es un lienzo 56x96 (sin contorno ni escala: el contorno se aplica
+// UNA vez al cuerpo ya ensamblado). Pivotes = articulación con el cuerpo (coords
+// del lienzo 56x96, ya con el translate(0,18) aplicado).
+const RIG_PIVOTS = {
+  cape: [28, 48], torso: [28, 58], head: [28, 44],
+  legL: [22, 74], legR: [34, 74], armL: [11, 48], armR: [45, 48],
+};
+function bakeHeroParts(dir, look) {
+  const P = heroPal(look);
+  const mk = (fn) => { const [c, g] = cv(56, 96); g.translate(0, 18); fn(g); return c; };
+  return {
+    cape: mk(g => hpCape(g, dir, P, 0)),
+    legL: mk(g => hpLeg(g, P, 18, 0)),
+    legR: mk(g => hpLeg(g, P, 30, 0)),
+    torso: mk(g => hpTorso(g, P, 0)),
+    head: mk(g => hpHead(g, dir, P, 0)),
+    armL: mk(g => hpArm(g, P, 8, 0)),
+    armR: mk(g => hpArm(g, P, 42, 0)),
+  };
 }
 
 // Set completo del héroe para un look (cacheado; los looks vienen saneados)
@@ -408,9 +416,10 @@ function getHeroLookSet(rawLook) {
   const look = clampLook(rawLook);
   const key = 's' + look.skin + 'h' + look.hair + 'y' + look.style + 'c' + look.shirt + 'p' + look.pants;
   if (Assets.heroSets[key]) return Assets.heroSets[key];
-  const set = {};
+  const set = { rig: {}, _key: key };
   for (const dir of ['down', 'up', 'left', 'right']) {
     set[dir] = [0, 1, 2, 3, 4, 5, 6].map(p => makeHeroFrame(dir, p, look));
+    set.rig[dir] = bakeHeroParts(dir, look);
   }
   Assets.heroSets[key] = set;
   return set;

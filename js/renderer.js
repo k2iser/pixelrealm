@@ -725,7 +725,7 @@ function computeLivePose(anim, dir) {
   if (anim.moving) {
     const at = anim.animT || 0;
     const step = Math.abs(Math.sin(at * 11));          // 1 en la elevación, 0 al apoyar
-    bob -= step * 2.2;                                  // bote del cuerpo al andar
+    bob -= step * (anim.rigged ? 0.7 : 2.2);           // bote global (reducido si el rig ya bota las piernas)
     shear += Math.sin(at * 5.5) * 0.05;                 // contoneo
     sy *= 1 - (1 - step) * 0.05;                        // aplaste al apoyar el pie
     sx *= 1 + (1 - step) * 0.04;
@@ -763,12 +763,90 @@ function computeLivePose(anim, dir) {
   return { sxScale: sx, syScale: sy, shearX: shear, bobY: bob };
 }
 
+// ===== RIG 2D: ensambla el cuerpo a partir de piezas (movimiento articulado) =====
+// El cuerpo se compone a un buffer 56x96, se contornea UNA vez y se reduce a
+// 28x48; el compuesto se cachea por (look,dir,bucket) para que toda la cadena de
+// efectos (sombra/cast-shadow/rim/estela) siga recibiendo UN sprite estable.
+const _rigCache = new Map();
+let _rigScratchCv = null, _rigScratchG = null;
+function rigScratch() {
+  if (!_rigScratchCv) { _rigScratchCv = document.createElement('canvas'); _rigScratchCv.width = 56; _rigScratchCv.height = 96; _rigScratchG = _rigScratchCv.getContext('2d'); }
+  return _rigScratchG;
+}
+// Ángulos/desplazamientos por pieza según el estado (pose discreta = cacheable).
+function rigPoseFor(dir, st) {
+  const P = { cape: { rot: 0, dx: 0, dy: 0 }, torso: { rot: 0, dx: 0, dy: 0 }, head: { rot: 0, dx: 0, dy: 0 },
+    legL: { rot: 0, dx: 0, dy: 0 }, legR: { rot: 0, dx: 0, dy: 0 }, armL: { rot: 0, dx: 0, dy: 0 }, armR: { rot: 0, dx: 0, dy: 0 } };
+  const prof = dir === 'left' || dir === 'right';
+  if (st.kind === 'walk') {
+    const ph = st.ph;
+    if (prof) {                                   // perfil: zancada por rotación
+      P.legL.rot = Math.sin(ph) * 0.5; P.legR.rot = Math.sin(ph + Math.PI) * 0.5;
+      P.armL.rot = Math.sin(ph + Math.PI) * 0.45; P.armR.rot = Math.sin(ph) * 0.45;
+    } else {                                       // frente/espalda: marcha por elevación
+      P.legL.dy = -Math.max(0, Math.sin(ph)) * 4; P.legL.rot = Math.sin(ph) * 0.16;
+      P.legR.dy = -Math.max(0, Math.sin(ph + Math.PI)) * 4; P.legR.rot = Math.sin(ph + Math.PI) * 0.16;
+      P.armL.rot = Math.sin(ph + Math.PI) * 0.30; P.armR.rot = Math.sin(ph) * 0.30;
+    }
+    P.torso.rot = -Math.sin(ph) * 0.05;            // contrarrotación de hombros
+    P.head.rot = Math.sin(ph) * 0.03; P.head.dy = -Math.abs(Math.sin(ph * 2)) * 1.0;   // cabeceo (2x)
+    P.cape.rot = Math.sin(ph * 0.5) * 0.06;
+  } else if (st.kind === 'jump') {
+    const a = st.air;
+    P.legL.dy = -3 - a * 3; P.legR.dy = -2 - a * 3; P.legL.rot = 0.34; P.legR.rot = -0.24;  // piernas recogidas
+    P.armL.rot = -0.55; P.armR.rot = 0.55; P.cape.rot = -0.35 - a * 0.25; P.head.dy = -1;
+  } else if (st.kind === 'atk') {
+    const w = Math.sin(st.prog * Math.PI), s = (dir === 'left') ? -1 : 1;
+    const near = (dir === 'left') ? 'armL' : 'armR';
+    P[near].rot = (st.prog < 0.3 ? -0.5 * (st.prog / 0.3) : 0.95 * w) * s;   // anticipación + latigazo
+    P.torso.rot = -0.06 * w * s;
+  }
+  return P;
+}
+// Devuelve el compuesto 28x48 articulado para este estado de animación (cacheado).
+function assembleHero(set, dir, anim, lookKey) {
+  const grounded = anim.grounded !== false;
+  let st, bucket;
+  if ((anim.swingT || 0) > 0) { const pr = clamp(1 - anim.swingT / 0.18, 0, 1); const q = Math.round(pr * 5); st = { kind: 'atk', prog: q / 5 }; bucket = 'a' + q; }
+  else if (!grounded) { const q = Math.round(clamp((anim.z || 0) * 1.0, 0, 1) * 3); st = { kind: 'jump', air: q / 3 }; bucket = 'j' + q; }
+  else if (anim.moving) { const N = 12, raw = (anim.animT || 0) * 9 / (Math.PI * 2); const fq = ((Math.round(raw * N) % N) + N) % N; st = { kind: 'walk', ph: fq / N * Math.PI * 2 }; bucket = 'w' + fq; }
+  else { st = { kind: 'idle' }; bucket = 'i'; }
+  const key = lookKey + '|' + dir + '|' + bucket;
+  const hit = _rigCache.get(key);
+  if (hit) return hit;
+  const parts = set.rig[dir];
+  const g = rigScratch();
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, 56, 96);
+  const rp = rigPoseFor(dir, st);
+  const order = dir === 'up' ? ['legL', 'legR', 'torso', 'armL', 'armR', 'cape', 'head']
+    : ['cape', 'legL', 'legR', 'torso', 'armL', 'armR', 'head'];
+  for (const k of order) {
+    const p = rp[k], piv = RIG_PIVOTS[k];
+    g.save();
+    g.translate(piv[0] + (p.dx || 0), piv[1] + (p.dy || 0));
+    if (p.rot) g.rotate(p.rot);
+    g.drawImage(parts[k], -piv[0], -piv[1]);
+    g.restore();
+  }
+  outlineSprite(_rigScratchCv, '#241a2e');
+  const out = scaleSmooth(_rigScratchCv, 28, 48);
+  if (_rigCache.size > 800) _rigCache.clear();
+  _rigCache.set(key, out);
+  return out;
+}
+
 // Dibuja un héroe (propio o remoto) con su herramienta al golpear.
 // En el agua se dibuja medio sumergido, con ondas en la superficie.
 function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater, anim) {
   // a prueba de estados remotos corruptos: dir/frame inválidos caen al defecto
   const frames = set[dir] || set.down;
-  const img = frames[frameI] || frames[0];
+  let img = frames[frameI] || frames[0];
+  // cuerpo ARTICULADO: el rig sustituye el sprite plano por las piezas ensambladas
+  if (set.rig && set._key && CFG.GFX >= 1 && anim) {
+    anim.rigged = true;
+    img = assembleHero(set, dir, anim, set._key);
+  }
   if (inWater) {
     const cut = Math.floor(img.height * 0.35);
     const bobw = Math.sin(G.elapsed * 3 + sx * 0.05) * 1.5;
