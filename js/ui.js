@@ -282,6 +282,7 @@ const UI = {
       this.helpOpen = false;
       this._swapFrom = -1;
       this.el('tab-creative').classList.toggle('hidden', !G.creative);
+      this.el('tab-build').classList.toggle('hidden', G.mode === 'side');   // los prefabs son iso-only
       this.setTab(G.creative ? 'creative' : 'craft');
       this.refreshInv();
       this.refreshCraft();

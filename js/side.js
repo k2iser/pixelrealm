@@ -12,6 +12,17 @@ function tile2d(mat) {
   if (_tile2dCache[mat]) return _tile2dCache[mat];
   const TS = CFG.TS;
   const [c, g] = cv(TS, TS);
+  if (mat === T.TORCH) {
+    // antorcha sobre fondo transparente: palo + cabeza de llama
+    const cx = TS >> 1;
+    g.fillStyle = '#6b4a2a'; g.fillRect(cx - 1, TS - 9, 2, 8);              // palo
+    g.fillStyle = '#3a2715'; g.fillRect(cx - 1, TS - 9, 1, 8);
+    g.fillStyle = '#ff7a1a'; g.fillRect(cx - 2, TS - 14, 4, 6);            // llama exterior
+    g.fillStyle = '#ffc23a'; g.fillRect(cx - 1, TS - 13, 2, 4);            // llama media
+    g.fillStyle = '#fff0b0'; g.fillRect(cx - 1, TS - 12, 1, 2);            // núcleo
+    _tile2dCache[mat] = c;
+    return c;
+  }
   const speck = (base, dk, lt, salt) => {
     g.fillStyle = base; g.fillRect(0, 0, TS, TS);
     for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
@@ -95,7 +106,8 @@ function updateBreaking2d(dt) {
   const h = hoveredTile2d();
   if (!inReach2d(h)) { player.breaking = null; return; }
   const mat = world.ground(h.tx, h.ty), def = TDEF[mat];
-  if (!def || !def.solid || def.hp === Infinity) { player.breaking = null; return; }
+  // se pueden picar materiales con dureza finita (incluida la antorcha, que no es sólida)
+  if (!def || mat === T.AIR || def.hp == null || def.hp === Infinity) { player.breaking = null; return; }
   if (!player.breaking || player.breaking.tx !== h.tx || player.breaking.ty !== h.ty) player.breaking = { tx: h.tx, ty: h.ty, id: mat, dmg: 0 };
   const tool = (Inv.selected() && ITEMS[Inv.selected().id]) ? ITEMS[Inv.selected().id].tool : null;
   player.breaking.dmg += dt * (G.creative ? 99 : (def.tool && tool === def.tool ? 2.4 : 1.3));
@@ -114,12 +126,17 @@ function updateBreaking2d(dt) {
 function placeAt2d() {
   if (UI.panelOpen || UI.chatOpen || UI.dialogOpen || player.dead) return;
   const sel = Inv.selected(); if (!sel) return;
-  const mat = PLACE2D[sel.id]; if (mat == null) return;
+  const mat = PLACE2D[sel.id];
+  if (mat == null) {                                   // no colocable en 2D: avisa en vez de ignorar
+    if (ITEMS[sel.id] && ITEMS[sel.id].place) UI.toast('Eso no se puede construir en el modo 2D');
+    return;
+  }
   const h = hoveredTile2d();
   if (!inReach2d(h)) return;
   if (world.ground(h.tx, h.ty) !== T.AIR) return;
-  // no colocar dentro del propio cuerpo
-  if (h.tx >= Math.floor(player.x - SIDE.HW) && h.tx <= Math.floor(player.x + SIDE.HW - 1e-4) &&
+  // no colocar un bloque SÓLIDO dentro del propio cuerpo (la antorcha sí, no estorba)
+  if (TDEF[mat] && TDEF[mat].solid &&
+      h.tx >= Math.floor(player.x - SIDE.HW) && h.tx <= Math.floor(player.x + SIDE.HW - 1e-4) &&
       h.ty >= Math.floor(player.y - SIDE.BODY) && h.ty <= Math.floor(player.y - 1e-4)) return;
   world.setGround(h.tx, h.ty, mat);
   if (!G.creative) Inv.consumeSelected(1);
@@ -195,7 +212,8 @@ function render2d(g, W, H) {
   const grad = g.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, side2dSky(true)); grad.addColorStop(1, side2dSky(false));
   g.fillStyle = grad; g.fillRect(0, 0, W, H);
-  // tiles visibles
+  // tiles visibles (y recoge antorchas para iluminar después)
+  const torches = [];
   const col0 = Math.floor(ox) - 1, col1 = Math.ceil(ox + W / TS) + 1;
   const row0 = Math.floor(oy) - 1, row1 = Math.ceil(oy + H / TS) + 1;
   for (let ty = row0; ty <= row1; ty++) {
@@ -203,6 +221,7 @@ function render2d(g, W, H) {
       const m = world.ground(tx, ty);
       if (m === T.AIR) continue;
       g.drawImage(tile2d(m), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
+      if (m === T.TORCH) torches.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS]);
     }
   }
   // partículas (polvo)
@@ -254,7 +273,21 @@ function render2d(g, W, H) {
     lg.globalCompositeOperation = 'destination-out';
     const lr = 6 * TS, lcx = psx, lcy = psy - 0.85 * TS;
     lg.drawImage(veilGlow(), lcx - lr, lcy - lr, lr * 2, lr * 2);
+    // halos de las antorchas colocadas (con parpadeo suave)
+    for (const t of torches) {
+      const flick = (0.9 + 0.1 * Math.sin(G.elapsed * 9 + t[0] * 0.3)) * (TDEF[T.TORCH].light || 6) * TS;
+      lg.drawImage(veilGlow(), t[0] - flick, t[1] - flick, flick * 2, flick * 2);
+    }
     lg.globalCompositeOperation = 'source-over';
     g.drawImage(_lightCv, 0, 0);
+    // resplandor cálido aditivo sobre las antorchas (sobre la escena ya revelada)
+    g.globalCompositeOperation = 'lighter';
+    for (const t of torches) {
+      const r = 2.6 * TS * (0.92 + 0.08 * Math.sin(G.elapsed * 11 + t[1] * 0.2));
+      const rg = g.createRadialGradient(t[0], t[1], 0, t[0], t[1], r);
+      rg.addColorStop(0, 'rgba(255,170,70,0.5)'); rg.addColorStop(1, 'rgba(255,150,60,0)');
+      g.fillStyle = rg; g.fillRect(t[0] - r, t[1] - r, r * 2, r * 2);
+    }
+    g.globalCompositeOperation = 'source-over';
   }
 }

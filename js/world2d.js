@@ -66,7 +66,8 @@ class World2D {
     if (this.chunks.size < 240) return;
     const N = CFG.CHUNK, pcx = Math.floor(this.center.x / N), pcy = Math.floor(this.center.y / N);
     for (const [k, ch] of this.chunks) {
-      if (ch.modified) continue;
+      if (this.chunks.size <= 200) break;   // ya hay holgura: no escanear el Map entero
+      if (ch.modified) continue;            // los chunks editados nunca se desalojan (los necesita el guardado)
       if (Math.abs(ch.cx - pcx) > 7 || Math.abs(ch.cy - pcy) > 7) this.chunks.delete(k);
     }
   }

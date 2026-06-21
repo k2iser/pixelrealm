@@ -899,20 +899,6 @@ function update(dt) {
   }
   if (G.darkness < 0.3) { G.bossWarned = false; G.bossNightDone = false; }
 
-  // --- autoguardado ---
-  G.saveTimer += dt;
-  if (G.saveTimer > CFG.AUTOSAVE) {
-    G.saveTimer = 0;
-    const ok = Save.write();
-    if (ok) {
-      G.saveFailWarned = false;
-      UI.toast('Partida guardada');
-    } else if (!G.saveFailWarned) {
-      G.saveFailWarned = true;
-      UI.toast('⚠ No se pudo guardar (almacenamiento lleno o bloqueado)');
-    }
-  }
-
   G.minimapTimer -= dt;
   if (G.minimapTimer <= 0) {
     G.minimapTimer = 0.5;
@@ -1065,6 +1051,22 @@ const MODES = {
   iso: { update: update, camera: updateCamera, render: render },
   side: { update: update2d, camera: updateCamera2d, render: render2d },
 };
+// autoguardado periódico, compartido por ambos modos (antes vivía dentro de update() iso)
+// Save.write() ya enruta a writeMp() cuando se juega online.
+function autosave(dt) {
+  G.saveTimer += dt;
+  if (G.saveTimer > CFG.AUTOSAVE) {
+    G.saveTimer = 0;
+    const ok = Save.write();
+    if (ok) {
+      G.saveFailWarned = false;
+      UI.toast('Partida guardada');
+    } else if (!G.saveFailWarned) {
+      G.saveFailWarned = true;
+      UI.toast('⚠ No se pudo guardar (almacenamiento lleno o bloqueado)');
+    }
+  }
+}
 function loop(now) {
   requestAnimationFrame(loop);
   let dt = (now - _last) / 1000;
@@ -1075,6 +1077,7 @@ function loop(now) {
   M.update(dt);
   M.camera(dt, G.viewW, G.viewH);
   M.render(ctx, G.viewW, G.viewH);
+  autosave(dt);
 }
 
 /* ---------- inicio ---------- */

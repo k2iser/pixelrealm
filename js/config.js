@@ -43,7 +43,7 @@ const CFG = {
 };
 
 // --- Suelos --- (AIR/COAL_ORE/IRON_ORE/BEDROCK son del modo 2D)
-const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12 };
+const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12, TORCH: 13 };
 
 // Materiales del modo 2D: sólido, dureza, herramienta y drops (reusa ITEMS)
 const TDEF = {
@@ -55,9 +55,11 @@ const TDEF = {
   [T.IRON_ORE]: { solid: true, hp: 10, tool: 'pick', drops: [['iron_ore', 1, 1], ['stone', 1, 0.3]] },
   [T.SAND]:     { solid: true, hp: 2, tool: null, drops: [['dirt', 1, 1]] },
   [T.BEDROCK]:  { solid: true, hp: Infinity, tool: 'pick', drops: [] },
+  // antorcha: no sólida, emite luz; se quita al instante y se recupera
+  [T.TORCH]:    { solid: false, light: 6.5, hp: 0.12, tool: null, drops: [['torch', 1, 1]] },
 };
 // item -> material que coloca (para construir en 2D con el clic derecho)
-const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.STONE };
+const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.STONE, torch: T.TORCH };
 
 // --- Objetos del mundo ---
 const O = {
