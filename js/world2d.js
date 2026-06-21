@@ -123,6 +123,7 @@ class World2D {
         else set(gx + lx, ry, T.AIR);
       }
       set(gx + HW - 2, floor - 1, T.TORCH);                          // antorcha interior
+      if (hash2(gx, 9, (this.seed + 4242) >>> 0) < 0.4) set(gx + 2, floor - 1, T.CHEST);  // a veces, cofre en casa
       for (let lx = 1; lx < HW - 1; lx++) set(gx + lx, base, T.WOOD); // refuerzo del suelo sobre la hierba
     }
     // --- salas/viviendas de cueva (dwarf-holds sepultados) ---
@@ -135,6 +136,7 @@ class World2D {
           set(gx + lx, gy + ly, perim ? T.BRICK : T.AIR);
         }
         set(gx + 1, gy + RH - 2, T.TORCH); set(gx + RW - 2, gy + RH - 2, T.TORCH);  // antorchas
+        set(gx + (RW >> 1), gy + RH - 2, T.CHEST);                                   // cofre con botín
         const doorY = gy + RH - 2;                                                   // puerta lateral
         set(gx, doorY, T.AIR); set(gx, doorY - 1, T.AIR);
       }

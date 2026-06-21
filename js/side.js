@@ -95,6 +95,17 @@ function tile2d(mat, variant) {
     g.fillStyle = '#4e3320'; for (let i = 0; i < 6; i++) { const x = hash2(i, 1, variant * 5 + 2) * TS | 0, y = hash2(i, 2, variant * 5 + 2) * TS | 0; g.fillRect(x, y, 1, 1); }
     _tile2dCache[key] = c; return c;
   }
+  if (mat === T.CHEST || mat === T.CHEST_OPEN) {
+    // cofre (placeholder procedural; sustituible por sprite de PixelLab)
+    const open = mat === T.CHEST_OPEN;
+    g.fillStyle = '#7a5230'; g.fillRect(2, TS - 12, TS - 4, 11);
+    g.fillStyle = '#5e3f24'; g.fillRect(2, TS - 12, TS - 4, 1); g.fillRect(2, TS - 2, TS - 4, 1);
+    if (open) { g.fillStyle = '#241a10'; g.fillRect(4, TS - 11, TS - 8, 5); g.fillStyle = '#5e3f24'; g.fillRect(2, TS - 17, TS - 4, 4); }
+    else { g.fillStyle = '#8a6238'; g.fillRect(2, TS - 13, TS - 4, 4); }
+    g.fillStyle = '#caa15a'; g.fillRect((TS / 2 | 0) - 1, TS - 13, 2, 12);
+    g.fillStyle = '#e8c878'; g.fillRect((TS / 2 | 0) - 1, TS - 9, 2, 2);
+    _tile2dCache[key] = c; return c;
+  }
   if (mat === T.BRICK) {
     // ladrillo de piedra (dwarf-holds / viviendas de cueva)
     const bh = Math.max(3, (TS / 4) | 0);
@@ -283,6 +294,8 @@ function placeAt2d() {
   // clic derecho sobre una Puerta Abisal contigua => INVOCAR descenso
   const hg = hoveredTile2d();
   if (world.ground(hg.tx, hg.ty) === T.GATE && canPlace2d(hg)) { descend2d(); return; }
+  // clic derecho sobre un cofre contiguo => abrirlo (botín)
+  if (world.ground(hg.tx, hg.ty) === T.CHEST && canPlace2d(hg)) { openChest2d(hg.tx, hg.ty); return; }
   const sel = Inv.selected(); if (!sel) return;
   const mat = PLACE2D[sel.id];
   if (mat == null) {                                   // no colocable en 2D: avisa en vez de ignorar
@@ -304,6 +317,29 @@ function placeAt2d() {
   if (UI.refreshHotbar) UI.refreshHotbar();
 }
 
+// botín de cofre, escalado por profundidad
+function rollChestLoot2d(depth) {
+  const out = [], R = Math.random;
+  out.push(['torch', 2 + (R() * 4 | 0)]);
+  if (R() < 0.7) out.push(['wood', 3 + (R() * 5 | 0)]);
+  if (R() < 0.6) out.push([depth > 22 ? 'iron_ore' : 'coal', 1 + (R() * 3 | 0)]);
+  if (R() < 0.5) out.push(['stone', 4 + (R() * 6 | 0)]);
+  if (depth > 100 && R() < 0.65) out.push(['crystal', 1 + (R() * 3 | 0)]);
+  if (R() < 0.4) out.push(['bone', 1 + (R() * 2 | 0)]);
+  if (R() < 0.22) out.push(['gate', 1]);
+  return out;
+}
+function openChest2d(tx, ty) {
+  const depth = ty - world.surfaceY(tx);
+  const loot = rollChestLoot2d(depth);
+  for (const [id, n] of loot) Inv.add(id, n);
+  world.setGround(tx, ty, T.CHEST_OPEN);
+  if (Sfx.place) Sfx.place();
+  for (let i = 0; i < 12; i++) particles.push({ x: tx + 0.5 + randRange(-0.3, 0.3), y: ty + 0.3, vx: randRange(-1.5, 1.5), vy: randRange(-2.8, -0.5), z: 0, vz: 0, life: 0.6, maxLife: 0.6, color: 'rgba(255,220,120,0.9)', flat2d: true });
+  const names = loot.map(l => (l[1] > 1 ? l[1] + '× ' : '') + (ITEMS[l[0]] ? ITEMS[l[0]].name : l[0])).join(', ');
+  if (UI.toast) UI.toast('🪙 Cofre: ' + (names || 'vacío'));
+  if (UI.refreshHotbar) UI.refreshHotbar();
+}
 // nombre del estrato según la profundidad alcanzada (lore)
 function strataName2d(depth) {
   if (depth < 45) return 'Las Cavernas — el primer estrato bajo la Corteza';
