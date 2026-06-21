@@ -1084,6 +1084,7 @@ function loop(now) {
 
 function boot() {
   buildAssets();
+  if (typeof Assets2D !== 'undefined') Assets2D.load();   // assets CC0 del modo 2D (async)
   // preferencias guardadas: zoom y apariencia del héroe
   try {
     G.zoom = clamp(parseInt(localStorage.getItem('pixelrealm.zoom'), 10) || 2, 1, 3);

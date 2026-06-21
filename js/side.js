@@ -6,8 +6,17 @@
 
 const SIDE = { HW: 0.34, BODY: 1.72 };   // medio ancho y alto de la caja del jugador (pies en player.y)
 
-/* ---------- arte: tiles cuadrados procedurales ---------- */
+/* ---------- arte: tiles (atlas externo CC0 + fallback procedural) ---------- */
 const _tile2dCache = {};
+// vetas de mineral superpuestas sobre la piedra base
+function oreSpecks(g, col, hi, salt) {
+  const TS = CFG.TS;
+  for (let i = 0; i < 9; i++) {
+    const x = 2 + (hash2(i, 1, salt) * (TS - 5) | 0), y = 2 + (hash2(i, 2, salt) * (TS - 5) | 0);
+    g.fillStyle = col; g.fillRect(x, y, 2, 2);
+    g.fillStyle = hi; g.fillRect(x, y, 1, 1);
+  }
+}
 function tile2d(mat) {
   if (_tile2dCache[mat]) return _tile2dCache[mat];
   const TS = CFG.TS;
@@ -22,6 +31,19 @@ function tile2d(mat) {
     g.fillStyle = '#fff0b0'; g.fillRect(cx - 1, TS - 12, 1, 2);            // núcleo
     _tile2dCache[mat] = c;
     return c;
+  }
+  // --- base desde el atlas externo CC0 (si está cargado) ---
+  if (typeof Assets2D !== 'undefined' && Assets2D.ready) {
+    const baseMat = (mat === T.COAL_ORE || mat === T.IRON_ORE) ? T.STONE : mat;
+    const src = TILE_SRC[baseMat], atlas = Assets2D.img.terrain;
+    if (src && atlas && atlas.naturalWidth) {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(atlas, src.c * 16, src.r * 16, 16, 16, 0, 0, TS, TS);
+      if (mat === T.COAL_ORE) oreSpecks(g, '#212128', '#3a3a44', 41);
+      else if (mat === T.IRON_ORE) oreSpecks(g, '#c08a5a', '#e6c79a', 53);
+      _tile2dCache[mat] = c;
+      return c;
+    }
   }
   const speck = (base, dk, lt, salt) => {
     g.fillStyle = base; g.fillRect(0, 0, TS, TS);
@@ -172,6 +194,9 @@ function update2d(dt) {
     if (player.grounded && !wasGrounded && fallV >= 0) onLand2d();
     player.moving = Math.abs(player.vx2 || 0) > 0.25 && player.grounded;
     if (player.moving) player.animT += dt;
+    // estado de animación del sprite + reloj de animación
+    player.anim2d = !player.grounded ? ((player.vy2 || 0) < 0 ? 'jump' : 'fall') : (player.moving ? 'run' : 'idle');
+    player._aclk = (player._aclk || 0) + dt;
     player.swingT = Math.max(0, player.swingT - dt);
     player.landT = Math.max(0, (player.landT || 0) - dt);
     player.hurtT = Math.max(0, player.hurtT - dt);
@@ -201,6 +226,29 @@ function side2dSky(top) {
   const dayT = [126, 192, 255], dayB = [191, 227, 255], nightT = [8, 12, 30], nightB = [18, 24, 52];
   const a = top ? dayT : dayB, b = top ? nightT : nightB;
   return 'rgb(' + lerp(a[0], b[0], dk) + ',' + lerp(a[1], b[1], dk) + ',' + lerp(a[2], b[2], dk) + ')';
+}
+// dibuja el personaje 2D (enano minero CC0) con sus frames; pies en sx,sy
+function drawPlayer2d(g, sx, sy, dir) {
+  const cfg = CHAR_ANIM[player.anim2d] || CHAR_ANIM.idle;
+  const sc = CFG.TS / 16 * 2.15;                 // escala (≈2.1 tiles de alto)
+  const dw = CHAR_FW * sc, dh = CHAR_FH * sc;
+  // sombra de contacto
+  g.fillStyle = 'rgba(0,0,0,0.30)';
+  g.beginPath(); g.ellipse(sx, sy, CFG.TS * 0.40, CFG.TS * 0.15, 0, 0, Math.PI * 2); g.fill();
+  const fr = Math.floor((player._aclk || 0) * cfg.fps) % cfg.keys.length;
+  const im = Assets2D.img[cfg.keys[fr]];
+  if (!im || !im.naturalWidth) {                 // aún sin cargar: marcador simple
+    g.fillStyle = '#cda'; g.fillRect(Math.round(sx - 6), Math.round(sy - 30), 12, 28); return;
+  }
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 2 * sc);  // pies cerca del borde inferior
+  g.imageSmoothingEnabled = false;
+  if (dir === 'left') {
+    g.save(); g.translate(dx + dw, 0); g.scale(-1, 1);
+    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, 0, dy, dw, dh);
+    g.restore();
+  } else {
+    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, dx, dy, dw, dh);
+  }
 }
 function render2d(g, W, H) {
   g.setTransform(G.renderScale, 0, 0, G.renderScale, 0, 0);
@@ -232,18 +280,11 @@ function render2d(g, W, H) {
     g.fillRect(Math.round((p.x - ox) * TS), Math.round((p.y - oy) * TS), 2, 2);
   }
   g.globalAlpha = 1;
-  // héroe (rig de perfil)
+  // personaje (sprite CC0 animado, siempre de perfil)
   const psx = (player.x - ox) * TS, psy = (player.y - oy) * TS;
-  const sel = Inv.selected();
-  const anim = {
-    grounded: player.grounded, moving: player.moving, animT: player.animT,
-    vx: player.vx2 || 0, vy: 0, swingT: player.swingT, t: G.elapsed,
-    hurtT: player.hurtT, landT: player.landT || 0, z: 0, vz: -(player.vy2 || 0) * 0.4, rigged: true,
-  };
   if (!player.dead) {
-    const dir = (player.dir === 'left' || player.dir === 'right') ? player.dir : 'right';   // siempre de perfil en 2D
-    drawHero(g, Assets.player, dir, player.grounded ? (player.moving ? 1 : 0) : 6, psx, psy,
-      player.swingT, sel && ITEMS[sel.id] && ITEMS[sel.id].tool ? sel.id : null, false, anim);
+    const dir = (player.dir === 'left' || player.dir === 'right') ? player.dir : 'right';
+    drawPlayer2d(g, psx, psy, dir);
   }
   // cursor de selección de tile
   if (!UI.panelOpen && !UI.chatOpen && !player.dead) {
