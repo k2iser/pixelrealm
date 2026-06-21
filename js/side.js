@@ -119,14 +119,35 @@ function hoveredTile2d() {
   return { tx: Math.floor(wx), ty: Math.floor(wy), wx, wy };
 }
 function heldTool2d() { const s = Inv.selected(); return (s && ITEMS[s.id] && ITEMS[s.id].tool) ? s.id : null; }
-function inReach2d(h) {
-  const cx = player.x, cy = player.y - 0.85;   // centro del cuerpo
-  return Math.max(Math.abs(h.wx - cx), Math.abs(h.wy - cy)) <= effReach() + 0.4;
+// celdas que ocupa el cuerpo del jugador (columna y filas)
+function playerCells2d() {
+  return {
+    col: Math.floor(player.x),
+    rTop: Math.floor(player.y - SIDE.BODY),
+    rBot: Math.floor(player.y - 1e-4),
+  };
+}
+// ¿el tile está justo delante (o encima/debajo) del personaje, a su alcance?
+function canMine2d(h) {
+  const p = playerCells2d(), fd = player.dir === 'left' ? -1 : 1;
+  const colOk = (h.tx === p.col) || (h.tx === p.col + fd);     // misma columna (arriba/abajo) o la de delante
+  return colOk && h.ty >= p.rTop - 1 && h.ty <= p.rBot + 1;
+}
+// ¿celda adyacente al cuerpo (anillo de 1), para colocar?
+function canPlace2d(h) {
+  const p = playerCells2d();
+  return Math.abs(h.tx - p.col) <= 1 && h.ty >= p.rTop - 1 && h.ty <= p.rBot + 1;
+}
+// soporte: una celda nueva necesita un sólido en algún lado ortogonal (nada flotando)
+function hasSupport2d(tx, ty) {
+  return world.isSolid(tx - 1, ty) || world.isSolid(tx + 1, ty) ||
+         world.isSolid(tx, ty - 1) || world.isSolid(tx, ty + 1) ||
+         world.ground(tx, ty - 1) === T.TORCH || world.ground(tx, ty + 1) === T.TORCH;
 }
 function updateBreaking2d(dt) {
   if (!Input.mdown || UI.panelOpen || UI.chatOpen || UI.dialogOpen) { player.breaking = null; return; }
   const h = hoveredTile2d();
-  if (!inReach2d(h)) { player.breaking = null; return; }
+  if (!canMine2d(h)) { player.breaking = null; return; }
   const mat = world.ground(h.tx, h.ty), def = TDEF[mat];
   // se pueden picar materiales con dureza finita (incluida la antorcha, que no es sólida)
   if (!def || mat === T.AIR || def.hp == null || def.hp === Infinity) { player.breaking = null; return; }
@@ -154,8 +175,10 @@ function placeAt2d() {
     return;
   }
   const h = hoveredTile2d();
-  if (!inReach2d(h)) return;
+  if (!canPlace2d(h)) return;
   if (world.ground(h.tx, h.ty) !== T.AIR) return;
+  // física: nada flotando — el bloque necesita un sólido contiguo
+  if (!hasSupport2d(h.tx, h.ty)) { UI.toast('Necesita un bloque al lado'); return; }
   // no colocar un bloque SÓLIDO dentro del propio cuerpo (la antorcha sí, no estorba)
   if (TDEF[mat] && TDEF[mat].solid &&
       h.tx >= Math.floor(player.x - SIDE.HW) && h.tx <= Math.floor(player.x + SIDE.HW - 1e-4) &&
@@ -227,6 +250,24 @@ function side2dSky(top) {
   const a = top ? dayT : dayB, b = top ? nightT : nightB;
   return 'rgb(' + lerp(a[0], b[0], dk) + ',' + lerp(a[1], b[1], dk) + ',' + lerp(a[2], b[2], dk) + ')';
 }
+// grietas progresivas sobre el bloque que se rompe (estilo Minecraft)
+function drawCracks2d(g, bx, by, TS, prog) {
+  if (prog <= 0.02) return;
+  g.fillStyle = 'rgba(0,0,0,' + (0.08 + prog * 0.28).toFixed(3) + ')';   // se oscurece al romperse
+  g.fillRect(bx, by, TS, TS);
+  const stages = Math.min(6, 1 + Math.floor(prog * 6));                  // 1..6 grietas
+  g.strokeStyle = 'rgba(12,9,7,0.9)'; g.lineWidth = 1;
+  const cx = bx + TS / 2, cy = by + TS / 2;
+  for (let i = 0; i < stages; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.7;
+    const len = TS * (0.28 + prog * 0.24);
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(a) * len * 0.5 + Math.cos(a + 1.4) * 2, cy + Math.sin(a) * len * 0.5 + Math.sin(a + 1.4) * 2);
+    g.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+    g.stroke();
+  }
+}
 // dibuja el personaje 2D (enano minero CC0) con sus frames; pies en sx,sy
 function drawPlayer2d(g, sx, sy, dir) {
   const cfg = CHAR_ANIM[player.anim2d] || CHAR_ANIM.idle;
@@ -286,18 +327,22 @@ function render2d(g, W, H) {
     const dir = (player.dir === 'left' || player.dir === 'right') ? player.dir : 'right';
     drawPlayer2d(g, psx, psy, dir);
   }
-  // cursor de selección de tile
+  // cursor de selección de tile (verde si es acción válida sobre esa celda)
   if (!UI.panelOpen && !UI.chatOpen && !player.dead) {
-    const h = hoveredTile2d(), ok = inReach2d(h);
-    g.strokeStyle = ok ? 'rgba(255,255,255,0.6)' : 'rgba(255,90,90,0.5)';
+    const h = hoveredTile2d();
+    const isAir = world.ground(h.tx, h.ty) === T.AIR;
+    const sel = Inv.selected(), placeMat = sel ? PLACE2D[sel.id] : null;
+    const ok = isAir
+      ? (placeMat != null && canPlace2d(h) && hasSupport2d(h.tx, h.ty))   // colocar
+      : canMine2d(h);                                                     // picar
+    g.strokeStyle = ok ? 'rgba(120,255,140,0.7)' : 'rgba(255,90,90,0.45)';
     g.lineWidth = 1;
     g.strokeRect(Math.round((h.tx - ox) * TS) + 0.5, Math.round((h.ty - oy) * TS) + 0.5, TS - 1, TS - 1);
-    // barra de progreso al picar
+    // grietas progresivas sobre el bloque que se está picando
     if (player.breaking) {
       const b = player.breaking, def = TDEF[b.id];
-      const bx = (b.tx - ox) * TS, by = (b.ty - oy) * TS;
-      g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(bx + 1), Math.round(by - 5), TS - 2, 3);
-      g.fillStyle = '#ffd34d'; g.fillRect(Math.round(bx + 1), Math.round(by - 5), Math.round((TS - 2) * clamp(b.dmg / def.hp, 0, 1)), 3);
+      const bx = Math.round((b.tx - ox) * TS), by = Math.round((b.ty - oy) * TS);
+      drawCracks2d(g, bx, by, TS, clamp(b.dmg / def.hp, 0, 1));
     }
   }
   // oscuridad subterránea con halo de visión del jugador (reusa la capa de luz)
