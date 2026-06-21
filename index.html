@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PixelRealm — Mundo abierto isométrico</title>
-<meta name="description" content="Un mundo abierto infinito estilo Minecraft con vista isométrica tipo Diablo, hecho en pixel art procedural. JS vanilla, cero dependencias. Cooperativo online.">
+<title>Pixel Realms — Vethrún, el mundo hueco</title>
+<meta name="description" content="Pixel Realms: aventura 2D de minería y exploración tipo Terraria. Cava, construye y desciende por los estratos de Vethrún. Pixel art, JS vanilla, sin dependencias.">
+<link rel="icon" href="assets/cover.webp">
+<meta property="og:title" content="Pixel Realms — Vethrún, el mundo hueco">
+<meta property="og:description" content="Aventura 2D de minería tipo Terraria: cava, construye y desciende hasta el Corazón del mundo.">
+<meta property="og:image" content="assets/cover.webp">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -143,34 +147,40 @@
 
   <!-- Pantalla de título -->
   <div id="title-overlay" class="overlay">
-    <div class="title-box">
-      <h1 class="logo">PIXEL<span>REALM</span></h1>
-      <p class="tagline">Mundo abierto infinito · Vista isométrica · Pixel art procedural · Cooperativo</p>
-      <div class="menu">
-        <div id="name-row" class="seedrow hidden">
-          <label for="name-input">Tu nombre:</label>
-          <input id="name-input" type="text" placeholder="Aventurera" maxlength="14" autocomplete="off">
+    <div class="title-wrap">
+      <div class="cover-col">
+        <img id="cover-art" class="cover-art" src="assets/cover.webp" alt="Pixel Realms"
+             onerror="this.style.display='none';var f=document.getElementById('cover-fallback');if(f)f.style.display='flex';">
+        <div id="cover-fallback" class="cover-fallback"><h1 class="logo">PIXEL<span>REALMS</span></h1></div>
+      </div>
+      <div class="panel-col">
+        <p class="tagline2">⛏ Cava, construye y <b>desciende</b> por los estratos de <b>Vethrún</b>, el mundo hueco.<br>Dinosaurios, cuevas de cristal y el <b>Corazón</b> en lo más hondo.</p>
+        <div class="menu">
+          <button id="btn-continue" class="bigbtn hidden">▶ Continuar</button>
+          <button id="btn-new-2d" class="bigbtn play">🌍 Nueva aventura</button>
+          <button id="btn-new-2d-creative" class="bigbtn creative">✨ Modo creativo</button>
+          <div class="seedrow">
+            <label for="seed-input">Semilla:</label>
+            <input id="seed-input" type="text" placeholder="aleatoria" maxlength="24" autocomplete="off">
+          </div>
+          <div class="title-links">
+            <button id="btn-hero" class="linkbtn">⚒ Personalizar héroe</button>
+            <a href="LORE.md" target="_blank" class="linkbtn">📜 Lore</a>
+            <a href="wiki.html" target="_blank" class="linkbtn">📖 Guía</a>
+          </div>
         </div>
-        <button id="btn-online" class="bigbtn online hidden">Entrar al mundo compartido</button>
-        <button id="btn-continue" class="bigbtn hidden">Continuar partida</button>
-        <button id="btn-new" class="bigbtn">Nuevo mundo (un jugador)</button>
-        <button id="btn-new-2d" class="bigbtn">Nuevo mundo 2D ⛏ (tipo Terraria)</button>
-        <button id="btn-new-2d-creative" class="bigbtn creative">Mundo 2D creativo ✨</button>
-        <button id="btn-creative" class="bigbtn creative">Modo creativo (isométrico)</button>
-        <div class="title-links">
-          <button id="btn-hero" class="linkbtn">⚒ Personalizar héroe</button>
-          <a href="wiki.html" target="_blank" class="linkbtn">📖 Guía del mundo</a>
-        </div>
-        <div class="seedrow">
-          <label for="seed-input">Semilla:</label>
-          <input id="seed-input" type="text" placeholder="aleatoria" maxlength="24" autocomplete="off">
+        <p class="credits">JS vanilla + Canvas · sin dependencias en runtime · texturas y portada externas (ver CREDITS.md)</p>
+        <!-- Modo isométrico: oculto de momento (NO borrado) -->
+        <div class="iso-hidden">
+          <div id="name-row" class="seedrow">
+            <label for="name-input">Tu nombre:</label>
+            <input id="name-input" type="text" placeholder="Aventurera" maxlength="14" autocomplete="off">
+          </div>
+          <button id="btn-online" class="bigbtn online">Entrar al mundo compartido</button>
+          <button id="btn-new" class="bigbtn">Nuevo mundo (iso)</button>
+          <button id="btn-creative" class="bigbtn creative">Creativo (iso)</button>
         </div>
       </div>
-      <div class="title-controls">
-        <span>Clic izq. ir/recolectar</span><span>Clic der. colocar/usar</span>
-        <span>E inventario</span><span>T chat</span><span>H ayuda</span><span>+/− zoom</span>
-      </div>
-      <p class="credits">Hecho con JS vanilla + Canvas + WebSocket artesanal · Sin dependencias · Todo el arte se genera por código</p>
     </div>
   </div>
 </div>

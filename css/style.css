@@ -520,3 +520,37 @@ html, body {
   40% { transform: translateX(8px); } 60% { transform: translateX(-5px); }
   80% { transform: translateX(5px); } 100% { transform: translateX(0); }
 }
+
+/* ===== Pantalla de entrada con portada (Pixel Realms) ===== */
+#title-overlay {
+  background: radial-gradient(ellipse at 50% 16%, #2b4f86, #0b1020 72%), #0b1020;
+  overflow: hidden;
+}
+#title-overlay::before {            /* portada difuminada de fondo */
+  content: ''; position: absolute; inset: -60px;
+  background: url('../assets/cover.webp') center/cover no-repeat;
+  filter: blur(36px) brightness(0.4) saturate(1.2);
+  opacity: 0.5; z-index: 0;
+}
+.title-wrap {
+  position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  gap: clamp(18px, 4vw, 56px); flex-wrap: wrap;
+  max-width: 1080px; padding: 24px;
+}
+.cover-col { position: relative; flex: 0 0 auto; }
+.cover-art {
+  display: block; width: clamp(200px, 30vw, 360px); height: auto;
+  border: 4px solid #15111d; border-radius: 8px;
+  box-shadow: 0 0 0 3px #06060c, 0 16px 50px rgba(0,0,0,0.65), 0 0 70px rgba(120,90,230,0.30);
+  animation: cover-float 4.5s ease-in-out infinite;
+}
+@keyframes cover-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+.cover-fallback { display: none; align-items: center; justify-content: center; width: clamp(200px,30vw,360px); height: 440px; }
+.panel-col { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 16px; align-items: center; width: min(380px, 90vw); }
+.panel-col .menu { width: 100%; }
+.panel-col .bigbtn { width: 100%; }
+.tagline2 { font-size: 10px; color: #e2e8ff; line-height: 1.9; text-shadow: 0 2px 4px rgba(0,0,0,0.7); }
+.tagline2 b { color: #ffd27a; }
+.bigbtn.play { font-size: 16px; padding: 18px 36px; }
+.iso-hidden { display: none; }

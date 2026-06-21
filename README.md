@@ -1,6 +1,8 @@
-# ⛏ PixelRealm
+# ⛏ Pixel Realms
 
-**Dos modos de juego · Mundo abierto isométrico (tipo Diablo/Warcraft) + Mundo 2D lateral (tipo Terraria) · Pixel art 100 % procedural · Cooperativo online**
+<p align="center"><img src="assets/cover.webp" width="360" alt="Pixel Realms"></p>
+
+**Aventura 2D de minería y exploración (tipo Terraria) — *Vethrún, el mundo hueco*** · Pixel art · *(el modo isométrico clásico sigue en el código, oculto del menú por ahora)*
 
 Un juego de supervivencia, construcción y cooperación para navegador hecho **solo con JavaScript vanilla**: cero dependencias, cero assets externos. Cada sprite — tiles, árboles, el héroe, los monstruos, los edificios — se dibuja píxel a píxel por código al arrancar. El sonido se sintetiza con WebAudio. Y el multijugador corre sobre un **WebSocket implementado a mano** (handshake SHA-1 y frames RFC 6455 sobre `net`/`http` de Node).
 
