@@ -104,6 +104,17 @@ function continueGame() {
   startWorld(data.seed, data);
 }
 
+// salir de la partida al título (guardando), con Escape
+function exitToTitle() {
+  if (!G.running) return;
+  if (!(typeof Net !== 'undefined' && Net.online)) Save.write();
+  G.running = false;
+  if (UI.closeAll) UI.closeAll();
+  const cont = document.getElementById('btn-continue');
+  if (cont && Save.exists()) cont.classList.remove('hidden');
+  UI.showTitleAgain('Partida guardada · pulsa Continuar para volver');
+}
+
 function startWorld(seed, data) {
   world = (G.mode === 'side') ? new World2D(seed) : new World(seed);
   if (data && G.mode === 'side') {
@@ -1123,6 +1134,12 @@ function boot() {
     Sfx.init(); Sfx.resume();
     if (Save.exists() && !confirm('Se borrará la partida guardada local. ¿Continuar?')) return;
     newGame(document.getElementById('seed-input').value, false, 'side');
+  });
+  const b2dc = document.getElementById('btn-new-2d-creative');
+  if (b2dc) b2dc.addEventListener('click', () => {
+    Sfx.init(); Sfx.resume();
+    if (Save.exists() && !confirm('Se borrará la partida guardada local. ¿Continuar?')) return;
+    newGame(document.getElementById('seed-input').value, true, 'side');
   });
   document.getElementById('btn-online').addEventListener('click', () => {
     Sfx.init(); Sfx.resume();

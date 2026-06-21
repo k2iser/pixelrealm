@@ -20,8 +20,31 @@ function oreSpecks(g, col, hi, salt) {
     g.fillStyle = hi; g.fillRect(x, y, 1, 1);
   }
 }
-function tile2d(mat) {
-  if (_tile2dCache[mat]) return _tile2dCache[mat];
+// piedra rocosa procedural y SEAMLESS (sin bandas), con variantes para romper la repetición
+function rockyStone(g, TS, v) {
+  const s = v * 131 + 7;
+  g.fillStyle = '#6f6f7a'; g.fillRect(0, 0, TS, TS);
+  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
+    const h = hash2(x + (s & 15), y + ((s >> 2) & 15), s);
+    if (h < 0.13) { g.fillStyle = '#565662'; g.fillRect(x, y, 1, 1); }
+    else if (h > 0.9) { g.fillStyle = '#84848f'; g.fillRect(x, y, 1, 1); }
+  }
+  for (let i = 0; i < 4; i++) {                              // bloques de roca oscuros dispersos
+    const x = (hash2(i, 1, s) * (TS - 2)) | 0, y = (hash2(i, 2, s) * (TS - 2)) | 0;
+    g.fillStyle = '#4c4c57'; g.fillRect(x, y, 2, 2);
+  }
+  // grieta corta de cantera, orientada según variante (rompe cualquier línea continua)
+  g.strokeStyle = 'rgba(40,40,48,0.7)'; g.lineWidth = 1;
+  g.beginPath();
+  const a = (v % 4) * 0.9 + 0.4, cx = TS / 2, cy = TS / 2, L = TS * 0.5;
+  g.moveTo(cx - Math.cos(a) * L, cy - Math.sin(a) * L);
+  g.lineTo(cx + Math.cos(a) * L * 0.6, cy + Math.sin(a) * L * 0.6);
+  g.stroke();
+}
+function tile2d(mat, variant) {
+  variant = variant || 0;
+  const key = mat + ':' + variant;
+  if (_tile2dCache[key]) return _tile2dCache[key];
   const TS = CFG.TS;
   const [c, g] = cv(TS, TS);
   if (mat === T.TORCH) {
@@ -32,19 +55,26 @@ function tile2d(mat) {
     g.fillStyle = '#ff7a1a'; g.fillRect(cx - 2, TS - 14, 4, 6);            // llama exterior
     g.fillStyle = '#ffc23a'; g.fillRect(cx - 1, TS - 13, 2, 4);            // llama media
     g.fillStyle = '#fff0b0'; g.fillRect(cx - 1, TS - 12, 1, 2);            // núcleo
-    _tile2dCache[mat] = c;
+    _tile2dCache[key] = c;
     return c;
   }
-  // --- base desde el atlas externo CC0 (si está cargado) ---
+  // piedra y vetas: rocosa procedural con variantes (evita el bandeado del atlas)
+  if (mat === T.STONE || mat === T.COAL_ORE || mat === T.IRON_ORE) {
+    rockyStone(g, TS, variant);
+    if (mat === T.COAL_ORE) oreSpecks(g, '#1e1e26', '#3a3a46', 41 + variant);
+    else if (mat === T.IRON_ORE) oreSpecks(g, '#c08a5a', '#e6c79a', 53 + variant);
+    _tile2dCache[key] = c;
+    return c;
+  }
+  // --- resto (hierba/tierra/arena) desde el atlas externo CC0 (si está cargado) ---
   if (typeof Assets2D !== 'undefined' && Assets2D.ready) {
-    const baseMat = (mat === T.COAL_ORE || mat === T.IRON_ORE) ? T.STONE : mat;
-    const src = TILE_SRC[baseMat], atlas = Assets2D.img.terrain;
+    const src = TILE_SRC[mat], atlas = Assets2D.img.terrain;
     if (src && atlas && atlas.naturalWidth) {
       g.imageSmoothingEnabled = false;
+      if (variant & 1) { g.translate(TS, 0); g.scale(-1, 1); }   // volteo horizontal para variar
       g.drawImage(atlas, src.c * 16, src.r * 16, 16, 16, 0, 0, TS, TS);
-      if (mat === T.COAL_ORE) oreSpecks(g, '#212128', '#3a3a44', 41);
-      else if (mat === T.IRON_ORE) oreSpecks(g, '#c08a5a', '#e6c79a', 53);
-      _tile2dCache[mat] = c;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      _tile2dCache[key] = c;
       return c;
     }
   }
@@ -83,7 +113,7 @@ function tile2d(mat) {
   // bisel sutil: luz arriba-izq, sombra abajo-der (lee como cubo)
   g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(0, 0, TS, 1); g.fillRect(0, 0, 1, TS);
   g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(0, TS - 1, TS, 1); g.fillRect(TS - 1, 0, 1, TS);
-  _tile2dCache[mat] = c;
+  _tile2dCache[key] = c;
   return c;
 }
 
@@ -181,8 +211,8 @@ function placeAt2d() {
   const h = hoveredTile2d();
   if (!canPlace2d(h)) return;
   if (world.ground(h.tx, h.ty) !== T.AIR) return;
-  // física: nada flotando — el bloque necesita un sólido contiguo
-  if (!hasSupport2d(h.tx, h.ty)) { UI.toast('Necesita un bloque al lado'); return; }
+  // física: nada flotando — el bloque necesita un sólido contiguo (en creativo se permite libre)
+  if (!G.creative && !hasSupport2d(h.tx, h.ty)) { UI.toast('Necesita un bloque al lado'); return; }
   // no colocar un bloque SÓLIDO dentro del propio cuerpo (la antorcha sí, no estorba)
   if (TDEF[mat] && TDEF[mat].solid &&
       h.tx >= Math.floor(player.x - SIDE.HW) && h.tx <= Math.floor(player.x + SIDE.HW - 1e-4) &&
@@ -391,7 +421,10 @@ function render2d(g, W, H) {
     for (let tx = col0; tx <= col1; tx++) {
       const m = world.ground(tx, ty);
       if (m === T.AIR) continue;
-      g.drawImage(tile2d(m), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
+      // variante por posición: 4 para piedra/vetas; volteo (0/1) para tierra/arena
+      const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE) ? (hash2(tx, ty, 5) * 4 | 0)
+        : (m === T.DIRT || m === T.SAND) ? (hash2(tx, ty, 5) & 1) : 0;
+      g.drawImage(tile2d(m, variant), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
       if (m === T.TORCH) torches.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS]);
     }
   }
@@ -420,11 +453,14 @@ function render2d(g, W, H) {
     g.strokeStyle = ok ? 'rgba(120,255,140,0.7)' : 'rgba(255,90,90,0.45)';
     g.lineWidth = 1;
     g.strokeRect(Math.round((h.tx - ox) * TS) + 0.5, Math.round((h.ty - oy) * TS) + 0.5, TS - 1, TS - 1);
-    // grietas progresivas sobre el bloque que se está picando
+    // grietas progresivas + barra de progreso sobre el bloque que se pica
     if (player.breaking) {
       const b = player.breaking, def = TDEF[b.id];
       const bx = Math.round((b.tx - ox) * TS), by = Math.round((b.ty - oy) * TS);
-      drawCracks2d(g, bx, by, TS, clamp(b.dmg / def.hp, 0, 1));
+      const prog = clamp(b.dmg / def.hp, 0, 1);
+      drawCracks2d(g, bx, by, TS, prog);
+      g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(bx + 1, by - 6, TS - 2, 4);
+      g.fillStyle = '#ffd34d'; g.fillRect(bx + 2, by - 5, Math.round((TS - 4) * prog), 2);
     }
   }
   // oscuridad subterránea con halo de visión del jugador (reusa la capa de luz)

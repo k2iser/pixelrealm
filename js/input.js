@@ -29,7 +29,11 @@ function setupInput(canvas) {
         UI.openChatInput();
         e.preventDefault();
       }
-    } else if (k === 'escape') UI.closeAll();
+    } else if (k === 'escape') {
+      // si hay algo abierto, ciérralo; si no, vuelve al título (salir del juego)
+      if (UI.panelOpen || UI.helpOpen || UI.chatOpen || UI.dialogOpen || (NPC && NPC.active)) UI.closeAll();
+      else exitToTitle();
+    }
     else if (k === 'm') {
       const muted = Sfx.toggleMute();
       UI.toast(muted ? 'Sonido silenciado' : 'Sonido activado');
