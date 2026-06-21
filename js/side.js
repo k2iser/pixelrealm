@@ -718,4 +718,14 @@ function render2d(g, W, H) {
     }
     g.globalCompositeOperation = 'source-over';
   }
+  // barra de jefe (encima de todo) si el Guardián está vivo
+  const boss = (typeof mobs2d !== 'undefined') && mobs2d.find(m => m.def && m.def.boss);
+  if (boss) {
+    const bw = W * 0.5, bx = (W - bw) / 2, by = 16;
+    g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(bx - 3, by - 12, bw + 6, 22);
+    g.fillStyle = '#2a0e18'; g.fillRect(bx, by, bw, 8);
+    g.fillStyle = '#e23b5a'; g.fillRect(bx, by, bw * clamp(boss.hp / boss.maxHp, 0, 1), 8);
+    g.fillStyle = '#ffd9e2'; g.font = '8px monospace'; g.textAlign = 'center';
+    g.fillText('☠ Guardián del Corazón', W / 2, by - 3); g.textAlign = 'left';
+  }
 }

@@ -246,6 +246,7 @@ function finishStart(msg) {
   mobs.length = 0;
   if (typeof mobs2d !== 'undefined') mobs2d.length = 0;   // criaturas del modo 2D
   if (typeof npc2d !== 'undefined') npc2d.length = 0;     // supervivientes 2D
+  G.bossDefeated2d = false;                               // el jefe del Corazón puede volver a aparecer
   particles.length = 0;
   floaters.length = 0;
   projectiles.length = 0;

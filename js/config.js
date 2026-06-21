@@ -144,6 +144,7 @@ const ITEMS = {
   leather:  { name: 'Cuero', stack: 99 },
   bone:     { name: 'Hueso', stack: 99 },
   crystal:  { name: 'Cristal abisal', stack: 99 },
+  core:     { name: 'Núcleo de Vethrún', stack: 10 },
   gate:     { name: 'Puerta Abisal', stack: 10, place: true },
   coal:     { name: 'Carbón', stack: 99 },
   iron_ore: { name: 'Mineral de hierro', stack: 99 },

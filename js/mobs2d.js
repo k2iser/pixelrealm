@@ -19,6 +19,8 @@ const DINO = {
     color: '#6aa15e', belly: '#bcd6a6', dark: '#467038', plates: true, drop: [['meat', 1], ['leather', 1]] },
   trike: { name: 'Triceratops', hostile: false, hp: 32, w: 1.1, bh: 1.35, speed: 2.1, dmg: 0,
     color: '#9c7b5a', belly: '#cdb38a', dark: '#6b5238', horns: true, drop: [['meat', 1], ['leather', 1]] },
+  guardian: { name: 'Guardián del Corazón', hostile: true, boss: true, hp: 240, w: 1.6, bh: 2.8, speed: 2.5, dmg: 20, sense: 80,
+    color: '#3a2d52', belly: '#6a4f9a', dark: '#241a36', horns: true, drop: [['crystal', 8], ['bone', 4], ['core', 1]] },
 };
 
 /* ---------- física ---------- */
@@ -53,8 +55,26 @@ function trySpawnMob2d() {
     grounded: false, think: 0, wander: 0, walk: 0, atkCd: 0, flee: 0, hurtT: 0 });
 }
 
+/* ---------- jefe del Corazón ---------- */
+let _bossCheckT = 0;
+function maybeSpawnBoss2d(dt) {
+  _bossCheckT -= dt; if (_bossCheckT > 0) return; _bossCheckT = 2;
+  if (G.bossDefeated2d || mobs2d.some(m => m.def.boss)) return;
+  const surf = world.surfaceY(Math.floor(player.x));
+  if (player.y - surf < 205) return;                       // solo en el estrato del Corazón
+  const px = Math.floor(player.x), py = Math.floor(player.y);
+  for (let yy = py - 9; yy <= py; yy++) for (let xx = px - 12; xx <= px + 12; xx++) if (world.ground(xx, yy) !== T.BEDROCK) world.setGround(xx, yy, T.AIR);
+  for (let xx = px - 12; xx <= px + 12; xx++) world.setGround(xx, py + 1, T.BRICK);     // suelo de la arena
+  world.setGround(px - 11, py - 1, T.TORCH); world.setGround(px + 11, py - 1, T.TORCH);
+  const d = DINO.guardian;
+  mobs2d.push({ key: 'guardian', def: d, x: px + 8, y: py, vx: 0, vy: 0, dir: -1, hp: d.hp, maxHp: d.hp, grounded: false, think: 0, wander: 0, walk: 0, atkCd: 0, flee: 0, hurtT: 0 });
+  G.shake = Math.max(G.shake, 0.6); if (Sfx.thunder) Sfx.thunder();
+  if (UI.toast) UI.toast('⚠ El Guardián del Corazón despierta…');
+}
+
 /* ---------- update ---------- */
 function updateMobs2d(dt) {
+  maybeSpawnBoss2d(dt);
   _mobSpawnT -= dt;
   if (_mobSpawnT <= 0) { _mobSpawnT = 2.5 + Math.random() * 2; trySpawnMob2d(); }
   for (let i = mobs2d.length - 1; i >= 0; i--) {
@@ -88,11 +108,16 @@ function updateMobs2d(dt) {
   }
 }
 function killMob2d(i) {
-  const m = mobs2d[i];
-  if (!G.creative) for (const dr of (m.def.drop || [])) Inv.add(dr[0], dr[1]);
-  for (let k = 0; k < 9; k++) particles.push({ x: m.x + randRange(-0.3, 0.3), y: m.y - m.def.bh * 0.5, vx: randRange(-2.5, 2.5), vy: randRange(-2.5, 0.5), z: 0, vz: 0, life: 0.55, maxLife: 0.55, color: 'rgba(150,40,40,0.85)', flat2d: true });
-  if (Sfx.land) Sfx.land();
+  const m = mobs2d[i], boss = m.def.boss;
+  for (const dr of (m.def.drop || [])) Inv.add(dr[0], dr[1]);   // el jefe siempre suelta su botín
+  const n = boss ? 40 : 9, col = boss ? 'rgba(150,90,230,0.9)' : 'rgba(150,40,40,0.85)';
+  for (let k = 0; k < n; k++) particles.push({ x: m.x + randRange(-0.6, 0.6), y: m.y - m.def.bh * 0.5, vx: randRange(-3.5, 3.5), vy: randRange(-3.5, 0.5), z: 0, vz: 0, life: 0.8, maxLife: 0.8, color: col, flat2d: true });
+  if (Sfx.thunder && boss) Sfx.thunder(); else if (Sfx.land) Sfx.land();
   mobs2d.splice(i, 1);
+  if (boss) {
+    G.bossDefeated2d = true; G.shake = Math.max(G.shake, 0.7);
+    if (UI.toast) UI.toast('☀ ¡Has vencido al Guardián! El Corazón de Vethrún late libre. Obtienes el Núcleo.');
+  }
   if (UI.refreshHotbar) UI.refreshHotbar();
 }
 
@@ -138,6 +163,15 @@ function _dino(g, m, ox, oy) {
   const TS = CFG.TS, d = m.def;
   const sx = Math.round((m.x - ox) * TS), sy = Math.round((m.y - oy) * TS);
   const Wd = d.w * 2 * TS, Hd = d.bh * TS;
+  // aura emisiva del jefe (para que destaque en la oscuridad)
+  if (d.boss) {
+    const r = Hd * (1.0 + 0.06 * Math.sin(G.elapsed * 4));
+    g.globalCompositeOperation = 'lighter';
+    const rg = g.createRadialGradient(sx, sy - Hd * 0.45, 0, sx, sy - Hd * 0.45, r);
+    rg.addColorStop(0, 'rgba(150,90,230,0.4)'); rg.addColorStop(1, 'rgba(120,70,210,0)');
+    g.fillStyle = rg; g.fillRect(sx - r, sy - Hd * 0.45 - r, r * 2, r * 2);
+    g.globalCompositeOperation = 'source-over';
+  }
   // sombra de contacto
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, Wd * 0.36, TS * 0.14, 0, 0, 7); g.fill();
   g.save(); g.translate(sx, sy); g.scale(m.dir > 0 ? 1 : -1, 1);
