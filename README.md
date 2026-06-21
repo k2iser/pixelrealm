@@ -63,6 +63,7 @@ Cualquiera que abra esa URL verá el botón **«Entrar al mundo compartido»**. 
 | **Clic izquierdo** | Ir ahí · talar/picar · atacar · hablar con comerciantes (estilo MOBA) |
 | Clic izquierdo (mantener) | Arrastrar para moverte |
 | **Clic derecho** | Colocar · comer · recoger producción |
+| **`Espacio`** | **Saltar** (arco con peso; sobrevuela charcos y huecos de 1 casilla) |
 | `WASD` / flechas | Moverse a mano (alternativa) |
 | `1–9` / rueda | Seleccionar en la barra rápida |
 | `E` | Inventario, fabricación y construcciones |
