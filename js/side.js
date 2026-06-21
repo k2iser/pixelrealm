@@ -241,14 +241,86 @@ function updateCamera2d(dt, W, H) {
   cam.oy += (ty - cam.oy) * f;
 }
 
-/* ---------- render ---------- */
-function side2dSky(top) {
-  // color del cielo por hora (mezcla día -> noche con la oscuridad global)
-  const dk = clamp(G.darkness, 0, 1);
-  const lerp = (a, b, t) => Math.round(a + (b - a) * t);
-  const dayT = [126, 192, 255], dayB = [191, 227, 255], nightT = [8, 12, 30], nightB = [18, 24, 52];
-  const a = top ? dayT : dayB, b = top ? nightT : nightB;
-  return 'rgb(' + lerp(a[0], b[0], dk) + ',' + lerp(a[1], b[1], dk) + ',' + lerp(a[2], b[2], dk) + ')';
+/* ---------- fondo con profundidad (parallax por bioma + cueva) ---------- */
+const BIOME2D = {
+  plains: { sky: [[126, 192, 255], [206, 234, 255]], far: [157, 180, 210], mid: [134, 173, 110], near: [88, 136, 64], decor: 'bush' },
+  forest: { sky: [[131, 192, 238], [205, 233, 230]], far: [147, 172, 196], mid: [92, 146, 84], near: [50, 100, 52], decor: 'pine' },
+  desert: { sky: [[159, 210, 242], [255, 232, 188]], far: [226, 202, 150], mid: [210, 184, 120], near: [180, 142, 78], decor: 'cactus' },
+  snow:   { sky: [[190, 217, 243], [238, 246, 255]], far: [203, 216, 231], mid: [176, 190, 205], near: [142, 160, 180], decor: 'snowpine' },
+};
+function mixNight2d(rgb) {
+  const d = clamp(G.darkness, 0, 1) * 0.82, n = [10, 12, 30];
+  return 'rgb(' + Math.round(rgb[0] + (n[0] - rgb[0]) * d) + ',' + Math.round(rgb[1] + (n[1] - rgb[1]) * d) + ',' + Math.round(rgb[2] + (n[2] - rgb[2]) * d) + ')';
+}
+function silhouette2d(g, W, H, baseY, shift, amp, period, color) {
+  g.fillStyle = color; g.beginPath(); g.moveTo(-2, H);
+  for (let x = -2; x <= W + 2; x += 4) {
+    const wx = shift + x;
+    const y = baseY - amp - (Math.sin(wx / period) * 0.6 + Math.sin(wx / (period * 0.41) + 1.7) * 0.4) * amp;
+    g.lineTo(x, y);
+  }
+  g.lineTo(W + 2, H); g.closePath(); g.fill();
+}
+function drawDecor2d(g, W, baseY, ox, b) {
+  const TS = CFG.TS, shift = ox * TS * 0.5, step = Math.round(2.6 * TS), col = mixNight2d(b.near);
+  const s0 = Math.floor(shift / step) * step;
+  g.fillStyle = col;
+  for (let wx = s0 - step; wx < shift + W + step; wx += step) {
+    const k = Math.round(wx / step), x = Math.round(wx - shift + (hash2(k, 3, 9) - 0.5) * step * 0.5);
+    const s = 0.8 + hash2(k, 4, 9) * 0.6, gy = baseY - 1;
+    if (b.decor === 'cactus') {
+      const h = (3 + hash2(k, 5, 9) * 2) * TS * s / 2;
+      g.fillRect(x, gy - h, Math.max(2, TS * 0.18), h);
+      g.fillRect(x - TS * 0.3, gy - h * 0.7, TS * 0.3, Math.max(2, TS * 0.12));
+      g.fillRect(x + TS * 0.18, gy - h * 0.85, TS * 0.3, Math.max(2, TS * 0.12));
+    } else { // pino / arbusto / pino nevado: triángulos
+      const h = (b.decor === 'bush' ? 1.0 : 2.4) * TS * s, w = (b.decor === 'bush' ? 1.4 : 1.0) * TS * s;
+      g.beginPath(); g.moveTo(x, gy - h); g.lineTo(x - w / 2, gy); g.lineTo(x + w / 2, gy); g.closePath(); g.fill();
+      if (b.decor === 'snowpine') { g.fillStyle = mixNight2d([235, 242, 252]); g.beginPath(); g.moveTo(x, gy - h); g.lineTo(x - w * 0.18, gy - h * 0.6); g.lineTo(x + w * 0.18, gy - h * 0.6); g.closePath(); g.fill(); g.fillStyle = col; }
+    }
+  }
+}
+function caveBackdrop2d(g, W, H, ox, cy0) {
+  const TS = CFG.TS, shift = ox * TS * 0.25, step = Math.round(5 * TS);
+  g.fillStyle = 'rgba(0,0,0,0.16)';
+  const s0 = Math.floor(shift / step) * step;
+  for (let wx = s0 - step; wx < shift + W + step; wx += step) {
+    const k = Math.round(wx / step), x = Math.round(wx - shift + (hash2(k, 5, 2) - 0.5) * step * 0.6);
+    const w = Math.round((2 + hash2(k, 6, 2) * 3) * TS);
+    g.fillRect(x, cy0, w, H - cy0);                 // columnas de roca lejana
+  }
+  g.fillStyle = 'rgba(0,0,0,0.22)';                 // estalactitas tenues del techo
+  const step2 = Math.round(1.7 * TS), t0 = Math.floor(shift / step2) * step2;
+  for (let wx = t0; wx < shift + W; wx += step2) {
+    const k = Math.round(wx / step2); if (hash2(k, 8, 4) > 0.5) continue;
+    const x = Math.round(wx - shift), h = Math.round((0.6 + hash2(k, 9, 4) * 1.6) * TS);
+    g.beginPath(); g.moveTo(x, cy0); g.lineTo(x + TS * 0.5, cy0 + h); g.lineTo(x + TS, cy0); g.closePath(); g.fill();
+  }
+}
+function bg2d(g, W, H, ox, oy) {
+  const TS = CFG.TS, ccol = Math.floor(ox + (W / TS) / 2);
+  const b = BIOME2D[world.biomeAt ? world.biomeAt(ccol) : 'plains'] || BIOME2D.plains;
+  const horizonY = (world.surfaceY(ccol) - oy) * TS;
+  // cielo (gradiente bioma + noche)
+  const sg = g.createLinearGradient(0, 0, 0, H);
+  sg.addColorStop(0, mixNight2d(b.sky[0])); sg.addColorStop(1, mixNight2d(b.sky[1]));
+  g.fillStyle = sg; g.fillRect(0, 0, W, H);
+  // capas parallax (si el horizonte está a la vista)
+  if (horizonY > -60) {
+    const hb = Math.min(horizonY, H);
+    silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(b.far));
+    silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(b.mid));
+    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(b.near));
+    drawDecor2d(g, W, hb, ox, b);
+  }
+  // fondo de cueva por debajo del horizonte
+  const cy0 = Math.max(0, horizonY);
+  if (cy0 < H) {
+    const cg = g.createLinearGradient(0, cy0, 0, H);
+    cg.addColorStop(0, 'rgba(28,24,32,0.55)'); cg.addColorStop(1, 'rgba(10,9,15,0.97)');
+    g.fillStyle = cg; g.fillRect(0, cy0, W, H - cy0);
+    caveBackdrop2d(g, W, H, ox, cy0);
+  }
 }
 // grietas progresivas sobre el bloque que se rompe (estilo Minecraft)
 function drawCracks2d(g, bx, by, TS, prog) {
@@ -297,10 +369,8 @@ function render2d(g, W, H) {
   const TS = CFG.TS;
   let ox = cam.ox, oy = cam.oy;
   if (G.shake > 0) { ox += (Math.random() - 0.5) * G.shake * 0.5; oy += (Math.random() - 0.5) * G.shake * 0.5; }
-  // cielo
-  const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, side2dSky(true)); grad.addColorStop(1, side2dSky(false));
-  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  // fondo con profundidad: parallax por bioma en superficie + cueva bajo tierra
+  bg2d(g, W, H, ox, oy);
   // tiles visibles (y recoge antorchas para iluminar después)
   const torches = [];
   const col0 = Math.floor(ox) - 1, col1 = Math.ceil(ox + W / TS) + 1;
