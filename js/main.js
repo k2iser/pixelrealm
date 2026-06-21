@@ -113,7 +113,7 @@ function startWorld(seed, data) {
     G.spawn = data.spawn || world.findSurfaceSpawn(0);
     player.x = data.player.x; player.y = data.player.y;
     player.hp = clamp(data.player.hp | 0, 1, player.maxHp);
-    player.vx2 = 0; player.vy2 = 0; player.grounded = false;
+    player.vx2 = 0; player.vy2 = 0; player.grounded = false; player.dir = 'right';
     Inv.slots = (data.inv || []).map(s => (s && ITEMS[s.id]) ? { id: s.id, n: s.n } : null);
     while (Inv.slots.length < 36) Inv.slots.push(null);
     Inv.slots.length = 36; Inv.sel = data.sel || 0; drops.length = 0;
@@ -148,7 +148,7 @@ function startWorld(seed, data) {
     G.time = 0.15; G.day = 1;
     G.spawn = world.findSurfaceSpawn(0);
     player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp;
-    player.vx2 = 0; player.vy2 = 0; player.grounded = false;
+    player.vx2 = 0; player.vy2 = 0; player.grounded = false; player.dir = 'right';
     Inv.slots = new Array(36).fill(null); Inv.sel = 0;
     Inv.add('pick', 1); Inv.add('axe', 1); Inv.add('dirt', 40); Inv.add('stone', 20); Inv.add('torch', 12);
     drops.length = 0;
@@ -1084,7 +1084,9 @@ function loop(now) {
 
 function boot() {
   buildAssets();
-  if (typeof Assets2D !== 'undefined') Assets2D.load();   // assets CC0 del modo 2D (async)
+  if (typeof Assets2D !== 'undefined') {                  // assets CC0 del modo 2D (async)
+    Assets2D.load(() => { if (typeof invalidate2dTiles === 'function') invalidate2dTiles(); });
+  }
   // preferencias guardadas: zoom y apariencia del héroe
   try {
     G.zoom = clamp(parseInt(localStorage.getItem('pixelrealm.zoom'), 10) || 2, 1, 3);

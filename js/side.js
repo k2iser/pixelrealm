@@ -8,6 +8,9 @@ const SIDE = { HW: 0.34, BODY: 1.72 };   // medio ancho y alto de la caja del ju
 
 /* ---------- arte: tiles (atlas externo CC0 + fallback procedural) ---------- */
 const _tile2dCache = {};
+// se llama cuando terminan de cargar los assets externos: descarta los tiles
+// procedurales cacheados para regenerarlos desde el atlas CC0.
+function invalidate2dTiles() { for (const k in _tile2dCache) delete _tile2dCache[k]; }
 // vetas de mineral superpuestas sobre la piedra base
 function oreSpecks(g, col, hi, salt) {
   const TS = CFG.TS;
@@ -138,15 +141,17 @@ function canPlace2d(h) {
   const p = playerCells2d();
   return Math.abs(h.tx - p.col) <= 1 && h.ty >= p.rTop - 1 && h.ty <= p.rBot + 1;
 }
-// soporte: una celda nueva necesita un sólido en algún lado ortogonal (nada flotando)
+// soporte: una celda nueva necesita un sólido contiguo (nada flotando en el vacío).
+// Solo cuentan sólidos reales: una antorcha no sostiene a otra.
 function hasSupport2d(tx, ty) {
   return world.isSolid(tx - 1, ty) || world.isSolid(tx + 1, ty) ||
-         world.isSolid(tx, ty - 1) || world.isSolid(tx, ty + 1) ||
-         world.ground(tx, ty - 1) === T.TORCH || world.ground(tx, ty + 1) === T.TORCH;
+         world.isSolid(tx, ty - 1) || world.isSolid(tx, ty + 1);
 }
 function updateBreaking2d(dt) {
   if (!Input.mdown || UI.panelOpen || UI.chatOpen || UI.dialogOpen) { player.breaking = null; return; }
   const h = hoveredTile2d();
+  // mira hacia el cursor ANTES de comprobar el alcance, para poder picar de pie a cualquier lado
+  if (Math.abs(h.wx - player.x) > 0.15) player.dir = h.wx >= player.x ? 'right' : 'left';
   if (!canMine2d(h)) { player.breaking = null; return; }
   const mat = world.ground(h.tx, h.ty), def = TDEF[mat];
   // se pueden picar materiales con dureza finita (incluida la antorcha, que no es sólida)
@@ -155,7 +160,6 @@ function updateBreaking2d(dt) {
   const tool = (Inv.selected() && ITEMS[Inv.selected().id]) ? ITEMS[Inv.selected().id].tool : null;
   player.breaking.dmg += dt * (G.creative ? 99 : (def.tool && tool === def.tool ? 2.4 : 1.3));
   player.swingT = 0.18;
-  player.dir = h.wx >= player.x ? 'right' : 'left';
   if (player.breaking.dmg >= def.hp) {
     world.setGround(h.tx, h.ty, T.AIR);
     if (!G.creative) for (const d of (def.drops || [])) if (Math.random() < d[2]) Inv.add(d[0], d[1]);
@@ -252,17 +256,18 @@ function mixNight2d(rgb) {
   const d = clamp(G.darkness, 0, 1) * 0.82, n = [10, 12, 30];
   return 'rgb(' + Math.round(rgb[0] + (n[0] - rgb[0]) * d) + ',' + Math.round(rgb[1] + (n[1] - rgb[1]) * d) + ',' + Math.round(rgb[2] + (n[2] - rgb[2]) * d) + ')';
 }
+function lerpRGB(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
 function silhouette2d(g, W, H, baseY, shift, amp, period, color) {
   g.fillStyle = color; g.beginPath(); g.moveTo(-2, H);
-  for (let x = -2; x <= W + 2; x += 4) {
+  for (let x = -2; x <= W + 2; x += 6) {
     const wx = shift + x;
     const y = baseY - amp - (Math.sin(wx / period) * 0.6 + Math.sin(wx / (period * 0.41) + 1.7) * 0.4) * amp;
     g.lineTo(x, y);
   }
   g.lineTo(W + 2, H); g.closePath(); g.fill();
 }
-function drawDecor2d(g, W, baseY, ox, b) {
-  const TS = CFG.TS, shift = ox * TS * 0.5, step = Math.round(2.6 * TS), col = mixNight2d(b.near);
+function drawDecor2d(g, W, baseY, ox, decor, col) {
+  const TS = CFG.TS, shift = ox * TS * 0.5, step = Math.round(2.6 * TS), b = { decor };
   const s0 = Math.floor(shift / step) * step;
   g.fillStyle = col;
   for (let wx = s0 - step; wx < shift + W + step; wx += step) {
@@ -298,26 +303,33 @@ function caveBackdrop2d(g, W, H, ox, cy0) {
   }
 }
 function bg2d(g, W, H, ox, oy) {
-  const TS = CFG.TS, ccol = Math.floor(ox + (W / TS) / 2);
-  const b = BIOME2D[world.biomeAt ? world.biomeAt(ccol) : 'plains'] || BIOME2D.plains;
-  const horizonY = (world.surfaceY(ccol) - oy) * TS;
-  // cielo (gradiente bioma + noche)
+  const TS = CFG.TS;
+  // muestreo continuo del centro: crossfade de bioma y horizonte entre columnas vecinas (sin saltos)
+  const cc = ox + (W / TS) / 2, c0 = Math.floor(cc), fr = cc - c0;
+  const ba = BIOME2D[world.biomeAt ? world.biomeAt(c0) : 'plains'] || BIOME2D.plains;
+  const bb = BIOME2D[world.biomeAt ? world.biomeAt(c0 + 1) : 'plains'] || BIOME2D.plains;
+  const sky0 = lerpRGB(ba.sky[0], bb.sky[0], fr), sky1 = lerpRGB(ba.sky[1], bb.sky[1], fr);
+  const far = lerpRGB(ba.far, bb.far, fr), mid = lerpRGB(ba.mid, bb.mid, fr), near = lerpRGB(ba.near, bb.near, fr);
+  const decor = fr < 0.5 ? ba.decor : bb.decor;
+  const horizonY = ((world.surfaceY(c0) * (1 - fr) + world.surfaceY(c0 + 1) * fr) - oy) * TS;
+  // cielo (gradiente bioma mezclado + noche)
   const sg = g.createLinearGradient(0, 0, 0, H);
-  sg.addColorStop(0, mixNight2d(b.sky[0])); sg.addColorStop(1, mixNight2d(b.sky[1]));
+  sg.addColorStop(0, mixNight2d(sky0)); sg.addColorStop(1, mixNight2d(sky1));
   g.fillStyle = sg; g.fillRect(0, 0, W, H);
-  // capas parallax (si el horizonte está a la vista)
-  if (horizonY > -60) {
+  // capas parallax (solo si el horizonte está dentro/encima de la vista)
+  if (horizonY > 0) {
     const hb = Math.min(horizonY, H);
-    silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(b.far));
-    silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(b.mid));
-    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(b.near));
-    drawDecor2d(g, W, hb, ox, b);
+    silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
+    silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
+    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));
+    drawDecor2d(g, W, hb, ox, decor, mixNight2d(near));
   }
-  // fondo de cueva por debajo del horizonte
+  // fondo de cueva por debajo del horizonte (base OPACA para que el cielo no se cuele)
   const cy0 = Math.max(0, horizonY);
   if (cy0 < H) {
+    g.fillStyle = mixNight2d([16, 13, 20]); g.fillRect(0, cy0, W, H - cy0);
     const cg = g.createLinearGradient(0, cy0, 0, H);
-    cg.addColorStop(0, 'rgba(28,24,32,0.55)'); cg.addColorStop(1, 'rgba(10,9,15,0.97)');
+    cg.addColorStop(0, 'rgba(34,29,40,0.85)'); cg.addColorStop(1, 'rgba(10,9,15,1)');
     g.fillStyle = cg; g.fillRect(0, cy0, W, H - cy0);
     caveBackdrop2d(g, W, H, ox, cy0);
   }
