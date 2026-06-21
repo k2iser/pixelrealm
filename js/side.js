@@ -58,11 +58,31 @@ function tile2d(mat, variant) {
     _tile2dCache[key] = c;
     return c;
   }
+  if (mat === T.GATE) {
+    // Puerta Abisal: marco rúnico de piedra con umbral violáceo (fondo transparente)
+    g.fillStyle = '#3a3450'; g.fillRect(1, 1, TS - 2, TS - 1);
+    g.fillStyle = '#221d33'; g.fillRect(3, 3, TS - 6, TS - 3);
+    g.fillStyle = '#110d1c'; g.fillRect(4, 5, TS - 8, TS - 5);
+    g.fillStyle = 'rgba(150,110,255,0.40)'; g.fillRect(5, 6, TS - 10, TS - 7);   // umbral brillante
+    g.fillStyle = '#c9a3ff';                                                     // runas
+    g.fillRect((TS / 2 | 0) - 1, 4, 2, 2); g.fillRect(3, (TS / 2 | 0), 2, 2); g.fillRect(TS - 5, (TS / 2 | 0), 2, 2);
+    g.fillRect((TS / 2 | 0), TS - 4, 1, 2);
+    _tile2dCache[key] = c;
+    return c;
+  }
   // piedra y vetas: rocosa procedural con variantes (evita el bandeado del atlas)
-  if (mat === T.STONE || mat === T.COAL_ORE || mat === T.IRON_ORE) {
+  if (mat === T.STONE || mat === T.COAL_ORE || mat === T.IRON_ORE || mat === T.CRYSTAL) {
     rockyStone(g, TS, variant);
     if (mat === T.COAL_ORE) oreSpecks(g, '#1e1e26', '#3a3a46', 41 + variant);
     else if (mat === T.IRON_ORE) oreSpecks(g, '#c08a5a', '#e6c79a', 53 + variant);
+    else if (mat === T.CRYSTAL) {
+      for (let i = 0; i < 5; i++) {
+        const x = 3 + (hash2(i, 1, 71 + variant) * (TS - 6) | 0), y = 3 + (hash2(i, 2, 71 + variant) * (TS - 6) | 0);
+        g.fillStyle = '#7a3fd0'; g.fillRect(x, y, 3, 3);
+        g.fillStyle = '#c9a3ff'; g.fillRect(x + 1, y, 1, 2);
+        g.fillStyle = '#ffffff'; g.fillRect(x + 1, y + 1, 1, 1);
+      }
+    }
     _tile2dCache[key] = c;
     return c;
   }
@@ -222,6 +242,9 @@ function updateBreaking2d(dt) {
 }
 function placeAt2d() {
   if (UI.panelOpen || UI.chatOpen || UI.dialogOpen || player.dead) return;
+  // clic derecho sobre una Puerta Abisal contigua => INVOCAR descenso
+  const hg = hoveredTile2d();
+  if (world.ground(hg.tx, hg.ty) === T.GATE && canPlace2d(hg)) { descend2d(); return; }
   const sel = Inv.selected(); if (!sel) return;
   const mat = PLACE2D[sel.id];
   if (mat == null) {                                   // no colocable en 2D: avisa en vez de ignorar
@@ -241,6 +264,30 @@ function placeAt2d() {
   if (!G.creative) Inv.consumeSelected(1);
   Sfx.place();
   if (UI.refreshHotbar) UI.refreshHotbar();
+}
+
+// nombre del estrato según la profundidad alcanzada (lore)
+function strataName2d(depth) {
+  if (depth < 45) return 'Las Cavernas — el primer estrato bajo la Corteza';
+  if (depth < 95) return 'Las Raíces del Mundo te tragan';
+  if (depth < 150) return 'La Jungla Sepultada — aquí duermen los lagartos antiguos';
+  if (depth < 215) return 'El Abismo. La luz aquí es solo un recuerdo';
+  return 'El Corazón de Vethrún late muy cerca…';
+}
+// invocar la Puerta Abisal: labra una cámara más abajo y desciende un estrato
+function descend2d() {
+  const px = Math.floor(player.x);
+  const targetY = Math.min(world.BOTTOM - 6, Math.floor(player.y) + 55);
+  for (let yy = targetY - 4; yy <= targetY; yy++) for (let xx = px - 2; xx <= px + 2; xx++) world.setGround(xx, yy, T.AIR);
+  for (let xx = px - 2; xx <= px + 2; xx++) world.setGround(xx, targetY + 1, T.STONE);   // suelo de aterrizaje
+  world.setGround(px - 2, targetY, T.TORCH); world.setGround(px + 2, targetY, T.TORCH);  // antorchas
+  world.setGround(px, targetY, T.GATE);                                                  // puerta para seguir bajando
+  player.x = px + 0.5; player.y = targetY + 1; player.vx2 = 0; player.vy2 = 0; player.grounded = false;
+  player._iframe = 1.3; cam.init = false; mobs2d.length = 0;
+  G.shake = Math.max(G.shake, 0.4);
+  for (let i = 0; i < 26; i++) particles.push({ x: px + 0.5 + randRange(-1.2, 1.2), y: targetY - randRange(0, 3), vx: randRange(-3, 3), vy: randRange(-3, 1), z: 0, vz: 0, life: 0.7, maxLife: 0.7, color: 'rgba(150,90,230,0.85)', flat2d: true });
+  if (Sfx.thunder) Sfx.thunder();
+  if (UI.toast) UI.toast('⇊ ' + strataName2d(targetY - world.surfaceY(px)));
 }
 
 /* ---------- update ---------- */
@@ -504,8 +551,8 @@ function render2d(g, W, H) {
   if (G.shake > 0) { ox += (Math.random() - 0.5) * G.shake * 0.5; oy += (Math.random() - 0.5) * G.shake * 0.5; }
   // fondo con profundidad: parallax por bioma en superficie + cueva bajo tierra
   bg2d(g, W, H, ox, oy);
-  // tiles visibles (y recoge antorchas para iluminar después)
-  const torches = [];
+  // tiles visibles (y recoge focos de luz: antorchas, cristales, puertas)
+  const lights = [];   // [sx, sy, intensidad, warm?]
   const col0 = Math.floor(ox) - 1, col1 = Math.ceil(ox + W / TS) + 1;
   const row0 = Math.floor(oy) - 1, row1 = Math.ceil(oy + H / TS) + 1;
   for (let ty = row0; ty <= row1; ty++) {
@@ -513,10 +560,11 @@ function render2d(g, W, H) {
       const m = world.ground(tx, ty);
       if (m === T.AIR) continue;
       // variante por posición: 4 para piedra/vetas; volteo (0/1) para tierra/arena
-      const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE) ? (hash2(tx, ty, 5) * 4 | 0)
+      const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE || m === T.CRYSTAL) ? (hash2(tx, ty, 5) * 4 | 0)
         : (m === T.DIRT || m === T.SAND) ? (hash2(tx, ty, 5) & 1) : 0;
       g.drawImage(tile2d(m, variant), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
-      if (m === T.TORCH) torches.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS]);
+      const ld = TDEF[m] && TDEF[m].light;
+      if (ld) lights.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS, ld, m === T.TORCH]);
     }
   }
   // árboles de superficie (segundo plano: detrás del jugador, no colisionan)
@@ -576,19 +624,20 @@ function render2d(g, W, H) {
     lg.globalCompositeOperation = 'destination-out';
     const lr = 6 * TS, lcx = psx, lcy = psy - 0.85 * TS;
     lg.drawImage(veilGlow(), lcx - lr, lcy - lr, lr * 2, lr * 2);
-    // halos de las antorchas colocadas (con parpadeo suave)
-    for (const t of torches) {
-      const flick = (0.9 + 0.1 * Math.sin(G.elapsed * 9 + t[0] * 0.3)) * (TDEF[T.TORCH].light || 6) * TS;
+    // halos de los focos de luz (antorchas/cristales/puertas) con parpadeo suave
+    for (const t of lights) {
+      const flick = (0.9 + 0.1 * Math.sin(G.elapsed * 9 + t[0] * 0.3)) * t[2] * TS;
       lg.drawImage(veilGlow(), t[0] - flick, t[1] - flick, flick * 2, flick * 2);
     }
     lg.globalCompositeOperation = 'source-over';
     g.drawImage(_lightCv, 0, 0);
-    // resplandor cálido aditivo sobre las antorchas (sobre la escena ya revelada)
+    // resplandor aditivo de color sobre cada foco (cálido antorchas, violáceo cristal/puerta)
     g.globalCompositeOperation = 'lighter';
-    for (const t of torches) {
-      const r = 2.6 * TS * (0.92 + 0.08 * Math.sin(G.elapsed * 11 + t[1] * 0.2));
+    for (const t of lights) {
+      const r = (t[2] * 0.42) * TS * (0.9 + 0.1 * Math.sin(G.elapsed * 11 + t[1] * 0.2));
       const rg = g.createRadialGradient(t[0], t[1], 0, t[0], t[1], r);
-      rg.addColorStop(0, 'rgba(255,170,70,0.5)'); rg.addColorStop(1, 'rgba(255,150,60,0)');
+      if (t[3]) { rg.addColorStop(0, 'rgba(255,170,70,0.5)'); rg.addColorStop(1, 'rgba(255,150,60,0)'); }
+      else { rg.addColorStop(0, 'rgba(150,110,255,0.45)'); rg.addColorStop(1, 'rgba(120,90,230,0)'); }
       g.fillStyle = rg; g.fillRect(t[0] - r, t[1] - r, r * 2, r * 2);
     }
     g.globalCompositeOperation = 'source-over';

@@ -41,6 +41,7 @@ class World2D {
     // piedra con vetas de mineral en parches
     const cl = fbm(tx * 0.21, ty * 0.21, s + 33, 2);
     const h = hash2(tx, ty, (s ^ 0x07e5) >>> 0);
+    if (depth > 110 && cl > 0.55 && h < 0.05) return T.CRYSTAL;     // cristal abisal (profundo)
     if (depth > 18 && cl > 0.6 && h < 0.06) return T.IRON_ORE;
     if (depth > 8 && cl > 0.58 && h < 0.10) return T.COAL_ORE;
     return T.STONE;

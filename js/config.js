@@ -43,7 +43,7 @@ const CFG = {
 };
 
 // --- Suelos --- (AIR/COAL_ORE/IRON_ORE/BEDROCK son del modo 2D)
-const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12, TORCH: 13 };
+const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12, TORCH: 13, GATE: 14, CRYSTAL: 15 };
 
 // Materiales del modo 2D: sólido, dureza, herramienta y drops (reusa ITEMS)
 const TDEF = {
@@ -57,9 +57,13 @@ const TDEF = {
   [T.BEDROCK]:  { solid: true, hp: Infinity, tool: 'pick', drops: [] },
   // antorcha: no sólida, emite luz; se quita al instante y se recupera
   [T.TORCH]:    { solid: false, light: 6.5, hp: 0.12, tool: null, drops: [['torch', 1, 1]] },
+  // Puerta Abisal: estructura no sólida que se INVOCA (clic derecho) para descender un estrato
+  [T.GATE]:     { solid: false, light: 5.5, hp: 0.4, tool: null, drops: [['gate', 1, 1]] },
+  // Cristal abisal: mineral profundo, valioso y luminoso
+  [T.CRYSTAL]:  { solid: true, light: 4.5, hp: 12, tool: 'pick', drops: [['crystal', 1, 1], ['stone', 1, 0.4]] },
 };
 // item -> material que coloca (para construir en 2D con el clic derecho)
-const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.STONE, torch: T.TORCH };
+const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.STONE, torch: T.TORCH, gate: T.GATE };
 
 // --- Objetos del mundo ---
 const O = {
@@ -132,6 +136,8 @@ const ITEMS = {
   meat:     { name: 'Carne', stack: 99 },
   leather:  { name: 'Cuero', stack: 99 },
   bone:     { name: 'Hueso', stack: 99 },
+  crystal:  { name: 'Cristal abisal', stack: 99 },
+  gate:     { name: 'Puerta Abisal', stack: 10, place: true },
   coal:     { name: 'Carbón', stack: 99 },
   iron_ore: { name: 'Mineral de hierro', stack: 99 },
   iron:     { name: 'Lingote de hierro', stack: 99 },
@@ -176,6 +182,7 @@ const RECIPES = [
   { out: 'sword', n: 1, cost: { plank: 2, stick: 1 }, cat: 'item' },
   { out: 'hoe', n: 1, cost: { plank: 2, stick: 2 }, cat: 'item', desc: 'Ara la tierra para plantar semillas' },
   { out: 'torch', n: 2, cost: { stick: 1, fiber: 1 }, cat: 'item' },
+  { out: 'gate', n: 1, cost: { stone: 8, wood: 4, iron_ore: 2 }, cat: 'item', desc: 'Puerta Abisal: colócala y haz clic derecho sobre ella para descender un estrato' },
   { out: 'campfire', n: 1, cost: { wood: 3, stone: 2 }, cat: 'item' },
   { out: 'wallw', n: 2, cost: { plank: 4 }, cat: 'item' },
   { out: 'walls', n: 2, cost: { stone: 4 }, cat: 'item' },

@@ -162,7 +162,7 @@ function startWorld(seed, data) {
     player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp;
     player.vx2 = 0; player.vy2 = 0; player.grounded = false; player.dir = 'right';
     Inv.slots = new Array(36).fill(null); Inv.sel = 0;
-    Inv.add('pick', 1); Inv.add('axe', 1); Inv.add('dirt', 40); Inv.add('stone', 20); Inv.add('torch', 12);
+    Inv.add('pick', 1); Inv.add('axe', 1); Inv.add('dirt', 40); Inv.add('stone', 20); Inv.add('torch', 12); Inv.add('gate', 1);
     drops.length = 0;
   } else {
     G.time = 0.08;
@@ -182,7 +182,7 @@ function startWorld(seed, data) {
   world.center = { x: player.x, y: player.y };
   cam.init = false;
   finishStart(G.mode === 'side'
-    ? 'Mundo 2D: A/D para moverte, Espacio para saltar, clic para picar/colocar'
+    ? 'Vethrún, el mundo hueco · A/D mover, Espacio saltar, clic picar/colocar · coloca la Puerta Abisal y haz clic derecho sobre ella para descender'
     : (data ? 'Partida cargada' : (G.creative ? 'Modo creativo: clic para moverte, recursos infinitos' : 'Clic izquierdo para moverte y recolectar · busca una aldea')));
 }
 
