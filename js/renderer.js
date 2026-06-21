@@ -773,38 +773,61 @@ function rigScratch() {
   if (!_rigScratchCv) { _rigScratchCv = document.createElement('canvas'); _rigScratchCv.width = 56; _rigScratchCv.height = 96; _rigScratchG = _rigScratchCv.getContext('2d'); }
   return _rigScratchG;
 }
-// Ángulos/desplazamientos por pieza según el estado (pose discreta = cacheable).
+// Ángulos por JUNTA (esqueleto FK de 2 huesos por miembro). Pose discreta = cacheable.
+// Devuelve { capeRot, torsoRot, headRot, headDy, hip{L,R}, knee{L,R}, legDy{L,R}, sh{L,R}, elb{L,R} }.
 function rigPoseFor(dir, st) {
-  const P = { cape: { rot: 0, dx: 0, dy: 0 }, torso: { rot: 0, dx: 0, dy: 0 }, head: { rot: 0, dx: 0, dy: 0 },
-    legL: { rot: 0, dx: 0, dy: 0 }, legR: { rot: 0, dx: 0, dy: 0 }, armL: { rot: 0, dx: 0, dy: 0 }, armR: { rot: 0, dx: 0, dy: 0 } };
+  const Q = { capeRot: 0, torsoRot: 0, headRot: 0, headDy: 0,
+    hipL: 0, hipR: 0, kneeL: 0, kneeR: 0, legDyL: 0, legDyR: 0, shL: 0, shR: 0, elbL: 0, elbR: 0 };
   const prof = dir === 'left' || dir === 'right';
+  const fs = dir === 'left' ? -1 : 1;            // signo de "frente" para el perfil
+  const S = Math.sin, mx = Math.max;
   if (st.kind === 'walk') {
     const ph = st.ph;
-    if (prof) {                                   // perfil: zancada por rotación
-      P.legL.rot = Math.sin(ph) * 0.5; P.legR.rot = Math.sin(ph + Math.PI) * 0.5;
-      P.armL.rot = Math.sin(ph + Math.PI) * 0.45; P.armR.rot = Math.sin(ph) * 0.45;
-    } else {                                       // frente/espalda: marcha por elevación
-      P.legL.dy = -Math.max(0, Math.sin(ph)) * 4; P.legL.rot = Math.sin(ph) * 0.16;
-      P.legR.dy = -Math.max(0, Math.sin(ph + Math.PI)) * 4; P.legR.rot = Math.sin(ph + Math.PI) * 0.16;
-      P.armL.rot = Math.sin(ph + Math.PI) * 0.30; P.armR.rot = Math.sin(ph) * 0.30;
+    if (prof) {
+      // zancada de cadera + flexión de rodilla en la fase de vuelo (pierna que avanza)
+      Q.hipL = S(ph) * 0.42 * fs; Q.hipR = S(ph + Math.PI) * 0.42 * fs;
+      Q.kneeL = mx(0, S(ph + 0.6)) * 1.0 * fs; Q.kneeR = mx(0, S(ph + Math.PI + 0.6)) * 1.0 * fs;
+      // brazos en contrafase a su pierna + codo con flexión
+      Q.shL = S(ph + Math.PI) * 0.5 * fs; Q.shR = S(ph) * 0.5 * fs;
+      Q.elbL = (-0.35 - mx(0, S(ph + Math.PI)) * 0.5) * fs; Q.elbR = (-0.35 - mx(0, S(ph)) * 0.5) * fs;
+    } else {
+      // marcha frontal: elevación alterna + rodilla que recoge el pie
+      Q.legDyL = -mx(0, S(ph)) * 5; Q.kneeL = mx(0, S(ph)) * 1.1; Q.hipL = S(ph) * 0.18;
+      Q.legDyR = -mx(0, S(ph + Math.PI)) * 5; Q.kneeR = mx(0, S(ph + Math.PI)) * 1.1; Q.hipR = S(ph + Math.PI) * 0.18;
+      Q.shL = S(ph + Math.PI) * 0.32; Q.shR = S(ph) * 0.32; Q.elbL = -0.3; Q.elbR = -0.3;
     }
-    P.torso.rot = -Math.sin(ph) * 0.05;            // contrarrotación de hombros
-    P.head.rot = Math.sin(ph) * 0.03; P.head.dy = -Math.abs(Math.sin(ph * 2)) * 1.0;   // cabeceo (2x)
-    P.cape.rot = Math.sin(ph * 0.5) * 0.06;
+    Q.torsoRot = -S(ph) * 0.05; Q.headRot = S(ph) * 0.03; Q.headDy = -Math.abs(S(ph * 2)) * 1.0;
+    Q.capeRot = S(ph * 0.5) * 0.06;
   } else if (st.kind === 'jump') {
     const a = st.air;
-    P.legL.dy = -3 - a * 3; P.legR.dy = -2 - a * 3; P.legL.rot = 0.34; P.legR.rot = -0.24;  // piernas recogidas
-    P.armL.rot = -0.55; P.armR.rot = 0.55; P.cape.rot = -0.35 - a * 0.25; P.head.dy = -1;
+    // recogida fetal: muslos arriba, rodillas muy flexionadas; brazos arriba
+    Q.hipL = 0.55; Q.hipR = 0.4; Q.kneeL = -1.4 * (0.6 + a * 0.4); Q.kneeR = -1.25 * (0.6 + a * 0.4);
+    Q.legDyL = -2; Q.legDyR = -2; Q.shL = -0.7; Q.shR = 0.7; Q.elbL = -0.6; Q.elbR = -0.6;
+    Q.capeRot = -0.4 - a * 0.25; Q.headDy = -1;
   } else if (st.kind === 'atk') {
-    const w = Math.sin(st.prog * Math.PI), s = (dir === 'left') ? -1 : 1;
-    const near = (dir === 'left') ? 'armL' : 'armR';
-    P[near].rot = (st.prog < 0.3 ? -0.5 * (st.prog / 0.3) : 0.95 * w) * s;   // anticipación + latigazo
-    P.torso.rot = -0.06 * w * s;
+    const w = Math.sin(st.prog * Math.PI), s = fs;
+    if (dir === 'left') { Q.shL = (st.prog < 0.3 ? -0.6 * (st.prog / 0.3) : 1.0 * w) * s; Q.elbL = -0.5 - 0.5 * w; }
+    else { Q.shR = (st.prog < 0.3 ? -0.6 * (st.prog / 0.3) : 1.0 * w) * s; Q.elbR = -0.5 - 0.5 * w; }
+    Q.torsoRot = -0.06 * w * s; Q.elbL = Q.elbL || -0.2; Q.elbR = Q.elbR || -0.2;
+  } else {                                          // idle: brazos relajados (resto lo da computeLivePose)
+    Q.elbL = -0.18; Q.elbR = -0.18;
   }
-  return P;
+  return Q;
+}
+// Dibuja un miembro de 2 huesos en cadena FK: raíz rota en su pivote, hijo rota
+// en el suyo arrastrado por la raíz (rodilla/codo que flexiona).
+function drawLimb(g, rImg, cImg, rp, cp, rRot, cRot, dy) {
+  dy = dy || 0;
+  g.save();
+  g.translate(rp[0], rp[1] + dy); g.rotate(rRot || 0);
+  g.drawImage(rImg, -rp[0], -rp[1]);
+  g.translate(cp[0] - rp[0], cp[1] - rp[1]); g.rotate(cRot || 0);
+  g.drawImage(cImg, -cp[0], -cp[1]);
+  g.restore();
 }
 // Devuelve el compuesto 28x48 articulado para este estado de animación (cacheado).
 function assembleHero(set, dir, anim, lookKey) {
+  if (!set.rig[dir]) dir = 'down';   // a prueba de dir remoto corrupto (como el path plano)
   const grounded = anim.grounded !== false;
   let st, bucket;
   if ((anim.swingT || 0) > 0) { const pr = clamp(1 - anim.swingT / 0.18, 0, 1); const q = Math.round(pr * 5); st = { kind: 'atk', prog: q / 5 }; bucket = 'a' + q; }
@@ -814,21 +837,25 @@ function assembleHero(set, dir, anim, lookKey) {
   const key = lookKey + '|' + dir + '|' + bucket;
   const hit = _rigCache.get(key);
   if (hit) return hit;
-  const parts = set.rig[dir];
+  const p = set.rig[dir], Q = rigPoseFor(dir, st), V = RIG_PIVOTS;
   const g = rigScratch();
   g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, 56, 96);
-  const rp = rigPoseFor(dir, st);
-  const order = dir === 'up' ? ['legL', 'legR', 'torso', 'armL', 'armR', 'cape', 'head']
-    : ['cape', 'legL', 'legR', 'torso', 'armL', 'armR', 'head'];
-  for (const k of order) {
-    const p = rp[k], piv = RIG_PIVOTS[k];
-    g.save();
-    g.translate(piv[0] + (p.dx || 0), piv[1] + (p.dy || 0));
-    if (p.rot) g.rotate(p.rot);
-    g.drawImage(parts[k], -piv[0], -piv[1]);
-    g.restore();
-  }
+  const legL = () => drawLimb(g, p.thighL, p.shinL, V.hipL, V.kneeL, Q.hipL, Q.kneeL, Q.legDyL);
+  const legR = () => drawLimb(g, p.thighR, p.shinR, V.hipR, V.kneeR, Q.hipR, Q.kneeR, Q.legDyR);
+  const armL = () => drawLimb(g, p.uarmL, p.farmL, V.shL, V.elbL, Q.shL, Q.elbL, 0);
+  const armR = () => drawLimb(g, p.uarmR, p.farmR, V.shR, V.elbR, Q.shR, Q.elbR, 0);
+  const simple = (img, piv, rot, dy) => { g.save(); g.translate(piv[0], piv[1] + (dy || 0)); if (rot) g.rotate(rot); g.drawImage(img, -piv[0], -piv[1]); g.restore(); };
+  const cape = () => simple(p.cape, V.cape, Q.capeRot, 0);
+  const torso = () => simple(p.torso, V.torso, Q.torsoRot, 0);
+  const head = () => simple(p.head, V.head, Q.headRot, Q.headDy);
+  // orden z (atrás→delante) por dirección; en perfil el lado lejano va tras el torso
+  let order;
+  if (dir === 'up') order = [legL, legR, armL, armR, torso, cape, head];
+  else if (dir === 'right') order = [cape, legL, armL, torso, legR, armR, head];     // lado izq = lejano
+  else if (dir === 'left') order = [cape, legR, armR, torso, legL, armL, head];      // lado der = lejano
+  else order = [cape, legL, legR, torso, armL, armR, head];                          // frente
+  for (const fn of order) fn();
   outlineSprite(_rigScratchCv, '#241a2e');
   const out = scaleSmooth(_rigScratchCv, 28, 48);
   if (_rigCache.size > 800) _rigCache.clear();
@@ -970,7 +997,7 @@ function drawDrawable(g, d, ox, oy) {
       t: G.elapsed + player.x * 0.13, moving: player.moving, vx: player.velX, vy: player.velY,
       animT: player.animT, swingT: player.swingT, hurtT: player.hurtT,
       pickT: player.pickT || 0, dirFlash: player._dirFlash || 0,
-      z: player.z || 0, vz: player.vz || 0, landT: player.landT || 0,
+      z: player.z || 0, vz: player.vz || 0, landT: player.landT || 0, grounded: player.grounded,
     };
     // estelas (afterimages) cian en salto/ataque/carrera — siluetas cacheadas, mezcla aditiva
     if (player._trail && player._trail.length && CFG.GFX >= 1 && !inWater) {

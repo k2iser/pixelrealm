@@ -327,6 +327,11 @@ function hpTorso(g, P, bob) {
 function hpArm(g, P, x, off) {   // un brazo simple (no ataque) en columna x
   _R(g, x, 30 + off, 6, 22, P.shirtD); _R(g, x, 46 + off, 6, 6, P.skin); _R(g, x, 44 + off, 6, 1, P.cuff);
 }
+// --- huesos para el rig FK (2 por miembro): se rotan en cadena por su junta ---
+function hpThigh(g, P, x) { _R(g, x, 56, 8, 9, P.pants); _R(g, x, 56, 2, 9, P.pantsD); }              // muslo (cadera→rodilla)
+function hpShin(g, P, x) { _R(g, x, 64, 8, 6, P.pants); _R(g, x, 64, 2, 6, P.pantsD); _R(g, x, 68, 8, 8, P.boots); _R(g, x, 74, 8, 2, P.bootsD); _R(g, x + 1, 69, 3, 1, '#7a5e3a'); }  // espinilla+bota (rodilla→pie)
+function hpUArm(g, P, x) { _R(g, x, 30, 6, 13, P.shirtD); }                                            // brazo (hombro→codo)
+function hpFArm(g, P, x) { _R(g, x, 42, 6, 4, P.shirtD); _R(g, x, 44, 6, 1, P.cuff); _R(g, x, 46, 6, 6, P.skin); }  // antebrazo+mano (codo→muñeca)
 function hpArmsAttack(g, dir, P, bob) {
   if (dir === 'left') {
     _R(g, 0, 32 + bob, 16, 6, P.shirtD); _R(g, 0, 32 + bob, 6, 6, P.skin);
@@ -393,21 +398,24 @@ function makeHeroFrame(dir, pose, look) {
 // Cada pieza es un lienzo 56x96 (sin contorno ni escala: el contorno se aplica
 // UNA vez al cuerpo ya ensamblado). Pivotes = articulación con el cuerpo (coords
 // del lienzo 56x96, ya con el translate(0,18) aplicado).
+// Pivotes en coords del lienzo 56x96 (con translate(0,18) aplicado): cada junta.
+// hip→knee→foot para piernas; shoulder→elbow→wrist para brazos.
 const RIG_PIVOTS = {
   cape: [28, 48], torso: [28, 58], head: [28, 44],
-  legL: [22, 74], legR: [34, 74], armL: [11, 48], armR: [45, 48],
+  hipL: [22, 74], kneeL: [22, 82], hipR: [34, 74], kneeR: [34, 82],
+  shL: [11, 48], elbL: [11, 60], shR: [45, 48], elbR: [45, 60],
 };
 function bakeHeroParts(dir, look) {
   const P = heroPal(look);
   const mk = (fn) => { const [c, g] = cv(56, 96); g.translate(0, 18); fn(g); return c; };
   return {
     cape: mk(g => hpCape(g, dir, P, 0)),
-    legL: mk(g => hpLeg(g, P, 18, 0)),
-    legR: mk(g => hpLeg(g, P, 30, 0)),
     torso: mk(g => hpTorso(g, P, 0)),
     head: mk(g => hpHead(g, dir, P, 0)),
-    armL: mk(g => hpArm(g, P, 8, 0)),
-    armR: mk(g => hpArm(g, P, 42, 0)),
+    thighL: mk(g => hpThigh(g, P, 18)), shinL: mk(g => hpShin(g, P, 18)),
+    thighR: mk(g => hpThigh(g, P, 30)), shinR: mk(g => hpShin(g, P, 30)),
+    uarmL: mk(g => hpUArm(g, P, 8)), farmL: mk(g => hpFArm(g, P, 8)),
+    uarmR: mk(g => hpUArm(g, P, 42)), farmR: mk(g => hpFArm(g, P, 42)),
   };
 }
 
