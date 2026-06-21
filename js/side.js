@@ -273,12 +273,18 @@ function update2d(dt) {
     if (player.moving) player.animT += dt;
     // estado de animación del sprite + reloj de animación
     player.anim2d = !player.grounded ? ((player.vy2 || 0) < 0 ? 'jump' : 'fall') : (player.moving ? 'run' : 'idle');
+    player.atkAnim = Math.max(0, (player.atkAnim || 0) - dt);
+    player._iframe = Math.max(0, (player._iframe || 0) - dt);
+    if (player.atkAnim > 0) player.anim2d = 'hit';
     player._aclk = (player._aclk || 0) + dt;
     player.swingT = Math.max(0, player.swingT - dt);
     player.landT = Math.max(0, (player.landT || 0) - dt);
     player.hurtT = Math.max(0, player.hurtT - dt);
     world.center.x = player.x; world.center.y = player.y;
-    updateBreaking2d(dt);
+    // criaturas + combate: si atacas a un dino de delante, no picas a la vez
+    if (typeof updateMobs2d === 'function') updateMobs2d(dt);
+    const attacked = (typeof attackMobs2d === 'function') && attackMobs2d(dt);
+    if (attacked) player.breaking = null; else updateBreaking2d(dt);
   }
   updateParticles(dt);
 }
@@ -518,6 +524,8 @@ function render2d(g, W, H) {
     const th = world.treeHeightAt(tx);
     if (th > 0) drawTree2d(g, (tx + 0.5 - ox) * TS, (world.surfaceY(tx) - oy) * TS, th, world.biomeAt(tx));
   }
+  // criaturas (dinosaurios) detrás del jugador
+  if (typeof drawMobs2d === 'function') drawMobs2d(g, ox, oy);
   // partículas (polvo)
   for (const p of particles) {
     if (!p.flat2d) continue;

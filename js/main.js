@@ -244,6 +244,7 @@ function finishStart(msg) {
   Input.mdownT = 0;
   Input.mdown = false;
   mobs.length = 0;
+  if (typeof mobs2d !== 'undefined') mobs2d.length = 0;   // criaturas del modo 2D
   particles.length = 0;
   floaters.length = 0;
   projectiles.length = 0;

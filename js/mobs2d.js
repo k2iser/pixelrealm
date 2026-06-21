@@ -1,0 +1,180 @@
+'use strict';
+/* ============ Criaturas del modo 2D: dinosaurios ============
+   Herbívoros pacíficos (vagan/pastan, huyen al ser golpeados) y carnívoros
+   hostiles (persiguen y atacan al jugador). Físicas propias (gravedad + AABB).
+   Arte 100% procedural por especie (silueta + patas animadas). */
+
+const mobs2d = [];
+let _mobSpawnT = 1.5;
+
+// especies: w=medio ancho, bh=alto (tiles); color/belly/dark; rasgos por flags
+const DINO = {
+  raptor: { name: 'Raptor', hostile: true, hp: 14, w: 0.55, bh: 1.0, speed: 4.4, dmg: 6, sense: 10,
+    color: '#a06a38', belly: '#d2a86a', dark: '#6e4724', drop: [['meat', 1]] },
+  rex: { name: 'T-Rex', hostile: true, hp: 40, w: 0.95, bh: 1.95, speed: 3.0, dmg: 15, sense: 12,
+    color: '#5f7444', belly: '#a6bd80', dark: '#3c4a2a', drop: [['meat', 2], ['bone', 1]] },
+  bronto: { name: 'Brontosaurio', hostile: false, hp: 46, w: 1.5, bh: 2.4, speed: 1.5, dmg: 0,
+    color: '#5790b2', belly: '#a3c8db', dark: '#3a647e', neck: true, drop: [['meat', 2], ['leather', 1]] },
+  stego: { name: 'Estegosaurio', hostile: false, hp: 28, w: 1.15, bh: 1.4, speed: 1.8, dmg: 0,
+    color: '#6aa15e', belly: '#bcd6a6', dark: '#467038', plates: true, drop: [['meat', 1], ['leather', 1]] },
+  trike: { name: 'Triceratops', hostile: false, hp: 32, w: 1.1, bh: 1.35, speed: 2.1, dmg: 0,
+    color: '#9c7b5a', belly: '#cdb38a', dark: '#6b5238', horns: true, drop: [['meat', 1], ['leather', 1]] },
+};
+
+/* ---------- física ---------- */
+function _solidBox(cx, fy, hw, bh) {
+  const x0 = Math.floor(cx - hw), x1 = Math.floor(cx + hw - 1e-4), y0 = Math.floor(fy - bh), y1 = Math.floor(fy - 1e-4);
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (world.isSolid(tx, ty)) return true;
+  return false;
+}
+function _moveMob(m, dx, dy) {
+  const hw = m.def.w, bh = m.def.bh;
+  if (dx) {
+    if (!_solidBox(m.x + dx, m.y, hw, bh)) m.x += dx;
+    else { const st = Math.sign(dx) * 0.05, lim = Math.abs(dx); let mv = 0; while (mv < lim && !_solidBox(m.x + st, m.y, hw, bh)) { m.x += st; mv += 0.05; } m.vx = 0; m.bumpX = true; }
+  }
+  if (dy) {
+    if (!_solidBox(m.x, m.y + dy, hw, bh)) m.y += dy;
+    else { const st = Math.sign(dy) * 0.05, lim = Math.abs(dy); let mv = 0; while (mv < lim && !_solidBox(m.x, m.y + st, hw, bh)) { m.y += st; mv += 0.05; } if (dy > 0) m.grounded = true; m.vy = 0; }
+  }
+}
+
+/* ---------- spawn ---------- */
+function trySpawnMob2d() {
+  if (mobs2d.length >= 8 || !world.surfaceY) return;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const tx = Math.floor(player.x) + side * (15 + (Math.random() * 8 | 0));
+  const surf = world.surfaceY(tx);
+  if (!world.isSolid(tx, surf)) return;          // necesita suelo sólido
+  const night = G.darkness > 0.5;
+  const pool = night ? ['raptor', 'raptor', 'rex', 'stego'] : ['bronto', 'stego', 'trike', 'raptor'];
+  const key = pool[Math.random() * pool.length | 0], d = DINO[key];
+  mobs2d.push({ key, def: d, x: tx + 0.5, y: surf, vx: 0, vy: 0, dir: -side, hp: d.hp, maxHp: d.hp,
+    grounded: false, think: 0, wander: 0, walk: 0, atkCd: 0, flee: 0, hurtT: 0 });
+}
+
+/* ---------- update ---------- */
+function updateMobs2d(dt) {
+  _mobSpawnT -= dt;
+  if (_mobSpawnT <= 0) { _mobSpawnT = 2.5 + Math.random() * 2; trySpawnMob2d(); }
+  for (let i = mobs2d.length - 1; i >= 0; i--) {
+    const m = mobs2d[i], d = m.def;
+    if (Math.abs(m.x - player.x) > 48) { mobs2d.splice(i, 1); continue; }   // despawn lejano
+    m.vy = Math.min(24, (m.vy || 0) + CFG.G2D_GRAV * dt);
+    m.grounded = false;
+    m.think -= dt;
+    let desired = 0;
+    if (d.hostile && !player.dead) {
+      const dxp = player.x - m.x, adist = Math.abs(dxp);
+      if (adist < d.sense) {
+        desired = Math.sign(dxp) * d.speed;
+        if (adist < d.w + 0.7 && Math.abs((player.y - 0.8) - (m.y - d.bh * 0.5)) < 1.4) {
+          m.atkCd -= dt; if (m.atkCd <= 0) { m.atkCd = 1.0; hurtPlayer2d(d.dmg, Math.sign(dxp) || 1); }
+        }
+      } else { if (m.think <= 0) { m.think = 1 + Math.random() * 2; m.wander = Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? -1 : 1); } desired = m.wander * d.speed * 0.5; }
+    } else {   // herbívoro
+      if (m.flee > 0) { m.flee -= dt; desired = Math.sign(m.x - player.x || 1) * d.speed * 1.4; }
+      else { if (m.think <= 0) { m.think = 1.5 + Math.random() * 2.5; m.wander = Math.random() < 0.4 ? 0 : (Math.random() < 0.5 ? -1 : 1); } desired = m.wander * d.speed * 0.6; }
+    }
+    m.vx = approach(m.vx || 0, desired, 30 * dt);
+    if (Math.abs(m.vx) > 0.05) m.dir = m.vx > 0 ? 1 : -1;
+    m.bumpX = false;
+    _moveMob(m, m.vx * dt, 0);
+    _moveMob(m, 0, m.vy * dt);
+    if (m.bumpX && m.grounded && Math.abs(desired) > 0.1) m.vy = -CFG.G2D_JUMP * 0.75;   // salta obstáculos
+    m.walk = (m.walk || 0) + Math.abs(m.vx) * dt;
+    m.hurtT = Math.max(0, m.hurtT - dt);
+    if (m.hp <= 0) killMob2d(i);
+  }
+}
+function killMob2d(i) {
+  const m = mobs2d[i];
+  if (!G.creative) for (const dr of (m.def.drop || [])) Inv.add(dr[0], dr[1]);
+  for (let k = 0; k < 9; k++) particles.push({ x: m.x + randRange(-0.3, 0.3), y: m.y - m.def.bh * 0.5, vx: randRange(-2.5, 2.5), vy: randRange(-2.5, 0.5), z: 0, vz: 0, life: 0.55, maxLife: 0.55, color: 'rgba(150,40,40,0.85)', flat2d: true });
+  if (Sfx.land) Sfx.land();
+  mobs2d.splice(i, 1);
+  if (UI.refreshHotbar) UI.refreshHotbar();
+}
+
+/* ---------- combate jugador <-> mob ---------- */
+function hurtPlayer2d(dmg, dir) {
+  if (G.creative || (player._iframe || 0) > 0) return;
+  player.hp -= dmg; player.hurtT = 0.35; player._iframe = 0.7;
+  player.vx2 = dir * 6; player.vy2 = -6; player.grounded = false;
+  G.shake = Math.max(G.shake, 0.22); if (Sfx.hurt) Sfx.hurt(); else if (Sfx.thunder) {}
+  if (player.hp <= 0) { player.hp = 0; respawn2d(); }
+}
+function respawn2d() {
+  const sp = G.spawn || (world.findSurfaceSpawn ? world.findSurfaceSpawn(0) : { x: 0.5, y: 60 });
+  player.x = sp.x; player.y = sp.y; player.hp = player.maxHp; player.vx2 = 0; player.vy2 = 0;
+  player._iframe = 1.5; mobs2d.length = 0; cam.init = false;
+  if (UI.toast) UI.toast('Te derrotaron… reapareces en la superficie');
+}
+// devuelve true si atacó a un mob (para no picar a la vez)
+function attackMobs2d(dt) {
+  player._atkCd = Math.max(0, (player._atkCd || 0) - dt);
+  if (!Input.mdown || UI.panelOpen || UI.chatOpen || UI.dialogOpen) return false;
+  const fd = player.dir === 'left' ? -1 : 1, reach = 1.5;
+  let hit = null;
+  for (const m of mobs2d) {
+    const dx = m.x - player.x;
+    if (Math.sign(dx || fd) !== fd) continue;                       // solo lo de delante
+    if (Math.abs(dx) < reach + m.def.w && Math.abs((m.y - m.def.bh * 0.5) - (player.y - 0.8)) < 1.5) { hit = m; break; }
+  }
+  if (!hit) return false;
+  player.swingT = 0.2; player.atkAnim = 0.25;
+  if (player._atkCd <= 0) {
+    player._atkCd = 0.42;
+    const it = Inv.selected() && ITEMS[Inv.selected().id], tool = it && it.tool;
+    const dmg = tool === 'sword' ? 11 : (tool === 'axe' || tool === 'pick') ? 5 : 3;
+    hit.hp -= G.creative ? 999 : dmg; hit.hurtT = 0.2; hit.vx = fd * 5; hit.flee = 4;
+    if (Sfx.mine) Sfx.mine();
+  }
+  return true;
+}
+
+/* ---------- render ---------- */
+function _dino(g, m, ox, oy) {
+  const TS = CFG.TS, d = m.def;
+  const sx = Math.round((m.x - ox) * TS), sy = Math.round((m.y - oy) * TS);
+  const Wd = d.w * 2 * TS, Hd = d.bh * TS;
+  // sombra de contacto
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, Wd * 0.36, TS * 0.14, 0, 0, 7); g.fill();
+  g.save(); g.translate(sx, sy); g.scale(m.dir > 0 ? 1 : -1, 1);
+  const col = m.hurtT > 0 ? '#ff7a7a' : d.color;
+  const bw = Wd * 0.62, bh = Hd * 0.4, by = -Hd * 0.52;
+  // patas (2, contrafase)
+  const lp = Math.sin(m.walk * 7) * 3, lh = Hd * 0.34;
+  g.fillStyle = d.dark;
+  g.fillRect(Math.round(-bw * 0.28), Math.round(-lh), Math.max(2, TS * 0.14), Math.round(lh + lp));
+  g.fillRect(Math.round(bw * 0.12), Math.round(-lh), Math.max(2, TS * 0.14), Math.round(lh - lp));
+  // cola
+  g.fillStyle = col; g.beginPath(); g.moveTo(-bw * 0.42, by + bh * 0.5); g.lineTo(-bw * 1.0, by + bh * 0.1); g.lineTo(-bw * 0.42, by - bh * 0.1); g.closePath(); g.fill();
+  // cuerpo
+  g.beginPath(); g.ellipse(0, by, bw * 0.5, bh, 0, 0, 7); g.fill();
+  g.fillStyle = d.belly; g.beginPath(); g.ellipse(0, by + bh * 0.32, bw * 0.4, bh * 0.55, 0, 0, 7); g.fill();
+  // placas (stego)
+  if (d.plates) { g.fillStyle = d.dark; for (let i = -2; i <= 2; i++) { const px = i * bw * 0.13; g.beginPath(); g.moveTo(px, by - bh * 0.9); g.lineTo(px - 4, by - bh * 0.1); g.lineTo(px + 4, by - bh * 0.1); g.closePath(); g.fill(); } }
+  // cuello + cabeza
+  g.fillStyle = col;
+  let hx, hy;
+  if (d.neck) {
+    g.fillRect(Math.round(bw * 0.32), Math.round(by - Hd * 0.62), Math.max(2, TS * 0.16), Math.round(Hd * 0.62));
+    hx = bw * 0.42; hy = by - Hd * 0.66; g.beginPath(); g.ellipse(hx, hy, TS * 0.22, TS * 0.17, 0, 0, 7); g.fill();
+  } else {
+    hx = bw * 0.5; hy = by - bh * 0.45; g.beginPath(); g.ellipse(hx, hy, bw * 0.3, bh * 0.72, 0, 0, 7); g.fill();
+    if (d.hostile) { g.fillRect(Math.round(bw * 0.5), Math.round(by - bh * 0.2), Math.round(bw * 0.32), Math.max(2, TS * 0.1)); }  // mandíbula
+  }
+  // cuernos (trike)
+  if (d.horns) { g.fillStyle = '#eee'; g.fillRect(Math.round(bw * 0.62), Math.round(by - bh * 0.7), 6, 2); g.fillRect(Math.round(bw * 0.5), Math.round(by - bh * 1.0), 2, 6); g.fillStyle = col; }
+  // ojo
+  g.fillStyle = '#fff'; g.fillRect(Math.round(hx + 2), Math.round(hy - 2), 2, 2);
+  g.fillStyle = d.hostile ? '#e23' : '#000'; g.fillRect(Math.round(hx + 3), Math.round(hy - 1), 1, 1);
+  g.restore();
+  // barra de vida si dañado
+  if (m.hp < m.maxHp) {
+    const barW = Wd * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
+    g.fillStyle = d.hostile ? '#ff5a5a' : '#7CFC5A'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW * clamp(m.hp / m.maxHp, 0, 1)), 3);
+  }
+}
+function drawMobs2d(g, ox, oy) { for (const m of mobs2d) _dino(g, m, ox, oy); }
