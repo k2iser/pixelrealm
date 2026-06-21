@@ -158,7 +158,10 @@ function startWorld(seed, data) {
     }
   } else if (G.mode === 'side') {
     G.time = 0.15; G.day = 1;
-    G.spawn = world.findSurfaceSpawn(0);
+    // elige una columna de aparición que NO caiga dentro de una casa (evita nacer en un muro)
+    let stx = 0;
+    for (let c = 0; c < 50; c++) { let inHouse = false; for (let h = c - 6; h <= c; h++) if (world.houseAnchor && world.houseAnchor(h)) { inHouse = true; break; } if (!inHouse) { stx = c; break; } }
+    G.spawn = world.findSurfaceSpawn(stx);
     player.x = G.spawn.x; player.y = G.spawn.y; player.hp = player.maxHp;
     player.vx2 = 0; player.vy2 = 0; player.grounded = false; player.dir = 'right';
     Inv.slots = new Array(36).fill(null); Inv.sel = 0;

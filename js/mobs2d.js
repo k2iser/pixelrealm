@@ -29,8 +29,15 @@ function _solidBox(cx, fy, hw, bh) {
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (world.isSolid(tx, ty)) return true;
   return false;
 }
+// ¿hay un sólido en la línea entre dos puntos (en tiles)? (para no golpear a través de paredes)
+function losBlocked2d(x0, y0, x1, y1) {
+  const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2));
+  for (let k = 1; k < n; k++) { const t = k / n; if (world.isSolid(Math.floor(x0 + (x1 - x0) * t), Math.floor(y0 + (y1 - y0) * t))) return true; }
+  return false;
+}
 function _moveMob(m, dx, dy) {
   const hw = m.def.w, bh = m.def.bh;
+  if (_solidBox(m.x, m.y, hw, bh)) { for (let s = 0; s < 30 && _solidBox(m.x, m.y, hw, bh); s++) m.y -= 0.12; }   // si nace incrustado, empuja hacia arriba
   if (dx) {
     if (!_solidBox(m.x + dx, m.y, hw, bh)) m.x += dx;
     else { const st = Math.sign(dx) * 0.05, lim = Math.abs(dx); let mv = 0; while (mv < lim && !_solidBox(m.x + st, m.y, hw, bh)) { m.x += st; mv += 0.05; } m.vx = 0; m.bumpX = true; }
@@ -79,7 +86,7 @@ function updateMobs2d(dt) {
   if (_mobSpawnT <= 0) { _mobSpawnT = 2.5 + Math.random() * 2; trySpawnMob2d(); }
   for (let i = mobs2d.length - 1; i >= 0; i--) {
     const m = mobs2d[i], d = m.def;
-    if (Math.abs(m.x - player.x) > 48) { mobs2d.splice(i, 1); continue; }   // despawn lejano
+    if (!d.boss && Math.abs(m.x - player.x) > 48) { mobs2d.splice(i, 1); continue; }   // despawn lejano (el jefe nunca)
     m.vy = Math.min(24, (m.vy || 0) + CFG.G2D_GRAV * dt);
     m.grounded = false;
     m.think -= dt;
@@ -88,7 +95,8 @@ function updateMobs2d(dt) {
       const dxp = player.x - m.x, adist = Math.abs(dxp);
       if (adist < d.sense) {
         desired = Math.sign(dxp) * d.speed;
-        if (adist < d.w + 0.7 && Math.abs((player.y - 0.8) - (m.y - d.bh * 0.5)) < 1.4) {
+        if (adist < d.w + 0.7 && Math.abs((player.y - 0.8) - (m.y - d.bh * 0.5)) < 1.4 &&
+            !losBlocked2d(m.x, m.y - d.bh * 0.5, player.x, player.y - 0.8)) {
           m.atkCd -= dt; if (m.atkCd <= 0) { m.atkCd = 1.0; hurtPlayer2d(d.dmg, Math.sign(dxp) || 1); }
         }
       } else { if (m.think <= 0) { m.think = 1 + Math.random() * 2; m.wander = Math.random() < 0.5 ? 0 : (Math.random() < 0.5 ? -1 : 1); } desired = m.wander * d.speed * 0.5; }
@@ -144,7 +152,8 @@ function attackMobs2d(dt) {
   for (const m of mobs2d) {
     const dx = m.x - player.x;
     if (Math.sign(dx || fd) !== fd) continue;                       // solo lo de delante
-    if (Math.abs(dx) < reach + m.def.w && Math.abs((m.y - m.def.bh * 0.5) - (player.y - 0.8)) < 1.5) { hit = m; break; }
+    if (Math.abs(dx) < reach + m.def.w && Math.abs((m.y - m.def.bh * 0.5) - (player.y - 0.8)) < 1.5 &&
+        !losBlocked2d(player.x, player.y - 0.8, m.x, m.y - m.def.bh * 0.5)) { hit = m; break; }
   }
   if (!hit) return false;
   player.swingT = 0.2; player.atkAnim = 0.25;
@@ -241,7 +250,7 @@ function scanSurvivors2d() {
       x: sx, y: world.surfaceY(hx), vy: 0, grounded: false, def: { w: 0.3, bh: 1.7 },
       name: SURVIVOR_NAMES[(k * SURVIVOR_NAMES.length) | 0],
       robe: SURVIVOR_ROBES[(hash2(hx, 6, 7) * SURVIVOR_ROBES.length) | 0],
-      line: SURVIVOR_LINES[(hash2(hx, 4, 9) * (SURVIVOR_LINES.length - 1)) | 0],
+      line: SURVIVOR_LINES[(hash2(hx, 4, 9) * SURVIVOR_LINES.length) | 0],
       gave: false, near: false, t: hash2(hx, 5, 9) * 6,
     });
   }

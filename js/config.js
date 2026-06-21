@@ -57,17 +57,19 @@ const TDEF = {
   [T.BEDROCK]:  { solid: true, hp: Infinity, tool: 'pick', drops: [] },
   // antorcha: no sólida, emite luz; se quita al instante y se recupera
   [T.TORCH]:    { solid: false, light: 6.5, hp: 0.12, tool: null, drops: [['torch', 1, 1]] },
-  // Puerta Abisal: estructura no sólida que se INVOCA (clic derecho) para descender un estrato
-  [T.GATE]:     { solid: false, light: 5.5, hp: 0.4, tool: null, drops: [['gate', 1, 1]] },
+  // Puerta Abisal: estructura no sólida que se INVOCA (clic derecho). Se puede retirar picándola,
+  // pero NO suelta item (evita el farmeo de puertas/descensos con las que se auto-colocan).
+  [T.GATE]:     { solid: false, light: 5.5, hp: 0.4, tool: null, drops: [] },
   // Cristal abisal: mineral profundo, valioso y luminoso
   [T.CRYSTAL]:  { solid: true, light: 4.5, hp: 12, tool: 'pick', drops: [['crystal', 1, 1], ['stone', 1, 0.4]] },
   // materiales de construcción (estructuras y colocables del jugador)
   [T.WOOD]:     { solid: true, hp: 4, tool: 'axe', drops: [['wood', 1, 1]] },
   [T.BRICK]:    { solid: true, hp: 9, tool: 'pick', drops: [['stone', 1, 1]] },
   [T.PLATFORM]: { solid: true, hp: 3, tool: 'axe', drops: [['wood', 1, 1]] },
-  // cofre: no sólido, no se pica (se abre con clic derecho); su versión abierta es decorativa
+  // cofre: no sólido; se abre con clic derecho. El cofre cerrado no se pica (hay que abrirlo);
+  // el abierto sí se puede retirar para limpiar (suelta algo de madera).
   [T.CHEST]:      { solid: false },
-  [T.CHEST_OPEN]: { solid: false },
+  [T.CHEST_OPEN]: { solid: false, hp: 1.5, tool: 'axe', drops: [['wood', 2, 1]] },
 };
 // item -> material que coloca (para construir en 2D con el clic derecho)
 const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.BRICK, wallw: T.WOOD, plank: T.WOOD, wood: T.WOOD, torch: T.TORCH, gate: T.GATE };

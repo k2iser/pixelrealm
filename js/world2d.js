@@ -117,7 +117,7 @@ class World2D {
       const roof = this.biomeAt(gx) === 'snow' ? T.STONE : T.WOOD;
       for (let lx = 0; lx < HW; lx++) for (let ry = top; ry <= floor; ry++) {
         const ly = ry - top, perim = (lx === 0 || lx === HW - 1 || ly === 0 || ly === HH - 1);
-        const door = (lx === 1 && (ly === HH - 1 || ly === HH - 2));
+        const door = (lx === 0 && (ly === HH - 1 || ly === HH - 2));   // vano real en el muro izquierdo
         if (door) set(gx + lx, ry, T.AIR);
         else if (perim) set(gx + lx, ry, ly === 0 ? roof : T.WOOD);
         else set(gx + lx, ry, T.AIR);
@@ -126,9 +126,10 @@ class World2D {
       if (hash2(gx, 9, (this.seed + 4242) >>> 0) < 0.4) set(gx + 2, floor - 1, T.CHEST);  // a veces, cofre en casa
       for (let lx = 1; lx < HW - 1; lx++) set(gx + lx, base, T.WOOD); // refuerzo del suelo sobre la hierba
     }
-    // --- salas/viviendas de cueva (dwarf-holds sepultados) ---
-    for (let gx = baseX - 12; gx < baseX + N + 12; gx++) {
-      for (let gy = baseY - 10; gy < baseY + N + 10; gy++) {
+    // --- salas/viviendas de cueva (dwarf-holds sepultados) --- (solo lattice 11x8, no toda la malla)
+    const gx0 = Math.ceil((baseX - 12) / 11) * 11, gy0 = Math.ceil((baseY - 10) / 8) * 8;
+    for (let gx = gx0; gx < baseX + N + 12; gx += 11) {
+      for (let gy = gy0; gy < baseY + N + 10; gy += 8) {
         if (!this.roomAnchor(gx, gy)) continue;
         const RW = 9, RH = 6;
         for (let lx = 0; lx < RW; lx++) for (let ly = 0; ly < RH; ly++) {

@@ -20,13 +20,19 @@ function icon2dURL(id) {
   }
   const blob = (col, hi) => { const [c, g] = cv(32, 32); g.fillStyle = col; g.beginPath(); g.ellipse(16, 18, 11, 9, 0, 0, 7); g.fill(); g.fillStyle = hi; g.fillRect(11, 12, 5, 3); return c.toDataURL(); };
   if (id === 'meat') return blob('#b8473a', '#e89a7a');
+  if (id === 'core') return blob('#7a3fd0', '#d9b6ff');   // Núcleo de Vethrún (violeta)
   if (id === 'leather') return blob('#8a5a32', '#b07d4a');
   if (id === 'bone') { const [c, g] = cv(32, 32); g.fillStyle = '#ece4cc'; g.fillRect(9, 14, 14, 4); g.beginPath(); g.arc(9, 13, 3, 0, 7); g.arc(9, 19, 3, 0, 7); g.arc(23, 13, 3, 0, 7); g.arc(23, 19, 3, 0, 7); g.fill(); return c.toDataURL(); }
   return '';
 }
 // se llama cuando terminan de cargar los assets externos: descarta los tiles
 // procedurales cacheados para regenerarlos desde el atlas CC0.
-function invalidate2dTiles() { for (const k in _tile2dCache) delete _tile2dCache[k]; }
+function invalidate2dTiles() {
+  for (const k in _tile2dCache) delete _tile2dCache[k];
+  // los iconos 2D derivan de las texturas: invalídalos también para que se regeneren
+  if (typeof Assets !== 'undefined' && Assets._icons) for (const id in (typeof ICON2D_MAT !== 'undefined' ? ICON2D_MAT : {})) delete Assets._icons[id];
+  if (typeof UI !== 'undefined' && UI.refreshHotbar && G.running) UI.refreshHotbar();
+}
 // vetas de mineral superpuestas sobre la piedra base
 function oreSpecks(g, col, hi, salt) {
   const TS = CFG.TS;
@@ -351,7 +357,14 @@ function strataName2d(depth) {
 // invocar la Puerta Abisal: labra una cámara más abajo y desciende un estrato
 function descend2d() {
   const px = Math.floor(player.x);
+  // ¿ya en el fondo? no re-labrar en bucle: avisar y parar
+  if (Math.floor(player.y) + 30 >= world.BOTTOM - 6) {
+    if (UI.toast) UI.toast('Has llegado al fondo de Vethrún: el Corazón. No hay estrato más abajo.');
+    return;
+  }
   const targetY = Math.min(world.BOTTOM - 6, Math.floor(player.y) + 55);
+  // si hay un jefe vivo, márcalo derrotado antes de limpiar (evita farmeo por descenso)
+  if (typeof mobs2d !== 'undefined' && mobs2d.some(m => m.def && m.def.boss)) G.bossDefeated2d = true;
   for (let yy = targetY - 4; yy <= targetY; yy++) for (let xx = px - 2; xx <= px + 2; xx++) world.setGround(xx, yy, T.AIR);
   for (let xx = px - 2; xx <= px + 2; xx++) world.setGround(xx, targetY + 1, T.STONE);   // suelo de aterrizaje
   world.setGround(px - 2, targetY, T.TORCH); world.setGround(px + 2, targetY, T.TORCH);  // antorchas
@@ -669,9 +682,12 @@ function render2d(g, W, H) {
     const h = hoveredTile2d();
     const isAir = world.ground(h.tx, h.ty) === T.AIR;
     const sel = Inv.selected(), placeMat = sel ? PLACE2D[sel.id] : null;
+    const mat = world.ground(h.tx, h.ty), mdef = TDEF[mat];
+    const interactable = mat === T.GATE || mat === T.CHEST;               // se usan con clic derecho
+    const mineable = canMine2d(h) && mdef && mdef.hp != null && mdef.hp !== Infinity;  // bedrock NO
     const ok = isAir
-      ? (placeMat != null && canPlace2d(h) && hasSupport2d(h.tx, h.ty))   // colocar
-      : canMine2d(h);                                                     // picar
+      ? (placeMat != null && canPlace2d(h) && (G.creative || hasSupport2d(h.tx, h.ty)))   // colocar
+      : (mineable || (interactable && canPlace2d(h)));                    // picar / interactuar
     g.strokeStyle = ok ? 'rgba(120,255,140,0.7)' : 'rgba(255,90,90,0.45)';
     g.lineWidth = 1;
     g.strokeRect(Math.round((h.tx - ox) * TS) + 0.5, Math.round((h.ty - oy) * TS) + 0.5, TS - 1, TS - 1);
