@@ -404,6 +404,7 @@ function update2d(dt) {
     world.center.x = player.x; world.center.y = player.y;
     // criaturas + combate: si atacas a un dino de delante, no picas a la vez
     if (typeof updateMobs2d === 'function') updateMobs2d(dt);
+    if (typeof updateNpc2d === 'function') updateNpc2d(dt);
     const attacked = (typeof attackMobs2d === 'function') && attackMobs2d(dt);
     if (attacked) player.breaking = null; else updateBreaking2d(dt);
   }
@@ -646,8 +647,9 @@ function render2d(g, W, H) {
     const th = world.treeHeightAt(tx);
     if (th > 0) drawTree2d(g, (tx + 0.5 - ox) * TS, (world.surfaceY(tx) - oy) * TS, th, world.biomeAt(tx));
   }
-  // criaturas (dinosaurios) detrás del jugador
+  // criaturas (dinosaurios) y supervivientes detrás del jugador
   if (typeof drawMobs2d === 'function') drawMobs2d(g, ox, oy);
+  if (typeof drawNpcs2d === 'function') drawNpcs2d(g, ox, oy);
   // partículas (polvo)
   for (const p of particles) {
     if (!p.flat2d) continue;

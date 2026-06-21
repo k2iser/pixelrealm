@@ -178,3 +178,74 @@ function _dino(g, m, ox, oy) {
   }
 }
 function drawMobs2d(g, ox, oy) { for (const m of mobs2d) _dino(g, m, ox, oy); }
+
+/* ============ NPCs supervivientes (pueblos de superficie) ============ */
+const npc2d = [];
+let _npcScanT = 0;
+const SURVIVOR_NAMES = ['Bryn', 'Tova', 'Kell', 'Mira', 'Doran', 'Saela', 'Orin', 'Hede'];
+const SURVIVOR_ROBES = ['#5a6b8a', '#7a5a6b', '#5a7a5e', '#8a7a4a', '#6a5a8a', '#7a6a4a'];
+const SURVIVOR_LINES = [
+  'Los Antiguos sellaron lo de abajo por algo… pero alguien debe mirar.',
+  'Dicen que cada estrato fue un cielo. Imagínatelo.',
+  'Si ves un hold con la luz aún encendida, alguien resistió ahí abajo.',
+  'El cristal abisal recuerda la luz del Corazón. Por eso brilla.',
+  'En la Jungla Sepultada los grandes pastan; los flacos cazan. Ojo.',
+  '¿Otra Puerta, Zahorí? Baja. Nosotros guardamos la Corteza.',
+  'Llévate esto. Allá abajo no hay tiendas.',
+];
+
+function scanSurvivors2d() {
+  if (G.mode !== 'side' || !world.houseAnchor) return;
+  const px = Math.floor(player.x);
+  for (let hx = px - 30; hx <= px + 30; hx++) {
+    if (!world.houseAnchor(hx)) continue;
+    const sx = hx + 1.5;                                   // junto a la puerta
+    if (npc2d.some(n => Math.abs(n.x - sx) < 1.5)) continue;
+    if (npc2d.length >= 6) break;
+    const k = hash2(hx, 3, 777);
+    npc2d.push({
+      x: sx, y: world.surfaceY(hx), vy: 0, grounded: false, def: { w: 0.3, bh: 1.7 },
+      name: SURVIVOR_NAMES[(k * SURVIVOR_NAMES.length) | 0],
+      robe: SURVIVOR_ROBES[(hash2(hx, 6, 7) * SURVIVOR_ROBES.length) | 0],
+      line: SURVIVOR_LINES[(hash2(hx, 4, 9) * (SURVIVOR_LINES.length - 1)) | 0],
+      gave: false, near: false, t: hash2(hx, 5, 9) * 6,
+    });
+  }
+}
+function updateNpc2d(dt) {
+  _npcScanT -= dt;
+  if (_npcScanT <= 0) { _npcScanT = 1.5; scanSurvivors2d(); }
+  for (let i = npc2d.length - 1; i >= 0; i--) {
+    const n = npc2d[i];
+    if (Math.abs(n.x - player.x) > 42) { npc2d.splice(i, 1); continue; }
+    n.vy = Math.min(20, (n.vy || 0) + CFG.G2D_GRAV * dt); n.grounded = false;
+    _moveMob(n, 0, n.vy * dt);
+    const d = Math.abs(n.x - player.x);
+    n.near = d < 3.2 && Math.abs(n.y - player.y) < 3;
+    if (n.near && !n.gave && !player.dead) {            // regalo único al acercarte
+      n.gave = true; Inv.add('torch', 3); Inv.add('meat', 1);
+      if (UI.toast) UI.toast(n.name + ': «' + n.line + '»  (+3 antorchas, +1 carne)');
+      if (UI.refreshHotbar) UI.refreshHotbar();
+    }
+  }
+}
+function drawNpc2d(g, n, ox, oy) {
+  const TS = CFG.TS, sx = (n.x - ox) * TS, sy = (n.y - oy) * TS;
+  const bob = Math.sin((G.elapsed + n.t) * 2) * 1.3;
+  const h = TS * 1.7, w = TS * 0.72;
+  g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(sx, sy, TS * 0.32, TS * 0.12, 0, 0, 7); g.fill();
+  g.fillStyle = n.robe;                                   // túnica
+  g.beginPath(); g.moveTo(sx - w / 2, sy); g.lineTo(sx + w / 2, sy); g.lineTo(sx + w * 0.32, sy - h * 0.62 + bob); g.lineTo(sx - w * 0.32, sy - h * 0.62 + bob); g.closePath(); g.fill();
+  g.fillStyle = '#e8c9a0'; g.beginPath(); g.arc(sx, sy - h * 0.72 + bob, w * 0.27, 0, 7); g.fill();   // cara
+  g.fillStyle = n.robe; g.beginPath(); g.arc(sx, sy - h * 0.78 + bob, w * 0.32, Math.PI, 0); g.fill(); // capucha
+  g.fillStyle = '#222'; g.fillRect(Math.round(sx - 3), Math.round(sy - h * 0.72 + bob), 1, 1); g.fillRect(Math.round(sx + 2), Math.round(sy - h * 0.72 + bob), 1, 1);
+  // bocadillo de lore al acercarte
+  if (n.near) {
+    g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - h - 20;
+    g.fillStyle = 'rgba(20,18,28,0.92)'; g.fillRect(bx, by, tw + 10, 16);
+    g.fillStyle = 'rgba(20,18,28,0.92)'; g.beginPath(); g.moveTo(sx - 4, by + 16); g.lineTo(sx + 4, by + 16); g.lineTo(sx, by + 21); g.closePath(); g.fill();
+    g.fillStyle = '#ffe9a6'; g.fillText(n.name, bx + 5, by + 7);
+    g.fillStyle = '#e8e2d2'; g.fillText(n.line, bx + 5, by + 14);
+  }
+}
+function drawNpcs2d(g, ox, oy) { for (const n of npc2d) drawNpc2d(g, n, ox, oy); }
