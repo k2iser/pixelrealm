@@ -422,7 +422,7 @@ function bakeHeroParts(dir, look) {
 // Set completo del héroe para un look (cacheado; los looks vienen saneados)
 function getHeroLookSet(rawLook) {
   const look = clampLook(rawLook);
-  const key = 's' + look.skin + 'h' + look.hair + 'y' + look.style + 'c' + look.shirt + 'p' + look.pants;
+  const key = 's' + look.skin + 'h' + look.hair + 'c' + look.shirt + 'p' + look.pants;  // style no afecta píxeles (capucha)
   if (Assets.heroSets[key]) return Assets.heroSets[key];
   const set = { rig: {}, _key: key };
   for (const dir of ['down', 'up', 'left', 'right']) {

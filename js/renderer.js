@@ -743,12 +743,13 @@ function computeLivePose(anim, dir) {
       else if (anim.role === 3) sy *= 1 + Math.max(0, Math.sin(t * 3)) * 0.025;                  // mercader: cabeceo (la moneda ya salta)
     }
   }
-  // recoil del golpe (anticipación + latigazo) — solo quien tiene swingT>0 (héroe)
+  // recoil del golpe (anticipación + latigazo). Si el rig ya late con el brazo, se atenúa el cuerpo
   if ((anim.swingT || 0) > 0) {
     const prog = clamp(1 - anim.swingT / 0.18, 0, 1);
     const sgn = (dir === 'up' || dir === 'left') ? -1 : 1;
-    if (prog < 0.3) { shear += sgn * -0.13 * (prog / 0.3); sy *= 0.96; }        // anticipa hacia atrás
-    else { const w = Math.sin(((prog - 0.3) / 0.7) * Math.PI); shear += sgn * 0.26 * w; sy *= 1 + 0.06 * w; sx *= 1 + 0.05 * w; } // latigazo (smear)
+    const rk = anim.rigged ? 0.4 : 1;
+    if (prog < 0.3) { shear += sgn * -0.13 * (prog / 0.3) * rk; sy *= 1 - 0.04 * rk; }
+    else { const w = Math.sin(((prog - 0.3) / 0.7) * Math.PI); shear += sgn * 0.26 * w * rk; sy *= 1 + 0.06 * w * rk; sx *= 1 + 0.05 * w * rk; }
   }
   // flinch de daño: aplaste rápido que decae (acompaña al parpadeo)
   if ((anim.hurtT || 0) > 0) { sx *= 1 + anim.hurtT * 0.5; sy *= 1 - anim.hurtT * 0.3; }
@@ -791,9 +792,9 @@ function rigPoseFor(dir, st) {
       Q.shL = S(ph + Math.PI) * 0.5 * fs; Q.shR = S(ph) * 0.5 * fs;
       Q.elbL = (-0.35 - mx(0, S(ph + Math.PI)) * 0.5) * fs; Q.elbR = (-0.35 - mx(0, S(ph)) * 0.5) * fs;
     } else {
-      // marcha frontal: elevación alterna + rodilla que recoge el pie
-      Q.legDyL = -mx(0, S(ph)) * 5; Q.kneeL = mx(0, S(ph)) * 1.1; Q.hipL = S(ph) * 0.18;
-      Q.legDyR = -mx(0, S(ph + Math.PI)) * 5; Q.kneeR = mx(0, S(ph + Math.PI)) * 1.1; Q.hipR = S(ph + Math.PI) * 0.18;
+      // marcha frontal: elevación alterna + rodilla que recoge el pie (atenuada)
+      Q.legDyL = -mx(0, S(ph)) * 3.5; Q.kneeL = mx(0, S(ph)) * 0.9; Q.hipL = S(ph) * 0.14;
+      Q.legDyR = -mx(0, S(ph + Math.PI)) * 3.5; Q.kneeR = mx(0, S(ph + Math.PI)) * 0.9; Q.hipR = S(ph + Math.PI) * 0.14;
       Q.shL = S(ph + Math.PI) * 0.32; Q.shR = S(ph) * 0.32; Q.elbL = -0.3; Q.elbR = -0.3;
     }
     Q.torsoRot = -S(ph) * 0.05; Q.headRot = S(ph) * 0.03; Q.headDy = -Math.abs(S(ph * 2)) * 1.0;
@@ -830,9 +831,9 @@ function assembleHero(set, dir, anim, lookKey) {
   if (!set.rig[dir]) dir = 'down';   // a prueba de dir remoto corrupto (como el path plano)
   const grounded = anim.grounded !== false;
   let st, bucket;
-  if ((anim.swingT || 0) > 0) { const pr = clamp(1 - anim.swingT / 0.18, 0, 1); const q = Math.round(pr * 5); st = { kind: 'atk', prog: q / 5 }; bucket = 'a' + q; }
+  if ((anim.swingT || 0) > 0) { const pr = clamp(1 - anim.swingT / 0.18, 0, 1); const q = Math.round(pr * 3); st = { kind: 'atk', prog: q / 3 }; bucket = 'a' + q; }
   else if (!grounded) { const q = Math.round(clamp((anim.z || 0) * 1.0, 0, 1) * 3); st = { kind: 'jump', air: q / 3 }; bucket = 'j' + q; }
-  else if (anim.moving) { const N = 12, raw = (anim.animT || 0) * 9 / (Math.PI * 2); const fq = ((Math.round(raw * N) % N) + N) % N; st = { kind: 'walk', ph: fq / N * Math.PI * 2 }; bucket = 'w' + fq; }
+  else if (anim.moving) { const N = 8, raw = (anim.animT || 0) * 9 / (Math.PI * 2); const fq = ((Math.round(raw * N) % N) + N) % N; st = { kind: 'walk', ph: fq / N * Math.PI * 2 }; bucket = 'w' + fq; }
   else { st = { kind: 'idle' }; bucket = 'i'; }
   const key = lookKey + '|' + dir + '|' + bucket;
   const hit = _rigCache.get(key);
@@ -858,8 +859,10 @@ function assembleHero(set, dir, anim, lookKey) {
   for (const fn of order) fn();
   outlineSprite(_rigScratchCv, '#241a2e');
   const out = scaleSmooth(_rigScratchCv, 28, 48);
-  if (_rigCache.size > 800) _rigCache.clear();
   _rigCache.set(key, out);
+  if (_rigCache.size > 600) {           // evicción FIFO suave (Map conserva orden); evita el flush total
+    for (let i = 0; i < 120; i++) { const k0 = _rigCache.keys().next().value; if (k0 === undefined) break; _rigCache.delete(k0); }
+  }
   return out;
 }
 
@@ -912,7 +915,7 @@ function drawHero(g, set, dir, frameI, sx, sy, swingT, toolId, inWater, anim) {
   if (swingT > 0 && toolId && Assets.items[toolId]) {
     const t = Assets.items[toolId];
     const prog = 1 - swingT / 0.18;
-    const offs = { down: [14, -16], up: [-14, -28], left: [-18, -22], right: [18, -22] };
+    const offs = { down: [14, -16], up: [14, -28], left: [-18, -22], right: [18, -22] };
     const o = offs[dir];
     const flip = dir === 'left' ? -1 : 1;
     g.save();
