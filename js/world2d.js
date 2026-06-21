@@ -63,9 +63,11 @@ class World2D {
   // bioma de superficie (solo afecta al fondo; el terreno es común en el MVP)
   biomeAt(tx) {
     const t = fbm(tx * 0.0016, 55.5, this.seed + 7, 2);
-    if (t < 0.30) return 'desert';
-    if (t < 0.56) return 'plains';
-    if (t < 0.80) return 'forest';
+    if (t < 0.18) return 'desert';
+    if (t < 0.36) return 'plains';
+    if (t < 0.54) return 'forest';
+    if (t < 0.70) return 'jungle';
+    if (t < 0.85) return 'mountain';
     return 'snow';
   }
 

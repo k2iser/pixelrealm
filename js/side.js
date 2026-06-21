@@ -297,10 +297,12 @@ function updateCamera2d(dt, W, H) {
 
 /* ---------- fondo con profundidad (parallax por bioma + cueva) ---------- */
 const BIOME2D = {
-  plains: { sky: [[126, 192, 255], [206, 234, 255]], far: [157, 180, 210], mid: [134, 173, 110], near: [88, 136, 64], decor: 'bush' },
-  forest: { sky: [[131, 192, 238], [205, 233, 230]], far: [147, 172, 196], mid: [92, 146, 84], near: [50, 100, 52], decor: 'pine' },
-  desert: { sky: [[159, 210, 242], [255, 232, 188]], far: [226, 202, 150], mid: [210, 184, 120], near: [180, 142, 78], decor: 'cactus' },
-  snow:   { sky: [[190, 217, 243], [238, 246, 255]], far: [203, 216, 231], mid: [176, 190, 205], near: [142, 160, 180], decor: 'snowpine' },
+  plains:   { sky: [[126, 192, 255], [206, 234, 255]], far: [157, 180, 210], mid: [134, 173, 110], near: [88, 136, 64], decor: 'bush' },
+  forest:   { sky: [[131, 192, 238], [205, 233, 230]], far: [147, 172, 196], mid: [92, 146, 84], near: [50, 100, 52], decor: 'pine' },
+  desert:   { sky: [[159, 210, 242], [255, 232, 188]], far: [226, 202, 150], mid: [210, 184, 120], near: [180, 142, 78], decor: 'cactus' },
+  snow:     { sky: [[190, 217, 243], [238, 246, 255]], far: [203, 216, 231], mid: [176, 190, 205], near: [142, 160, 180], decor: 'snowpine' },
+  jungle:   { sky: [[120, 196, 210], [197, 230, 200]], far: [120, 165, 150], mid: [56, 130, 70], near: [30, 86, 46], decor: 'pine' },
+  mountain: { sky: [[150, 188, 224], [214, 230, 244]], far: [150, 156, 178], mid: [120, 132, 140], near: [96, 104, 112], decor: 'pine' },
 };
 function mixNight2d(rgb) {
   const d = clamp(G.darkness, 0, 1) * 0.82, n = [10, 12, 30];
@@ -352,6 +354,50 @@ function caveBackdrop2d(g, W, H, ox, cy0) {
     g.beginPath(); g.moveTo(x, cy0); g.lineTo(x + TS * 0.5, cy0 + h); g.lineTo(x + TS, cy0); g.closePath(); g.fill();
   }
 }
+// decoración del cielo: sol/luna, estrellas de noche y nubes (parallax lento)
+function cloud2d(g, x, y, r) {
+  const u = Math.max(2, r / 3);
+  g.fillRect(x - 2 * u, y, 4 * u, 2 * u);
+  g.fillRect(x - u, y - u, 3 * u, u);
+  g.fillRect(x + 0.2 * u, y - 1.8 * u, 1.6 * u, u);
+}
+function skyDecor2d(g, W, H, ox, skyBottom) {
+  const day = clamp(1 - G.darkness, 0, 1), t = G.time || 0;
+  // estrellas (de noche)
+  if (G.darkness > 0.25) {
+    g.fillStyle = '#ffffff';
+    for (let i = 0; i < 70; i++) {
+      const sx = (hash2(i, 1, 3) * W) | 0, sy = (hash2(i, 2, 3) * Math.min(H * 0.7, skyBottom)) | 0;
+      if (sy >= skyBottom - 2) continue;
+      g.globalAlpha = clamp((G.darkness - 0.25) / 0.5, 0, 1) * (0.4 + 0.6 * Math.abs(Math.sin(G.elapsed * 1.5 + i)));
+      g.fillRect(sx, sy, 1, 1);
+    }
+    g.globalAlpha = 1;
+  }
+  // sol de día / luna de noche, recorriendo el cielo según la hora
+  const cxs = ((t + 0.25) % 1) * (W + 80) - 40, cyy = 36 + Math.sin(((t + 0.25) % 1) * Math.PI) * -18;
+  const isDay = G.darkness < 0.5;
+  if (cyy < skyBottom) {
+    if (isDay) {
+      g.fillStyle = 'rgba(255,240,180,0.16)'; g.beginPath(); g.arc(cxs, cyy, 30, 0, 7); g.fill();
+      g.fillStyle = '#ffe9a6'; g.beginPath(); g.arc(cxs, cyy, 15, 0, 7); g.fill();
+    } else {
+      g.fillStyle = '#e2e8ff'; g.beginPath(); g.arc(cxs, cyy, 12, 0, 7); g.fill();
+      g.fillStyle = 'rgba(20,24,46,0.9)'; g.beginPath(); g.arc(cxs + 5, cyy - 3, 11, 0, 7); g.fill();   // fase lunar
+    }
+  }
+  // nubes (parallax muy lento + deriva), se desvanecen de noche
+  if (day > 0.05) {
+    g.globalAlpha = 0.75 * day; g.fillStyle = '#ffffff';
+    const shift = ox * CFG.TS * 0.06 + G.elapsed * 5, step = 230;
+    const s0 = Math.floor(shift / step) * step;
+    for (let wx = s0 - step; wx < shift + W + step; wx += step) {
+      const k = Math.round(wx / step), x = wx - shift, y = 22 + hash2(k, 4, 8) * Math.min(120, skyBottom * 0.55);
+      if (y < skyBottom - 12) cloud2d(g, x, y, 22 + hash2(k, 5, 8) * 20);
+    }
+    g.globalAlpha = 1;
+  }
+}
 // árbol de superficie (segundo plano, pixel, no colisiona): tronco + copa por bloques
 function drawTree2d(g, sx, baseY, h, biome) {
   const TS = CFG.TS;
@@ -387,6 +433,7 @@ function bg2d(g, W, H, ox, oy) {
   // capas parallax (solo si el horizonte está dentro/encima de la vista)
   if (horizonY > 0) {
     const hb = Math.min(horizonY, H);
+    skyDecor2d(g, W, H, ox, hb);          // sol/luna + estrellas + nubes (sobre el cielo)
     silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
     silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
     silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));
