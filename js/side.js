@@ -598,6 +598,15 @@ function drawSurfaceDecor2d(g, ox, oy, col0, col1) {
     g.drawImage(im, Math.round((tx + 0.5 - ox) * TS - dw / 2), Math.round((surf - oy) * TS - dh + 2), Math.round(dw), Math.round(dh));
   }
 }
+// capa de fondo tileada horizontalmente con parallax (base inferior en hb)
+function bgLayer2d(g, W, im, hb, shift, dh) {
+  if (!im || !im.naturalWidth) return false;
+  const dw = im.width * (dh / im.height);
+  let x = -(((shift % dw) + dw) % dw);
+  g.imageSmoothingEnabled = false;
+  for (; x < W; x += dw) g.drawImage(im, Math.round(x), Math.round(hb - dh), Math.round(dw), Math.round(dh));
+  return true;
+}
 function bg2d(g, W, H, ox, oy) {
   const TS = CFG.TS;
   // muestreo continuo del centro: crossfade de bioma y horizonte entre columnas vecinas (sin saltos)
@@ -616,9 +625,16 @@ function bg2d(g, W, H, ox, oy) {
   if (horizonY > 0) {
     const hb = Math.min(horizonY, H);
     skyDecor2d(g, W, H, ox, hb);          // sol/luna + estrellas + nubes (sobre el cielo)
-    silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
-    silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
-    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));
+    // capas lejanas: montañas/colinas PixelLab (se desvanecen de noche); fallback a siluetas
+    const night = clamp(G.darkness, 0, 1);
+    g.globalAlpha = 1 - night * 0.5;
+    const farOk = bgLayer2d(g, W, Assets2D.img.bg_mountains, hb, ox * TS * 0.15, TS * 4.6);
+    const midOk = bgLayer2d(g, W, Assets2D.img.bg_hills, hb, ox * TS * 0.30, TS * 3.2);
+    g.globalAlpha = 1;
+    if (!farOk) silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
+    if (!midOk) silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
+    if (night > 0.05 && (farOk || midOk)) { g.fillStyle = 'rgba(10,12,30,' + (night * 0.5).toFixed(2) + ')'; g.fillRect(0, 0, W, hb); }  // velo nocturno sobre las capas
+    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));   // colina cercana (línea de hierba)
     drawDecor2d(g, W, hb, ox, decor, mixNight2d(near));
   }
   // fondo de cueva por debajo del horizonte (base OPACA para que el cielo no se cuele)
@@ -651,9 +667,10 @@ function drawCracks2d(g, bx, by, TS, prog) {
 }
 // dibuja el personaje 2D (enano minero CC0) con sus frames; pies en sx,sy
 function drawPlayer2d(g, sx, sy, dir) {
-  const cfg = CHAR_ANIM[player.anim2d] || CHAR_ANIM.idle;
-  const sc = CFG.TS / 16 * 2.15;                 // escala (≈2.1 tiles de alto)
-  const dw = CHAR_FW * sc, dh = CHAR_FH * sc;
+  // usa el héroe PixelLab si está cargado; si no, el dwarf CC0 (frames 16x28)
+  const usePL = Assets2D.ready && Assets2D.img.hero_idle && Assets2D.img.hero_idle.naturalWidth;
+  const set = usePL ? CHAR_ANIM_PL : CHAR_ANIM;
+  const cfg = set[player.anim2d] || set.idle;
   // sombra de contacto
   g.fillStyle = 'rgba(0,0,0,0.30)';
   g.beginPath(); g.ellipse(sx, sy, CFG.TS * 0.40, CFG.TS * 0.15, 0, 0, Math.PI * 2); g.fill();
@@ -662,14 +679,15 @@ function drawPlayer2d(g, sx, sy, dir) {
   if (!im || !im.naturalWidth) {                 // aún sin cargar: marcador simple
     g.fillStyle = '#cda'; g.fillRect(Math.round(sx - 6), Math.round(sy - 30), 12, 28); return;
   }
-  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 2 * sc);  // pies cerca del borde inferior
+  const dh = CFG.TS * 2.05, dw = im.width * (dh / im.height);   // ≈2 tiles de alto, aspecto nativo
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 2);
   g.imageSmoothingEnabled = false;
   if (dir === 'left') {
     g.save(); g.translate(dx + dw, 0); g.scale(-1, 1);
-    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, 0, dy, dw, dh);
+    g.drawImage(im, 0, dy, dw, dh);
     g.restore();
   } else {
-    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, dx, dy, dw, dh);
+    g.drawImage(im, dx, dy, dw, dh);
   }
 }
 function render2d(g, W, H) {
