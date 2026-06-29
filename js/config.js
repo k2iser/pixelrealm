@@ -147,6 +147,8 @@ const ITEMS = {
   bone:     { name: 'Hueso', stack: 99 },
   crystal:  { name: 'Cristal abisal', stack: 99 },
   core:     { name: 'Núcleo de Vethrún', stack: 10 },
+  drill:    { name: 'Taladro', tool: 'pick', area: 1 },        // rompe 3×3
+  excavator:{ name: 'Excavadora', tool: 'pick', area: 2 },     // rompe 5×5
   gate:     { name: 'Puerta Abisal', stack: 10, place: true },
   coal:     { name: 'Carbón', stack: 99 },
   iron_ore: { name: 'Mineral de hierro', stack: 99 },
@@ -193,6 +195,8 @@ const RECIPES = [
   { out: 'hoe', n: 1, cost: { plank: 2, stick: 2 }, cat: 'item', desc: 'Ara la tierra para plantar semillas' },
   { out: 'torch', n: 2, cost: { stick: 1, fiber: 1 }, cat: 'item' },
   { out: 'gate', n: 1, cost: { stone: 8, wood: 4, iron_ore: 2 }, cat: 'item', desc: 'Puerta Abisal: colócala y haz clic derecho sobre ella para descender un estrato' },
+  { out: 'drill', n: 1, cost: { iron_ore: 6, wood: 4 }, cat: 'item', desc: 'Taladro: rompe un área de 3×3 de un golpe' },
+  { out: 'excavator', n: 1, cost: { iron_ore: 10, crystal: 4, wood: 6 }, cat: 'item', desc: 'Excavadora: rompe un área de 5×5 de un golpe' },
   { out: 'campfire', n: 1, cost: { wood: 3, stone: 2 }, cat: 'item' },
   { out: 'wallw', n: 2, cost: { plank: 4 }, cat: 'item' },
   { out: 'walls', n: 2, cost: { stone: 4 }, cat: 'item' },

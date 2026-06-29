@@ -19,6 +19,11 @@ function icon2dURL(id) {
     return c.toDataURL();
   }
   const blob = (col, hi) => { const [c, g] = cv(32, 32); g.fillStyle = col; g.beginPath(); g.ellipse(16, 18, 11, 9, 0, 0, 7); g.fill(); g.fillStyle = hi; g.fillRect(11, 12, 5, 3); return c.toDataURL(); };
+  if (id === 'drill' || id === 'excavator') {              // pico/taladro
+    const [c, g] = cv(32, 32); g.strokeStyle = '#caa15a'; g.lineWidth = 3; g.beginPath(); g.moveTo(9, 25); g.lineTo(22, 11); g.stroke();
+    g.strokeStyle = id === 'excavator' ? '#c9a3ff' : '#cdd6e0'; g.lineWidth = 3; g.beginPath(); g.moveTo(13, 7); g.quadraticCurveTo(24, 9, 27, 18); g.stroke();
+    return c.toDataURL();
+  }
   if (id === 'meat') return blob('#b8473a', '#e89a7a');
   if (id === 'core') return blob('#7a3fd0', '#d9b6ff');   // Núcleo de Vethrún (violeta)
   if (id === 'leather') return blob('#8a5a32', '#b07d4a');
@@ -282,14 +287,25 @@ function updateBreaking2d(dt) {
   // se pueden picar materiales con dureza finita (incluida la antorcha, que no es sólida)
   if (!def || mat === T.AIR || def.hp == null || def.hp === Infinity) { player.breaking = null; return; }
   if (!player.breaking || player.breaking.tx !== h.tx || player.breaking.ty !== h.ty) player.breaking = { tx: h.tx, ty: h.ty, id: mat, dmg: 0 };
-  const tool = (Inv.selected() && ITEMS[Inv.selected().id]) ? ITEMS[Inv.selected().id].tool : null;
+  const heldItem = Inv.selected() && ITEMS[Inv.selected().id], tool = heldItem ? heldItem.tool : null;
   player.breaking.dmg += dt * (G.creative ? 99 : (def.tool && tool === def.tool ? 2.4 : 1.3));
   player.swingT = 0.18;
   if (player.breaking.dmg >= def.hp) {
-    world.setGround(h.tx, h.ty, T.AIR);
-    if (!G.creative) for (const d of (def.drops || [])) if (Math.random() < d[2]) Inv.add(d[0], d[1]);
+    const breakOne = (bx, by) => {
+      const bm = world.ground(bx, by), bd = TDEF[bm];
+      if (!bd || bm === T.AIR || bd.hp == null || bd.hp === Infinity) return;   // solo materiales picables
+      world.setGround(bx, by, T.AIR);
+      if (!G.creative) for (const d of (bd.drops || [])) if (Math.random() < d[2]) Inv.add(d[0], d[1]);
+      for (let i = 0; i < 5; i++) particles.push({ x: bx + 0.5 + randRange(-0.3, 0.3), y: by + 0.5 + randRange(-0.3, 0.3), vx: randRange(-2, 2), vy: randRange(-2.5, 0.5), z: 0, vz: 0, life: 0.4, maxLife: 0.4, color: 'rgba(150,130,95,0.8)', flat2d: true });
+    };
+    breakOne(h.tx, h.ty);                                      // siempre el objetivo
+    const area = (heldItem && heldItem.area) || 0;             // herramientas de área (taladro): rompen NxN de sólidos
+    if (area > 0) for (let ddx = -area; ddx <= area; ddx++) for (let ddy = -area; ddy <= area; ddy++) {
+      if (ddx === 0 && ddy === 0) continue;
+      const am = world.ground(h.tx + ddx, h.ty + ddy), ad = TDEF[am];
+      if (ad && ad.solid) breakOne(h.tx + ddx, h.ty + ddy);    // solo sólidos alrededor (no antorchas/puertas)
+    }
     Sfx.mine();
-    for (let i = 0; i < 7; i++) particles.push({ x: h.tx + 0.5 + randRange(-0.3, 0.3), y: h.ty + 0.5 + randRange(-0.3, 0.3), vx: randRange(-2, 2), vy: randRange(-2.5, 0.5), z: 0, vz: 0, life: 0.4, maxLife: 0.4, color: 'rgba(150,130,95,0.8)', flat2d: true });
     player.breaking = null;
     if (UI.refreshHotbar) UI.refreshHotbar();
     if (UI.panelOpen && UI.refreshInv) UI.refreshInv();
@@ -390,11 +406,19 @@ function update2d(dt) {
     if (Input.keys['d'] || Input.keys['arrowright']) ax += 1;
     if (ax !== 0) { player.vx2 = approach(player.vx2 || 0, ax * CFG.PLAYER_SPEED, CFG.G2D_ACCEL * dt); player.dir = ax > 0 ? 'right' : 'left'; }
     else player.vx2 = approach(player.vx2 || 0, 0, CFG.G2D_FRIC * dt);
-    // salto (espacio / W / arriba) con coyote + buffer + altura variable
+    // salto (espacio / W / arriba) con coyote + buffer + altura variable + DOBLE SALTO
     const jump = !!(Input.keys[' '] || Input.keys['w'] || Input.keys['arrowup']);
+    if (player.grounded) player.airJumps = 1;                 // 1 salto extra en el aire
     player.coyoteT = player.grounded ? CFG.COYOTE : Math.max(0, (player.coyoteT || 0) - dt);
-    if (jump && !player._jHeld) player.jumpBufferT = CFG.JUMP_BUFFER; else player.jumpBufferT = Math.max(0, (player.jumpBufferT || 0) - dt);
-    if (player.jumpBufferT > 0 && player.coyoteT > 0) { player.vy2 = -CFG.G2D_JUMP; player.grounded = false; player.coyoteT = 0; player.jumpBufferT = 0; Sfx.jump(); }
+    const pressed = jump && !player._jHeld;
+    if (pressed) player.jumpBufferT = CFG.JUMP_BUFFER; else player.jumpBufferT = Math.max(0, (player.jumpBufferT || 0) - dt);
+    if (player.jumpBufferT > 0 && player.coyoteT > 0) {       // salto desde el suelo (o coyote)
+      player.vy2 = -CFG.G2D_JUMP; player.grounded = false; player.coyoteT = 0; player.jumpBufferT = 0; Sfx.jump();
+    } else if (pressed && player.coyoteT <= 0 && (player.airJumps || 0) > 0) {   // doble salto en el aire
+      player.vy2 = -CFG.G2D_JUMP * 0.92; player.airJumps--; player.grounded = false; player.jumpBufferT = 0;
+      if (Sfx.jump) Sfx.jump();
+      for (let i = 0; i < 9; i++) particles.push({ x: player.x + randRange(-0.35, 0.35), y: player.y - 0.1, vx: randRange(-2.4, 2.4), vy: randRange(0.5, 2.4), z: 0, vz: 0, life: 0.32, maxLife: 0.32, color: 'rgba(220,232,255,0.8)', flat2d: true });
+    }
     if (!jump && player._jHeld && (player.vy2 || 0) < 0) player.vy2 *= 0.45;   // soltar = salto más corto
     player._jHeld = jump;
     // gravedad + integración con colisión AABB (X y luego Y, en una pasada)
