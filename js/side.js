@@ -709,7 +709,16 @@ function render2d(g, W, H) {
       // variante por posición: 4 para piedra/vetas; volteo (0/1) para tierra/arena
       const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE || m === T.CRYSTAL) ? (hash2(tx, ty, 5) * 4 | 0)
         : (m === T.DIRT || m === T.SAND) ? (hash2(tx, ty, 5) & 1) : 0;
-      g.drawImage(tile2d(m, variant), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
+      const sx = Math.round((tx - ox) * TS), sy = Math.round((ty - oy) * TS);
+      g.drawImage(tile2d(m, variant), sx, sy);
+      // contorno de silueta (estilo PixelLab): borde oscuro contra el aire/cielo, no rejilla interna
+      if (m !== T.TORCH && m !== T.GATE && m !== T.CHEST && m !== T.CHEST_OPEN) {
+        const ow = Math.max(2, TS / 14 | 0); g.fillStyle = 'rgba(22,17,13,0.9)';
+        if (world.ground(tx, ty - 1) === T.AIR) g.fillRect(sx, sy, TS, ow);
+        if (world.ground(tx, ty + 1) === T.AIR) g.fillRect(sx, sy + TS - ow, TS, ow);
+        if (world.ground(tx - 1, ty) === T.AIR) g.fillRect(sx, sy, ow, TS);
+        if (world.ground(tx + 1, ty) === T.AIR) g.fillRect(sx + TS - ow, sy, ow, TS);
+      }
       const ld = TDEF[m] && TDEF[m].light;
       if (ld) lights.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS, ld, m === T.TORCH]);
     }
