@@ -167,13 +167,59 @@ function attackMobs2d(dt) {
   return true;
 }
 
-/* ---------- render ---------- */
+/* ---------- render (pixel-art horneado a baja resolución y ampliado nearest-neighbor) ---------- */
+const _dinoCache = {};
+const ART = 12;   // px de arte por tile; al ampliar a TS quedan píxeles chunky como el prota
+function _dinoSprite(d, frame, hurt) {
+  const key = d.name + ':' + frame + ':' + (hurt ? 1 : 0);
+  if (_dinoCache[key]) return _dinoCache[key];
+  const Wd = d.w * 2 * ART, Hd = d.bh * ART, pad = 3;
+  const fw = Math.ceil(Wd) + pad * 2, fh = Math.ceil(Hd) + pad * 2;
+  const [c, g] = cv(fw, fh);
+  g.translate(Math.round(fw / 2), fh - pad);                 // origen: pies, centrado
+  const col = hurt ? '#ff8a8a' : d.color, belly = hurt ? '#ffc0c0' : d.belly, dark = d.dark, line = 'rgba(0,0,0,0.45)';
+  const bw = Wd * 0.62, bh = Hd * 0.4, by = -Hd * 0.5;
+  const R = (x, y, w, h, c2) => { g.fillStyle = c2; g.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); };
+  // óvalo pixelado fila a fila (cuerpo/cabeza redondeados pero en píxeles)
+  const oval = (cx, cy, rx, ry, top, bot) => {
+    for (let yy = -Math.round(ry); yy <= Math.round(ry); yy++) {
+      const t = yy / ry, w = rx * Math.sqrt(Math.max(0, 1 - t * t));
+      if (w < 0.5) continue;
+      g.fillStyle = (bot && yy > ry * 0.15) ? bot : top;
+      g.fillRect(Math.round(cx - w), Math.round(cy + yy), Math.max(1, Math.round(w * 2)), 1);
+    }
+  };
+  const legH = Hd * 0.34, lw = Math.max(2, ART * 0.18);
+  const lp = [0, 1.6, 0, -1.6][frame & 3];                   // patas (4 frames)
+  R(-bw * 0.30, -legH, lw, legH + lp, dark);
+  R(bw * 0.12, -legH, lw, legH - lp, dark);
+  // cola (escalones)
+  R(-bw * 1.02, by - bh * 0.05, bw * 0.4, Math.max(2, bh * 0.5), col);
+  R(-bw * 0.72, by - bh * 0.2, bw * 0.38, Math.max(2, bh * 0.8), col);
+  // cuerpo
+  oval(0, by, bw * 0.52, bh, col, belly);
+  // placas dorsales (stego)
+  if (d.plates) for (let i = -2; i <= 2; i++) { const px = i * bw * 0.16; R(px - bw * 0.05, by - bh * 1.05, bw * 0.1, bh * 0.6, dark); R(px - bw * 0.02, by - bh * 1.25, bw * 0.04, bh * 0.3, dark); }
+  // cuello + cabeza
+  let hx, hy;
+  if (d.neck) {
+    R(bw * 0.30, by - Hd * 0.6, Math.max(2, ART * 0.18), Hd * 0.6, col);
+    hx = bw * 0.42; hy = by - Hd * 0.64; oval(hx, hy, ART * 0.26, ART * 0.2, col);
+  } else {
+    hx = bw * 0.52; hy = by - bh * 0.5; oval(hx, hy, bw * 0.32, bh * 0.78, col, belly);
+    if (d.hostile) { R(bw * 0.5, by - bh * 0.15, bw * 0.34, Math.max(1, ART * 0.12), col); for (let k = 0; k < 3; k++) R(bw * 0.55 + k * bw * 0.09, by - bh * 0.05, 1, 1, '#fff'); }  // mandíbula + dientes
+  }
+  // cuernos + gola (trike)
+  if (d.horns) { R(hx + bw * 0.12, hy - bh * 0.1, bw * 0.3, 1, '#eee'); R(hx, hy - bh * 0.55, 1, bh * 0.5, '#eee'); R(hx - bw * 0.25, hy - bh * 0.4, bw * 0.1, bh * 0.5, dark); }
+  // ojo
+  R(hx + 1, hy - 2, 2, 2, '#fff'); R(hx + 2, hy - 1, 1, 1, d.hostile ? '#e23' : '#111');
+  _dinoCache[key] = c; return c;
+}
 function _dino(g, m, ox, oy) {
   const TS = CFG.TS, d = m.def;
   const sx = Math.round((m.x - ox) * TS), sy = Math.round((m.y - oy) * TS);
-  const Wd = d.w * 2 * TS, Hd = d.bh * TS;
-  // aura emisiva del jefe (para que destaque en la oscuridad)
-  if (d.boss) {
+  const Hd = d.bh * TS;
+  if (d.boss) {                                              // aura emisiva del jefe
     const r = Hd * (1.0 + 0.06 * Math.sin(G.elapsed * 4));
     g.globalCompositeOperation = 'lighter';
     const rg = g.createRadialGradient(sx, sy - Hd * 0.45, 0, sx, sy - Hd * 0.45, r);
@@ -181,42 +227,16 @@ function _dino(g, m, ox, oy) {
     g.fillStyle = rg; g.fillRect(sx - r, sy - Hd * 0.45 - r, r * 2, r * 2);
     g.globalCompositeOperation = 'source-over';
   }
-  // sombra de contacto
-  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, Wd * 0.36, TS * 0.14, 0, 0, 7); g.fill();
-  g.save(); g.translate(sx, sy); g.scale(m.dir > 0 ? 1 : -1, 1);
-  const col = m.hurtT > 0 ? '#ff7a7a' : d.color;
-  const bw = Wd * 0.62, bh = Hd * 0.4, by = -Hd * 0.52;
-  // patas (2, contrafase)
-  const lp = Math.sin(m.walk * 7) * 3, lh = Hd * 0.34;
-  g.fillStyle = d.dark;
-  g.fillRect(Math.round(-bw * 0.28), Math.round(-lh), Math.max(2, TS * 0.14), Math.round(lh + lp));
-  g.fillRect(Math.round(bw * 0.12), Math.round(-lh), Math.max(2, TS * 0.14), Math.round(lh - lp));
-  // cola
-  g.fillStyle = col; g.beginPath(); g.moveTo(-bw * 0.42, by + bh * 0.5); g.lineTo(-bw * 1.0, by + bh * 0.1); g.lineTo(-bw * 0.42, by - bh * 0.1); g.closePath(); g.fill();
-  // cuerpo
-  g.beginPath(); g.ellipse(0, by, bw * 0.5, bh, 0, 0, 7); g.fill();
-  g.fillStyle = d.belly; g.beginPath(); g.ellipse(0, by + bh * 0.32, bw * 0.4, bh * 0.55, 0, 0, 7); g.fill();
-  // placas (stego)
-  if (d.plates) { g.fillStyle = d.dark; for (let i = -2; i <= 2; i++) { const px = i * bw * 0.13; g.beginPath(); g.moveTo(px, by - bh * 0.9); g.lineTo(px - 4, by - bh * 0.1); g.lineTo(px + 4, by - bh * 0.1); g.closePath(); g.fill(); } }
-  // cuello + cabeza
-  g.fillStyle = col;
-  let hx, hy;
-  if (d.neck) {
-    g.fillRect(Math.round(bw * 0.32), Math.round(by - Hd * 0.62), Math.max(2, TS * 0.16), Math.round(Hd * 0.62));
-    hx = bw * 0.42; hy = by - Hd * 0.66; g.beginPath(); g.ellipse(hx, hy, TS * 0.22, TS * 0.17, 0, 0, 7); g.fill();
-  } else {
-    hx = bw * 0.5; hy = by - bh * 0.45; g.beginPath(); g.ellipse(hx, hy, bw * 0.3, bh * 0.72, 0, 0, 7); g.fill();
-    if (d.hostile) { g.fillRect(Math.round(bw * 0.5), Math.round(by - bh * 0.2), Math.round(bw * 0.32), Math.max(2, TS * 0.1)); }  // mandíbula
-  }
-  // cuernos (trike)
-  if (d.horns) { g.fillStyle = '#eee'; g.fillRect(Math.round(bw * 0.62), Math.round(by - bh * 0.7), 6, 2); g.fillRect(Math.round(bw * 0.5), Math.round(by - bh * 1.0), 2, 6); g.fillStyle = col; }
-  // ojo
-  g.fillStyle = '#fff'; g.fillRect(Math.round(hx + 2), Math.round(hy - 2), 2, 2);
-  g.fillStyle = d.hostile ? '#e23' : '#000'; g.fillRect(Math.round(hx + 3), Math.round(hy - 1), 1, 1);
-  g.restore();
-  // barra de vida si dañado
-  if (m.hp < m.maxHp) {
-    const barW = Wd * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, d.w * 0.72 * TS, TS * 0.14, 0, 0, 7); g.fill();
+  const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
+  const spr = _dinoSprite(d, frame, m.hurtT > 0);
+  const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
+  g.imageSmoothingEnabled = false;
+  if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+  else g.drawImage(spr, dx, dy, dw, dh);
+  if (m.hp < m.maxHp) {                                      // barra de vida
+    const barW = d.w * 2 * TS * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
     g.fillStyle = d.hostile ? '#ff5a5a' : '#7CFC5A'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW * clamp(m.hp / m.maxHp, 0, 1)), 3);
   }
 }
