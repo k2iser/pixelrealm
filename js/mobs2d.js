@@ -228,26 +228,13 @@ function _dino(g, m, ox, oy) {
     g.globalCompositeOperation = 'source-over';
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, d.w * 0.72 * TS, TS * 0.14, 0, 0, 7); g.fill();
-  const im = Assets2D.ready && Assets2D.img['dino_' + m.key];
-  if (im && im.naturalWidth) {                                   // sprite PixelLab
-    const moving = Math.abs(m.vx || 0) > 0.2;
-    const bob = moving ? Math.abs(Math.sin(m.walk * 8)) * 1.6 : Math.sin((G.elapsed + sx) * 1.4) * 0.6;
-    const dh = Hd * 1.08, dw = im.width * (dh / im.height);
-    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh - bob + 2);
-    g.imageSmoothingEnabled = false;
-    if (m.hurtT > 0) g.globalAlpha = 0.55;                       // parpadeo al recibir daño
-    if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(im, 0, dy, dw, dh); g.restore(); }
-    else g.drawImage(im, dx, dy, dw, dh);
-    g.globalAlpha = 1;
-  } else {                                                       // fallback procedural pixelado
-    const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
-    const spr = _dinoSprite(d, frame, m.hurtT > 0);
-    const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
-    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
-    g.imageSmoothingEnabled = false;
-    if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
-    else g.drawImage(spr, dx, dy, dw, dh);
-  }
+  const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
+  const spr = _dinoSprite(d, frame, m.hurtT > 0);
+  const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
+  g.imageSmoothingEnabled = false;
+  if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+  else g.drawImage(spr, dx, dy, dw, dh);
   if (m.hp < m.maxHp) {                                      // barra de vida
     const barW = d.w * 2 * TS * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
     g.fillStyle = d.hostile ? '#ff5a5a' : '#7CFC5A'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW * clamp(m.hp / m.maxHp, 0, 1)), 3);
@@ -283,8 +270,6 @@ function scanSurvivors2d() {
       x: sx, y: world.surfaceY(hx), vy: 0, grounded: false, def: { w: 0.3, bh: 1.7 },
       name: SURVIVOR_NAMES[(k * SURVIVOR_NAMES.length) | 0],
       robe: SURVIVOR_ROBES[(hash2(hx, 6, 7) * SURVIVOR_ROBES.length) | 0],
-      sprite: hash2(hx, 8, 5) < 0.5 ? 'npc1' : 'npc2',
-      dir: -1,
       line: SURVIVOR_LINES[(hash2(hx, 4, 9) * SURVIVOR_LINES.length) | 0],
       gave: false, near: false, t: hash2(hx, 5, 9) * 6,
     });
@@ -310,23 +295,16 @@ function updateNpc2d(dt) {
 function drawNpc2d(g, n, ox, oy) {
   const TS = CFG.TS, sx = (n.x - ox) * TS, sy = (n.y - oy) * TS;
   const bob = Math.sin((G.elapsed + n.t) * 2) * 1.3;
+  const h = TS * 1.7, w = TS * 0.72;
   g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(sx, sy, TS * 0.32, TS * 0.12, 0, 0, 7); g.fill();
-  const im = Assets2D.ready && Assets2D.img[n.sprite || 'npc1'];
-  if (im && im.naturalWidth) {                            // sprite PixelLab (mira hacia el jugador)
-    const dh = TS * 1.85, dw = im.width * (dh / im.height);
-    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + bob);
-    g.imageSmoothingEnabled = false;
-    if (player.x < n.x) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(im, 0, dy, dw, dh); g.restore(); }
-    else g.drawImage(im, dx, dy, dw, dh);
-  } else {                                                // fallback procedural
-    const h = TS * 1.7, w = TS * 0.72;
-    g.fillStyle = n.robe; g.beginPath(); g.moveTo(sx - w / 2, sy); g.lineTo(sx + w / 2, sy); g.lineTo(sx + w * 0.32, sy - h * 0.62 + bob); g.lineTo(sx - w * 0.32, sy - h * 0.62 + bob); g.closePath(); g.fill();
-    g.fillStyle = '#e8c9a0'; g.beginPath(); g.arc(sx, sy - h * 0.72 + bob, w * 0.27, 0, 7); g.fill();
-    g.fillStyle = n.robe; g.beginPath(); g.arc(sx, sy - h * 0.78 + bob, w * 0.32, Math.PI, 0); g.fill();
-  }
+  g.fillStyle = n.robe;                                   // túnica
+  g.beginPath(); g.moveTo(sx - w / 2, sy); g.lineTo(sx + w / 2, sy); g.lineTo(sx + w * 0.32, sy - h * 0.62 + bob); g.lineTo(sx - w * 0.32, sy - h * 0.62 + bob); g.closePath(); g.fill();
+  g.fillStyle = '#e8c9a0'; g.beginPath(); g.arc(sx, sy - h * 0.72 + bob, w * 0.27, 0, 7); g.fill();   // cara
+  g.fillStyle = n.robe; g.beginPath(); g.arc(sx, sy - h * 0.78 + bob, w * 0.32, Math.PI, 0); g.fill(); // capucha
+  g.fillStyle = '#222'; g.fillRect(Math.round(sx - 3), Math.round(sy - h * 0.72 + bob), 1, 1); g.fillRect(Math.round(sx + 2), Math.round(sy - h * 0.72 + bob), 1, 1);
   // bocadillo de lore al acercarte
   if (n.near) {
-    g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - TS * 2.1 - 20;
+    g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - h - 20;
     g.fillStyle = 'rgba(20,18,28,0.92)'; g.fillRect(bx, by, tw + 10, 16);
     g.fillStyle = 'rgba(20,18,28,0.92)'; g.beginPath(); g.moveTo(sx - 4, by + 16); g.lineTo(sx + 4, by + 16); g.lineTo(sx, by + 21); g.closePath(); g.fill();
     g.fillStyle = '#ffe9a6'; g.fillText(n.name, bx + 5, by + 7);

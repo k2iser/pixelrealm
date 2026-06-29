@@ -564,48 +564,22 @@ function skyDecor2d(g, W, H, ox, skyBottom) {
   }
 }
 // árbol de superficie (segundo plano, pixel, no colisiona): tronco + copa por bloques
-const TREE_IMG2D = { plains: 'tree_oak', forest: 'tree_pine', jungle: 'tree_jungle' };
 function drawTree2d(g, sx, baseY, h, biome) {
   const TS = CFG.TS;
-  const im = Assets2D.ready && Assets2D.img[TREE_IMG2D[biome] || 'tree_oak'];
-  if (im && im.naturalWidth) {                                  // sprite PixelLab
-    const dh = h * TS * 1.18, dw = im.width * (dh / im.height);
-    g.imageSmoothingEnabled = false;
-    g.drawImage(im, Math.round(sx - dw / 2), Math.round(baseY - dh + TS * 0.15), Math.round(dw), Math.round(dh));
-    return;
-  }
-  // fallback procedural simple
   const trunkW = Math.max(3, Math.round(TS * 0.22)), trunkH = Math.round(h * TS * 0.5);
-  g.fillStyle = '#6b4a2a'; g.fillRect(Math.round(sx - trunkW / 2), Math.round(baseY - trunkH), trunkW, trunkH);
-  g.fillStyle = '#3c8540'; const cw = h * TS * 0.7;
-  g.fillRect(Math.round(sx - cw / 2), Math.round(baseY - trunkH - cw), Math.round(cw), Math.round(cw));
-}
-// matorrales y rocas de superficie (decoración coherente, no colisionan)
-function drawSurfaceDecor2d(g, ox, oy, col0, col1) {
-  if (!Assets2D.ready) return;
-  const TS = CFG.TS;
-  for (let tx = col0; tx <= col1; tx++) {
-    if (world.treeHeightAt(tx)) continue;                       // no donde hay árbol
-    const k = hash2(tx, 7, 222);
-    if (k >= 0.07) continue;
-    const b = world.biomeAt(tx);
-    const useRock = k < 0.025 || b === 'desert' || b === 'mountain' || b === 'snow';
-    const im = Assets2D.img[useRock ? 'rock' : 'bush'];
-    if (!im || !im.naturalWidth) continue;
-    const surf = world.surfaceY(tx);
-    const dh = (useRock ? 0.8 : 0.95) * TS, dw = im.width * (dh / im.height);
-    g.imageSmoothingEnabled = false;
-    g.drawImage(im, Math.round((tx + 0.5 - ox) * TS - dw / 2), Math.round((surf - oy) * TS - dh + 2), Math.round(dw), Math.round(dh));
-  }
-}
-// capa de fondo tileada horizontalmente con parallax (base inferior en hb)
-function bgLayer2d(g, W, im, hb, shift, dh) {
-  if (!im || !im.naturalWidth) return false;
-  const dw = im.width * (dh / im.height);
-  let x = -(((shift % dw) + dw) % dw);
-  g.imageSmoothingEnabled = false;
-  for (; x < W; x += dw) g.drawImage(im, Math.round(x), Math.round(hb - dh), Math.round(dw), Math.round(dh));
-  return true;
+  const tx = Math.round(sx - trunkW / 2), ty = Math.round(baseY - trunkH);
+  g.fillStyle = '#6b4a2a'; g.fillRect(tx, ty, trunkW, trunkH);
+  g.fillStyle = '#523823'; g.fillRect(tx, ty, Math.max(1, (trunkW * 0.38) | 0), trunkH);
+  const cy = ty, R = Math.round(h * TS * 0.4);
+  const dark = biome === 'forest' ? '#2f6b34' : biome === 'jungle' ? '#27773a' : '#3c8540';
+  const lite = biome === 'forest' ? '#43914a' : biome === 'jungle' ? '#3aa052' : '#5aa850';
+  const cw = R * 1.8, ch = R * 1.5;
+  g.fillStyle = dark;
+  g.fillRect(Math.round(sx - cw / 2), Math.round(cy - ch), Math.round(cw), Math.round(ch));
+  g.fillRect(Math.round(sx - cw * 0.34), Math.round(cy - ch * 1.35), Math.round(cw * 0.68), Math.round(ch * 0.55));
+  g.fillStyle = lite;
+  g.fillRect(Math.round(sx - cw * 0.32), Math.round(cy - ch * 0.95), Math.round(cw * 0.36), Math.round(ch * 0.4));
+  g.fillRect(Math.round(sx + cw * 0.05), Math.round(cy - ch * 1.15), Math.round(cw * 0.22), Math.round(ch * 0.3));
 }
 function bg2d(g, W, H, ox, oy) {
   const TS = CFG.TS;
@@ -625,16 +599,9 @@ function bg2d(g, W, H, ox, oy) {
   if (horizonY > 0) {
     const hb = Math.min(horizonY, H);
     skyDecor2d(g, W, H, ox, hb);          // sol/luna + estrellas + nubes (sobre el cielo)
-    // capas lejanas: montañas/colinas PixelLab (se desvanecen de noche); fallback a siluetas
-    const night = clamp(G.darkness, 0, 1);
-    g.globalAlpha = 1 - night * 0.5;
-    const farOk = bgLayer2d(g, W, Assets2D.img.bg_mountains, hb, ox * TS * 0.15, TS * 4.6);
-    const midOk = bgLayer2d(g, W, Assets2D.img.bg_hills, hb, ox * TS * 0.30, TS * 3.2);
-    g.globalAlpha = 1;
-    if (!farOk) silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
-    if (!midOk) silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
-    if (night > 0.05 && (farOk || midOk)) { g.fillStyle = 'rgba(10,12,30,' + (night * 0.5).toFixed(2) + ')'; g.fillRect(0, 0, W, hb); }  // velo nocturno sobre las capas
-    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));   // colina cercana (línea de hierba)
+    silhouette2d(g, W, H, hb, ox * TS * 0.15, 2.4 * TS, 9 * TS, mixNight2d(far));
+    silhouette2d(g, W, H, hb, ox * TS * 0.30, 1.5 * TS, 5.5 * TS, mixNight2d(mid));
+    silhouette2d(g, W, H, hb, ox * TS * 0.50, 0.9 * TS, 3.6 * TS, mixNight2d(near));
     drawDecor2d(g, W, hb, ox, decor, mixNight2d(near));
   }
   // fondo de cueva por debajo del horizonte (base OPACA para que el cielo no se cuele)
@@ -667,10 +634,9 @@ function drawCracks2d(g, bx, by, TS, prog) {
 }
 // dibuja el personaje 2D (enano minero CC0) con sus frames; pies en sx,sy
 function drawPlayer2d(g, sx, sy, dir) {
-  // usa el héroe PixelLab si está cargado; si no, el dwarf CC0 (frames 16x28)
-  const usePL = Assets2D.ready && Assets2D.img.hero_idle && Assets2D.img.hero_idle.naturalWidth;
-  const set = usePL ? CHAR_ANIM_PL : CHAR_ANIM;
-  const cfg = set[player.anim2d] || set.idle;
+  const cfg = CHAR_ANIM[player.anim2d] || CHAR_ANIM.idle;
+  const sc = CFG.TS / 16 * 2.15;                 // escala (≈2.1 tiles de alto)
+  const dw = CHAR_FW * sc, dh = CHAR_FH * sc;
   // sombra de contacto
   g.fillStyle = 'rgba(0,0,0,0.30)';
   g.beginPath(); g.ellipse(sx, sy, CFG.TS * 0.40, CFG.TS * 0.15, 0, 0, Math.PI * 2); g.fill();
@@ -679,15 +645,14 @@ function drawPlayer2d(g, sx, sy, dir) {
   if (!im || !im.naturalWidth) {                 // aún sin cargar: marcador simple
     g.fillStyle = '#cda'; g.fillRect(Math.round(sx - 6), Math.round(sy - 30), 12, 28); return;
   }
-  const dh = CFG.TS * 2.05, dw = im.width * (dh / im.height);   // ≈2 tiles de alto, aspecto nativo
-  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 2);
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 2 * sc);  // pies cerca del borde inferior
   g.imageSmoothingEnabled = false;
   if (dir === 'left') {
     g.save(); g.translate(dx + dw, 0); g.scale(-1, 1);
-    g.drawImage(im, 0, dy, dw, dh);
+    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, 0, dy, dw, dh);
     g.restore();
   } else {
-    g.drawImage(im, dx, dy, dw, dh);
+    g.drawImage(im, 0, 0, CHAR_FW, CHAR_FH, dx, dy, dw, dh);
   }
 }
 function render2d(g, W, H) {
@@ -709,16 +674,7 @@ function render2d(g, W, H) {
       // variante por posición: 4 para piedra/vetas; volteo (0/1) para tierra/arena
       const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE || m === T.CRYSTAL) ? (hash2(tx, ty, 5) * 4 | 0)
         : (m === T.DIRT || m === T.SAND) ? (hash2(tx, ty, 5) & 1) : 0;
-      const sx = Math.round((tx - ox) * TS), sy = Math.round((ty - oy) * TS);
-      g.drawImage(tile2d(m, variant), sx, sy);
-      // contorno de silueta (estilo PixelLab): borde oscuro contra el aire/cielo, no rejilla interna
-      if (m !== T.TORCH && m !== T.GATE && m !== T.CHEST && m !== T.CHEST_OPEN) {
-        const ow = Math.max(2, TS / 14 | 0); g.fillStyle = 'rgba(22,17,13,0.9)';
-        if (world.ground(tx, ty - 1) === T.AIR) g.fillRect(sx, sy, TS, ow);
-        if (world.ground(tx, ty + 1) === T.AIR) g.fillRect(sx, sy + TS - ow, TS, ow);
-        if (world.ground(tx - 1, ty) === T.AIR) g.fillRect(sx, sy, ow, TS);
-        if (world.ground(tx + 1, ty) === T.AIR) g.fillRect(sx + TS - ow, sy, ow, TS);
-      }
+      g.drawImage(tile2d(m, variant), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
       const ld = TDEF[m] && TDEF[m].light;
       if (ld) lights.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS, ld, m === T.TORCH]);
     }
@@ -728,7 +684,6 @@ function render2d(g, W, H) {
     const th = world.treeHeightAt(tx);
     if (th > 0) drawTree2d(g, (tx + 0.5 - ox) * TS, (world.surfaceY(tx) - oy) * TS, th, world.biomeAt(tx));
   }
-  drawSurfaceDecor2d(g, ox, oy, col0, col1);                    // matorrales y rocas
   // criaturas (dinosaurios) y supervivientes detrás del jugador
   if (typeof drawMobs2d === 'function') drawMobs2d(g, ox, oy);
   if (typeof drawNpcs2d === 'function') drawNpcs2d(g, ox, oy);
