@@ -228,13 +228,26 @@ function _dino(g, m, ox, oy) {
     g.globalCompositeOperation = 'source-over';
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, d.w * 0.72 * TS, TS * 0.14, 0, 0, 7); g.fill();
-  const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
-  const spr = _dinoSprite(d, frame, m.hurtT > 0);
-  const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
-  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
-  g.imageSmoothingEnabled = false;
-  if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
-  else g.drawImage(spr, dx, dy, dw, dh);
+  const im = Assets2D.ready && Assets2D.img['dino_' + m.key];
+  if (im && im.naturalWidth) {                                   // sprite PixelLab
+    const moving = Math.abs(m.vx || 0) > 0.2;
+    const bob = moving ? Math.abs(Math.sin(m.walk * 8)) * 1.6 : Math.sin((G.elapsed + sx) * 1.4) * 0.6;
+    const dh = Hd * 1.08, dw = im.width * (dh / im.height);
+    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh - bob + 2);
+    g.imageSmoothingEnabled = false;
+    if (m.hurtT > 0) g.globalAlpha = 0.55;                       // parpadeo al recibir daño
+    if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(im, 0, dy, dw, dh); g.restore(); }
+    else g.drawImage(im, dx, dy, dw, dh);
+    g.globalAlpha = 1;
+  } else {                                                       // fallback procedural pixelado
+    const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
+    const spr = _dinoSprite(d, frame, m.hurtT > 0);
+    const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
+    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
+    g.imageSmoothingEnabled = false;
+    if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+    else g.drawImage(spr, dx, dy, dw, dh);
+  }
   if (m.hp < m.maxHp) {                                      // barra de vida
     const barW = d.w * 2 * TS * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
     g.fillStyle = d.hostile ? '#ff5a5a' : '#7CFC5A'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW * clamp(m.hp / m.maxHp, 0, 1)), 3);

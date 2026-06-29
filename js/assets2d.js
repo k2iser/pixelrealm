@@ -20,6 +20,8 @@ const Assets2D = {
     tree_oak: 'assets/pl/tree_oak.png', tree_pine: 'assets/pl/tree_pine.png', tree_jungle: 'assets/pl/tree_jungle.png',
     bush: 'assets/pl/bush.png', rock: 'assets/pl/rock.png',
     npc1: 'assets/pl/npc_villager.png', npc2: 'assets/pl/npc_elder.png',
+    dino_raptor: 'assets/pl/dino_raptor.png', dino_rex: 'assets/pl/dino_rex.png', dino_bronto: 'assets/pl/dino_bronto.png',
+    dino_stego: 'assets/pl/dino_stego.png', dino_trike: 'assets/pl/dino_trike.png', dino_guardian: 'assets/pl/dino_guardian.png',
   },
   load(cb) {
     const keys = Object.keys(this.manifest);
