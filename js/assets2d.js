@@ -16,6 +16,10 @@ const Assets2D = {
     // tilesets
     terrain: 'assets/tiles/terrain.png',                                            // atlas 22x11 (16px) Pixel Frog
     oreRocks: 'assets/tiles/ore/Stone_ore_gems/Stones_ores_gems_without_grass.png', // 7x9 (16px) Senmou
+    // props y NPCs coherentes (PixelLab)
+    tree_oak: 'assets/pl/tree_oak.png', tree_pine: 'assets/pl/tree_pine.png', tree_jungle: 'assets/pl/tree_jungle.png',
+    bush: 'assets/pl/bush.png', rock: 'assets/pl/rock.png',
+    npc1: 'assets/pl/npc_villager.png', npc2: 'assets/pl/npc_elder.png',
   },
   load(cb) {
     const keys = Object.keys(this.manifest);

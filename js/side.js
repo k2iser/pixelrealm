@@ -564,22 +564,39 @@ function skyDecor2d(g, W, H, ox, skyBottom) {
   }
 }
 // árbol de superficie (segundo plano, pixel, no colisiona): tronco + copa por bloques
+const TREE_IMG2D = { plains: 'tree_oak', forest: 'tree_pine', jungle: 'tree_jungle' };
 function drawTree2d(g, sx, baseY, h, biome) {
   const TS = CFG.TS;
+  const im = Assets2D.ready && Assets2D.img[TREE_IMG2D[biome] || 'tree_oak'];
+  if (im && im.naturalWidth) {                                  // sprite PixelLab
+    const dh = h * TS * 1.18, dw = im.width * (dh / im.height);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(im, Math.round(sx - dw / 2), Math.round(baseY - dh + TS * 0.15), Math.round(dw), Math.round(dh));
+    return;
+  }
+  // fallback procedural simple
   const trunkW = Math.max(3, Math.round(TS * 0.22)), trunkH = Math.round(h * TS * 0.5);
-  const tx = Math.round(sx - trunkW / 2), ty = Math.round(baseY - trunkH);
-  g.fillStyle = '#6b4a2a'; g.fillRect(tx, ty, trunkW, trunkH);
-  g.fillStyle = '#523823'; g.fillRect(tx, ty, Math.max(1, (trunkW * 0.38) | 0), trunkH);
-  const cy = ty, R = Math.round(h * TS * 0.4);
-  const dark = biome === 'forest' ? '#2f6b34' : biome === 'jungle' ? '#27773a' : '#3c8540';
-  const lite = biome === 'forest' ? '#43914a' : biome === 'jungle' ? '#3aa052' : '#5aa850';
-  const cw = R * 1.8, ch = R * 1.5;
-  g.fillStyle = dark;
-  g.fillRect(Math.round(sx - cw / 2), Math.round(cy - ch), Math.round(cw), Math.round(ch));
-  g.fillRect(Math.round(sx - cw * 0.34), Math.round(cy - ch * 1.35), Math.round(cw * 0.68), Math.round(ch * 0.55));
-  g.fillStyle = lite;
-  g.fillRect(Math.round(sx - cw * 0.32), Math.round(cy - ch * 0.95), Math.round(cw * 0.36), Math.round(ch * 0.4));
-  g.fillRect(Math.round(sx + cw * 0.05), Math.round(cy - ch * 1.15), Math.round(cw * 0.22), Math.round(ch * 0.3));
+  g.fillStyle = '#6b4a2a'; g.fillRect(Math.round(sx - trunkW / 2), Math.round(baseY - trunkH), trunkW, trunkH);
+  g.fillStyle = '#3c8540'; const cw = h * TS * 0.7;
+  g.fillRect(Math.round(sx - cw / 2), Math.round(baseY - trunkH - cw), Math.round(cw), Math.round(cw));
+}
+// matorrales y rocas de superficie (decoración coherente, no colisionan)
+function drawSurfaceDecor2d(g, ox, oy, col0, col1) {
+  if (!Assets2D.ready) return;
+  const TS = CFG.TS;
+  for (let tx = col0; tx <= col1; tx++) {
+    if (world.treeHeightAt(tx)) continue;                       // no donde hay árbol
+    const k = hash2(tx, 7, 222);
+    if (k >= 0.07) continue;
+    const b = world.biomeAt(tx);
+    const useRock = k < 0.025 || b === 'desert' || b === 'mountain' || b === 'snow';
+    const im = Assets2D.img[useRock ? 'rock' : 'bush'];
+    if (!im || !im.naturalWidth) continue;
+    const surf = world.surfaceY(tx);
+    const dh = (useRock ? 0.8 : 0.95) * TS, dw = im.width * (dh / im.height);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(im, Math.round((tx + 0.5 - ox) * TS - dw / 2), Math.round((surf - oy) * TS - dh + 2), Math.round(dw), Math.round(dh));
+  }
 }
 function bg2d(g, W, H, ox, oy) {
   const TS = CFG.TS;
@@ -684,6 +701,7 @@ function render2d(g, W, H) {
     const th = world.treeHeightAt(tx);
     if (th > 0) drawTree2d(g, (tx + 0.5 - ox) * TS, (world.surfaceY(tx) - oy) * TS, th, world.biomeAt(tx));
   }
+  drawSurfaceDecor2d(g, ox, oy, col0, col1);                    // matorrales y rocas
   // criaturas (dinosaurios) y supervivientes detrás del jugador
   if (typeof drawMobs2d === 'function') drawMobs2d(g, ox, oy);
   if (typeof drawNpcs2d === 'function') drawNpcs2d(g, ox, oy);
