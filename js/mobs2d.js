@@ -7,20 +7,22 @@
 const mobs2d = [];
 let _mobSpawnT = 1.5;
 
-// especies: w=medio ancho, bh=alto (tiles); color/belly/dark; rasgos por flags
+// criaturas del modo 2D: monstruos del pack 0x72 (mismo estilo que el prota).
+// sprite = base del atlas (usa <sprite>_idle/run_anim_f0..3); w=medio ancho, bh=alto (tiles).
+// color = tinte de partículas al morir. Se mantienen stats/flags/drops del diseño previo.
 const DINO = {
-  raptor: { name: 'Raptor', hostile: true, hp: 14, w: 0.55, bh: 1.0, speed: 4.4, dmg: 6, sense: 10,
-    color: '#a06a38', belly: '#d2a86a', dark: '#6e4724', drop: [['meat', 1]] },
-  rex: { name: 'T-Rex', hostile: true, hp: 40, w: 0.95, bh: 1.95, speed: 3.0, dmg: 15, sense: 12,
-    color: '#5f7444', belly: '#a6bd80', dark: '#3c4a2a', drop: [['meat', 2], ['bone', 1]] },
-  bronto: { name: 'Brontosaurio', hostile: false, hp: 46, w: 1.5, bh: 2.4, speed: 1.5, dmg: 0,
-    color: '#5790b2', belly: '#a3c8db', dark: '#3a647e', neck: true, drop: [['meat', 2], ['leather', 1]] },
-  stego: { name: 'Estegosaurio', hostile: false, hp: 28, w: 1.15, bh: 1.4, speed: 1.8, dmg: 0,
-    color: '#6aa15e', belly: '#bcd6a6', dark: '#467038', plates: true, drop: [['meat', 1], ['leather', 1]] },
-  trike: { name: 'Triceratops', hostile: false, hp: 32, w: 1.1, bh: 1.35, speed: 2.1, dmg: 0,
-    color: '#9c7b5a', belly: '#cdb38a', dark: '#6b5238', horns: true, drop: [['meat', 1], ['leather', 1]] },
-  guardian: { name: 'Guardián del Corazón', hostile: true, boss: true, hp: 240, w: 1.6, bh: 2.8, speed: 2.5, dmg: 20, sense: 80,
-    color: '#3a2d52', belly: '#6a4f9a', dark: '#241a36', horns: true, drop: [['crystal', 8], ['bone', 4], ['core', 1]] },
+  raptor: { name: 'Goblin', sprite: 'goblin', hostile: true, hp: 14, w: 0.55, bh: 1.15, speed: 4.4, dmg: 6, sense: 10,
+    color: '#6e8a3a', drop: [['meat', 1]] },
+  rex: { name: 'Ogro', sprite: 'ogre', hostile: true, hp: 40, w: 0.95, bh: 2.1, speed: 3.0, dmg: 15, sense: 12,
+    color: '#7a7a86', drop: [['meat', 2], ['bone', 1]] },
+  bronto: { name: 'Zombi colosal', sprite: 'big_zombie', hostile: false, hp: 46, w: 1.3, bh: 2.3, speed: 1.5, dmg: 0,
+    color: '#6a9a4a', drop: [['meat', 2], ['leather', 1]] },
+  stego: { name: 'Orco enmascarado', sprite: 'masked_orc', hostile: false, hp: 28, w: 0.9, bh: 1.5, speed: 1.8, dmg: 0,
+    color: '#5f8a6a', drop: [['meat', 1], ['leather', 1]] },
+  trike: { name: 'Orco guerrero', sprite: 'orc_warrior', hostile: false, hp: 32, w: 0.9, bh: 1.5, speed: 2.1, dmg: 0,
+    color: '#7a9a5a', drop: [['meat', 1], ['leather', 1]] },
+  guardian: { name: 'Gran Demonio', sprite: 'big_demon', hostile: true, boss: true, hp: 240, w: 1.5, bh: 2.6, speed: 2.5, dmg: 20, sense: 80,
+    color: '#b03a3a', drop: [['crystal', 8], ['bone', 4], ['core', 1]] },
 };
 
 /* ---------- física ---------- */
@@ -167,87 +169,47 @@ function attackMobs2d(dt) {
   return true;
 }
 
-/* ---------- render (pixel-art horneado a baja resolución y ampliado nearest-neighbor) ---------- */
-const _dinoCache = {};
-const ART = 12;   // px de arte por tile; al ampliar a TS quedan píxeles chunky como el prota
-function _dinoSprite(d, frame, hurt) {
-  const key = d.name + ':' + frame + ':' + (hurt ? 1 : 0);
-  if (_dinoCache[key]) return _dinoCache[key];
-  const Wd = d.w * 2 * ART, Hd = d.bh * ART, pad = 3;
-  const fw = Math.ceil(Wd) + pad * 2, fh = Math.ceil(Hd) + pad * 2;
-  const [c, g] = cv(fw, fh);
-  g.translate(Math.round(fw / 2), fh - pad);                 // origen: pies, centrado
-  const col = hurt ? '#ff8a8a' : d.color, belly = hurt ? '#ffc0c0' : d.belly, dark = d.dark;
-  const bw = Wd * 0.62, bh = Hd * 0.4, by = -Hd * 0.5;
-  const R = (x, y, w, h, c2) => { g.fillStyle = c2; g.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); };
-  // óvalo pixelado fila a fila (cuerpo/cabeza redondeados pero en píxeles)
-  const oval = (cx, cy, rx, ry, top, bot) => {
-    for (let yy = -Math.round(ry); yy <= Math.round(ry); yy++) {
-      const t = yy / ry, w = rx * Math.sqrt(Math.max(0, 1 - t * t));
-      if (w < 0.5) continue;
-      g.fillStyle = (bot && yy > ry * 0.15) ? bot : top;
-      g.fillRect(Math.round(cx - w), Math.round(cy + yy), Math.max(1, Math.round(w * 2)), 1);
-    }
-  };
-  const legH = Hd * 0.34, lw = Math.max(2, ART * 0.18);
-  const lp = [0, 1.6, 0, -1.6][frame & 3];                   // patas (4 frames)
-  R(-bw * 0.30, -legH, lw, legH + lp, dark);
-  R(bw * 0.12, -legH, lw, legH - lp, dark);
-  // cola (escalones)
-  R(-bw * 1.02, by - bh * 0.05, bw * 0.4, Math.max(2, bh * 0.5), col);
-  R(-bw * 0.72, by - bh * 0.2, bw * 0.38, Math.max(2, bh * 0.8), col);
-  // cuerpo
-  oval(0, by, bw * 0.52, bh, col, belly);
-  // placas dorsales (stego)
-  if (d.plates) for (let i = -2; i <= 2; i++) { const px = i * bw * 0.16; R(px - bw * 0.05, by - bh * 1.05, bw * 0.1, bh * 0.6, dark); R(px - bw * 0.02, by - bh * 1.25, bw * 0.04, bh * 0.3, dark); }
-  // cuello + cabeza
-  let hx, hy;
-  if (d.neck) {
-    R(bw * 0.30, by - Hd * 0.6, Math.max(2, ART * 0.18), Hd * 0.6, col);
-    hx = bw * 0.42; hy = by - Hd * 0.64; oval(hx, hy, ART * 0.26, ART * 0.2, col);
-  } else {
-    hx = bw * 0.52; hy = by - bh * 0.5; oval(hx, hy, bw * 0.32, bh * 0.78, col, belly);
-    if (d.hostile) { R(bw * 0.5, by - bh * 0.15, bw * 0.34, Math.max(1, ART * 0.12), col); for (let k = 0; k < 3; k++) R(bw * 0.55 + k * bw * 0.09, by - bh * 0.05, 1, 1, '#fff'); }  // mandíbula + dientes
-  }
-  // cuernos + gola (trike)
-  if (d.horns) { R(hx + bw * 0.12, hy - bh * 0.1, bw * 0.3, 1, '#eee'); R(hx, hy - bh * 0.55, 1, bh * 0.5, '#eee'); R(hx - bw * 0.25, hy - bh * 0.4, bw * 0.1, bh * 0.5, dark); }
-  // ojo
-  R(hx + 1, hy - 2, 2, 2, '#fff'); R(hx + 2, hy - 1, 1, 1, d.hostile ? '#e23' : '#111');
-  outline1px(c, OUTLINE2D);                                   // contorno oscuro estilo protagonista
-  _dinoCache[key] = c; return c;
-}
-function _dino(g, m, ox, oy) {
+/* ---------- render (sprites del atlas 0x72 DungeonTileset II, mismo estilo que el prota) ---------- */
+function _mob(g, m, ox, oy) {
   const TS = CFG.TS, d = m.def;
   const sx = Math.round((m.x - ox) * TS), sy = Math.round((m.y - oy) * TS);
   const Hd = d.bh * TS;
-  if (d.boss) {                                              // aura emisiva del jefe
+  if (d.boss) {                                              // aura emisiva del jefe (demonio)
     const r = Hd * (1.0 + 0.06 * Math.sin(G.elapsed * 4));
     g.globalCompositeOperation = 'lighter';
     const rg = g.createRadialGradient(sx, sy - Hd * 0.45, 0, sx, sy - Hd * 0.45, r);
-    rg.addColorStop(0, 'rgba(150,90,230,0.4)'); rg.addColorStop(1, 'rgba(120,70,210,0)');
+    rg.addColorStop(0, 'rgba(200,70,60,0.4)'); rg.addColorStop(1, 'rgba(160,50,50,0)');
     g.fillStyle = rg; g.fillRect(sx - r, sy - Hd * 0.45 - r, r * 2, r * 2);
     g.globalCompositeOperation = 'source-over';
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(sx, sy, d.w * 0.72 * TS, TS * 0.14, 0, 0, 7); g.fill();
-  const frame = (Math.abs(m.vx || 0) > 0.2) ? (Math.floor(m.walk * 3) & 3) : 0;
-  const spr = _dinoSprite(d, frame, m.hurtT > 0);
-  const scale = TS / ART, dw = spr.width * scale, dh = spr.height * scale;
-  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 3 * scale);
-  g.imageSmoothingEnabled = false;
-  if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
-  else g.drawImage(spr, dx, dy, dw, dh);
+  const moving = Math.abs(m.vx || 0) > 0.2;
+  const frame = moving ? (Math.floor(m.walk * 8) & 3) : (Math.floor(G.elapsed * 3 + m.x) & 3);   // run (rápido) o idle
+  const spr = typeof dsprite === 'function' ? dsprite(d.sprite + '_' + (moving ? 'run' : 'idle') + '_anim_f' + frame) : null;
+  if (spr && spr.width) {
+    const dh = Hd, dw = spr.width * (dh / spr.height);
+    const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + 1);
+    g.imageSmoothingEnabled = false;
+    if (m.hurtT > 0) g.globalAlpha = 0.5;                    // parpadeo al recibir daño
+    if (m.dir < 0) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+    else g.drawImage(spr, dx, dy, dw, dh);
+    g.globalAlpha = 1;
+  } else {                                                   // atlas aún sin cargar: silueta simple
+    g.fillStyle = d.color || '#556'; g.fillRect(Math.round(sx - d.w * TS), Math.round(sy - Hd), Math.round(d.w * 2 * TS), Math.round(Hd));
+  }
   if (m.hp < m.maxHp) {                                      // barra de vida
-    const barW = d.w * 2 * TS * 0.6; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
+    const barW = d.w * 2 * TS * 0.7; g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW), 3);
     g.fillStyle = d.hostile ? '#ff5a5a' : '#7CFC5A'; g.fillRect(Math.round(sx - barW / 2), Math.round(sy - Hd - 6), Math.round(barW * clamp(m.hp / m.maxHp, 0, 1)), 3);
   }
 }
-function drawMobs2d(g, ox, oy) { for (const m of mobs2d) _dino(g, m, ox, oy); }
+function drawMobs2d(g, ox, oy) { for (const m of mobs2d) _mob(g, m, ox, oy); }
 
 /* ============ NPCs supervivientes (pueblos de superficie) ============ */
 const npc2d = [];
 let _npcScanT = 0;
 const SURVIVOR_NAMES = ['Bryn', 'Tova', 'Kell', 'Mira', 'Doran', 'Saela', 'Orin', 'Hede'];
-const SURVIVOR_ROBES = ['#5a6b8a', '#7a5a6b', '#5a7a5e', '#8a7a4a', '#6a5a8a', '#7a6a4a'];
+// supervivientes = otros héroes del pack 0x72 (mismo estilo que el prota enano)
+const SURVIVOR_CHARS = ['elf_f', 'elf_m', 'knight_f', 'knight_m', 'wizzard_f', 'wizzard_m', 'lizard_f', 'lizard_m', 'dwarf_f'];
 const SURVIVOR_LINES = [
   'Los Antiguos sellaron lo de abajo por algo… pero alguien debe mirar.',
   'Dicen que cada estrato fue un cielo. Imagínatelo.',
@@ -270,7 +232,7 @@ function scanSurvivors2d() {
     npc2d.push({
       x: sx, y: world.surfaceY(hx), vy: 0, grounded: false, def: { w: 0.3, bh: 1.7 },
       name: SURVIVOR_NAMES[(k * SURVIVOR_NAMES.length) | 0],
-      robe: SURVIVOR_ROBES[(hash2(hx, 6, 7) * SURVIVOR_ROBES.length) | 0],
+      char: SURVIVOR_CHARS[(hash2(hx, 6, 7) * SURVIVOR_CHARS.length) | 0],
       line: SURVIVOR_LINES[(hash2(hx, 4, 9) * SURVIVOR_LINES.length) | 0],
       gave: false, near: false, t: hash2(hx, 5, 9) * 6,
     });
@@ -293,39 +255,19 @@ function updateNpc2d(dt) {
     }
   }
 }
-// aldeano encapuchado horneado a baja res (mismo lenguaje que el enano protagonista)
-const _npcCache = {};
-const NPC_ART = 12;
-function _npcSprite(robe) {
-  if (_npcCache[robe]) return _npcCache[robe];
-  const [c, g] = cv(18, 25);
-  const cx = 9, baseY = 23, dk = OUTLINE2D;
-  const dRobe = shade2d(robe, -0.30), lRobe = shade2d(robe, 0.14);
-  const skin = '#d8a57d', skinDk = '#c38d70';
-  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, Math.max(1, w), Math.max(1, h)); };
-  // túnica (torso + falda acampanada) con lado sombreado y brillo
-  R(cx - 4, 10, 8, 10, robe); R(cx - 6, 17, 12, 5, robe);
-  R(cx - 4, 10, 3, 12, dRobe); R(cx + 2, 10, 2, 7, lRobe);
-  R(cx - 6, 17, 4, 5, dRobe);
-  R(cx - 4, 21, 3, 2, '#3a2b26'); R(cx + 1, 21, 3, 2, '#3a2b26');   // pies
-  // cabeza (cara tostada) bajo la capucha
-  R(cx - 4, 3, 8, 7, skin); R(cx - 4, 8, 8, 2, skinDk);
-  R(cx - 5, 1, 10, 3, robe);                                        // techo de capucha
-  R(cx - 5, 3, 2, 6, robe); R(cx + 3, 3, 2, 6, robe);               // lados de la capucha
-  R(cx - 5, 1, 3, 8, dRobe);                                        // sombra de la capucha
-  R(cx - 2, 6, 1, 1, dk); R(cx + 1, 6, 1, 1, dk);                   // ojos
-  outline1px(c, dk);
-  _npcCache[robe] = c; return c;
-}
 function drawNpc2d(g, n, ox, oy) {
   const TS = CFG.TS, sx = (n.x - ox) * TS, sy = (n.y - oy) * TS;
   const bob = Math.sin((G.elapsed + n.t) * 2) * 1.3;
   g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(sx, sy, TS * 0.30, TS * 0.12, 0, 0, 7); g.fill();
-  const spr = _npcSprite(n.robe), scale = TS / NPC_ART, dw = spr.width * scale, dh = spr.height * scale;
-  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + bob + scale);
-  g.imageSmoothingEnabled = false;
-  if (player.x < n.x) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
-  else g.drawImage(spr, dx, dy, dw, dh);
+  const frame = Math.floor(G.elapsed * 3 + n.t) & 3;                          // idle animado (4 frames del atlas)
+  const spr = typeof dsprite === 'function' ? dsprite((n.char || 'dwarf_f') + '_idle_anim_f' + frame) : null;
+  const dh = TS * 2.05;
+  if (spr && spr.width) {
+    const dw = spr.width * (dh / spr.height), dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + bob + 2);
+    g.imageSmoothingEnabled = false;
+    if (player.x < n.x) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+    else g.drawImage(spr, dx, dy, dw, dh);
+  }
   // bocadillo de lore al acercarte
   if (n.near) {
     g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - dh - 16;

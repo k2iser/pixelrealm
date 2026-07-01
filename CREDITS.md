@@ -7,7 +7,7 @@ El modo **2D lateral (tipo Terraria)** usa algunas texturas pixel-art externas c
 
 | Asset | Autor | Licencia | Fuente |
 |---|---|---|---|
-| Personaje: enano minero (idle/run/hit, 16×28) — de DungeonTileset II | **0x72** | CC0 | https://0x72.itch.io/dungeontileset-ii |
+| **DungeonTileset II v1.7** — atlas completo (`assets/tiles/dungeon.png`): enano protagonista + héroes (elfa/mago/caballero/lagarto), monstruos (goblin/orco/esqueleto/zombi/ogro/gran demonio), props y tiles de mazmorra | **0x72** | CC0 | https://0x72.itch.io/dungeontileset-ii |
 | Tileset de terreno (16×16) — de Pixel Adventure | **Pixel Frog** | CC0 | https://pixelfrog-assets.itch.io/pixel-adventure-1 |
 | Piedras y vetas de mineral (16×16) | **Senmou** | CC0 | https://opengameart.org/content/various-stones-and-oregem-veins-16x16 |
 

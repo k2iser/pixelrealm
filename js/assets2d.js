@@ -16,6 +16,7 @@ const Assets2D = {
     // tilesets
     terrain: 'assets/tiles/terrain.png',                                            // atlas 22x11 (16px) Pixel Frog
     oreRocks: 'assets/tiles/ore/Stone_ore_gems/Stones_ores_gems_without_grass.png', // 7x9 (16px) Senmou
+    dungeon: 'assets/tiles/dungeon.png',                                            // atlas 512x512 (0x72 DungeonTileset II, CC0) — mismo autor que el prota
   },
   load(cb) {
     const keys = Object.keys(this.manifest);
@@ -40,6 +41,18 @@ const CHAR_ANIM = {
   hit:  { keys: ['dHit0'], fps: 1 },
 };
 const CHAR_FW = 16, CHAR_FH = 28;   // tamaño de frame fuente
+
+// trocea un sprite del atlas de mazmorra 0x72 por nombre (cacheado como canvas propio)
+const _dCache = {};
+function dsprite(name) {
+  if (_dCache[name]) return _dCache[name];
+  if (typeof DUNGEON_SRC === 'undefined') return null;
+  const s = DUNGEON_SRC[name]; if (!s) return null;
+  const atlas = Assets2D.img.dungeon; if (!atlas || !atlas.naturalWidth) return null;   // aún sin cargar: reintenta luego
+  const [c, g] = cv(s[2], s[3]); g.imageSmoothingEnabled = false;
+  g.drawImage(atlas, s[0], s[1], s[2], s[3], 0, 0, s[2], s[3]);
+  _dCache[name] = c; return c;
+}
 
 // material -> celda (col,row) del atlas de terreno (tiles base sólidos)
 const TILE_SRC = {
