@@ -43,7 +43,7 @@ const CFG = {
 };
 
 // --- Suelos --- (AIR/COAL_ORE/IRON_ORE/BEDROCK son del modo 2D)
-const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12, TORCH: 13, GATE: 14, CRYSTAL: 15, WOOD: 16, BRICK: 17, PLATFORM: 18, CHEST: 19, CHEST_OPEN: 20 };
+const T = { DEEP: 0, WATER: 1, SAND: 2, GRASS: 3, DIRT: 4, STONE: 5, SNOW: 6, FLOOR: 7, TILLED: 8, AIR: 9, COAL_ORE: 10, IRON_ORE: 11, BEDROCK: 12, TORCH: 13, GATE: 14, CRYSTAL: 15, WOOD: 16, BRICK: 17, PLATFORM: 18, CHEST: 19, CHEST_OPEN: 20, ROOF: 21, WINDOW: 22, DOOR: 23 };
 
 // Materiales del modo 2D: sólido, dureza, herramienta y drops (reusa ITEMS)
 const TDEF = {
@@ -70,6 +70,10 @@ const TDEF = {
   // el abierto sí se puede retirar para limpiar (suelta algo de madera).
   [T.CHEST]:      { solid: false },
   [T.CHEST_OPEN]: { solid: false, hp: 1.5, tool: 'axe', drops: [['wood', 2, 1]] },
+  // casas de superficie: tejado, ventana (con luz cálida tenue) y puerta (no sólida, se cruza)
+  [T.ROOF]:   { solid: true, hp: 4, tool: 'axe', drops: [['wood', 1, 1]] },
+  [T.WINDOW]: { solid: true, hp: 4, light: 3, tool: 'axe', drops: [['wood', 1, 1]] },
+  [T.DOOR]:   { solid: false, hp: 4, tool: 'axe', drops: [['wood', 1, 1]] },
 };
 // item -> material que coloca (para construir en 2D con el clic derecho)
 const PLACE2D = { dirt: T.DIRT, stone: T.STONE, walls: T.BRICK, wallw: T.WOOD, plank: T.WOOD, wood: T.WOOD, torch: T.TORCH, gate: T.GATE };
@@ -142,7 +146,6 @@ const ITEMS = {
   wood:     { name: 'Madera', stack: 99 },
   dirt:     { name: 'Tierra', stack: 99 },
   stone:    { name: 'Piedra', stack: 99 },
-  meat:     { name: 'Carne', stack: 99 },
   leather:  { name: 'Cuero', stack: 99 },
   bone:     { name: 'Hueso', stack: 99 },
   crystal:  { name: 'Cristal abisal', stack: 99 },

@@ -110,21 +110,20 @@ class World2D {
   stampStructures(cx, cy, ground, N) {
     const baseX = cx * N, baseY = cy * N;
     const set = (gx, gy, mat) => { const lx = gx - baseX, ly = gy - baseY; if (lx >= 0 && lx < N && ly >= 0 && ly < N) ground[ly * N + lx] = mat; };
-    // --- casas de superficie (y pueblos por agrupación) ---
+    // --- casas de superficie (tejado escalonado + muros + puerta + ventana) ---
     for (let gx = baseX - 8; gx < baseX + N + 8; gx++) {
       if (!this.houseAnchor(gx)) continue;
+      const s2 = (this.seed + 4242) >>> 0;
       const HW = 7, HH = 5, base = this.surfaceY(gx), top = base - HH, floor = base - 1;
-      const roof = this.biomeAt(gx) === 'snow' ? T.STONE : T.WOOD;
-      for (let lx = 0; lx < HW; lx++) for (let ry = top; ry <= floor; ry++) {
-        const ly = ry - top, perim = (lx === 0 || lx === HW - 1 || ly === 0 || ly === HH - 1);
-        const door = (lx === 0 && (ly === HH - 1 || ly === HH - 2));   // vano real en el muro izquierdo
-        if (door) set(gx + lx, ry, T.AIR);
-        else if (perim) set(gx + lx, ry, ly === 0 ? roof : T.WOOD);
-        else set(gx + lx, ry, T.AIR);
-      }
+      for (let ry = top + 1; ry <= floor; ry++) { set(gx, ry, T.WOOD); set(gx + HW - 1, ry, T.WOOD); } // muros laterales
+      for (let lx = 0; lx < HW; lx++) set(gx + lx, base, T.WOOD);     // suelo de madera sobre la hierba
+      for (let lx = -1; lx <= HW; lx++) set(gx + lx, top, T.ROOF);    // alero (sobresale a los lados)
+      for (let lx = 1; lx <= HW - 2; lx++) set(gx + lx, top - 1, T.ROOF);   // escalón de tejado
+      for (let lx = 2; lx <= HW - 3; lx++) set(gx + lx, top - 2, T.ROOF);   // cumbrera
+      set(gx, floor, T.DOOR); set(gx, floor - 1, T.DOOR);            // puerta (no sólida) en el muro izquierdo
+      set(gx + HW - 1, top + 2, T.WINDOW);                           // ventana en el muro derecho
       set(gx + HW - 2, floor - 1, T.TORCH);                          // antorcha interior
-      if (hash2(gx, 9, (this.seed + 4242) >>> 0) < 0.4) set(gx + 2, floor - 1, T.CHEST);  // a veces, cofre en casa
-      for (let lx = 1; lx < HW - 1; lx++) set(gx + lx, base, T.WOOD); // refuerzo del suelo sobre la hierba
+      if (hash2(gx, 9, s2) < 0.4) set(gx + 2, floor - 1, T.CHEST);   // a veces, cofre
     }
     // --- salas/viviendas de cueva (dwarf-holds sepultados) --- (solo lattice 11x8, no toda la malla)
     const gx0 = Math.ceil((baseX - 12) / 11) * 11, gy0 = Math.ceil((baseY - 10) / 8) * 8;

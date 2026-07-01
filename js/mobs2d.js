@@ -134,7 +134,7 @@ function hurtPlayer2d(dmg, dir) {
   if (G.creative || (player._iframe || 0) > 0) return;
   player.hp -= dmg; player.hurtT = 0.35; player._iframe = 0.7;
   player.vx2 = dir * 6; player.vy2 = -6; player.grounded = false;
-  G.shake = Math.max(G.shake, 0.22); if (Sfx.hurt) Sfx.hurt(); else if (Sfx.thunder) {}
+  G.shake = Math.max(G.shake, 0.22); if (Sfx.hurt) Sfx.hurt();
   if (player.hp <= 0) { player.hp = 0; respawn2d(); }
 }
 function respawn2d() {
@@ -177,7 +177,7 @@ function _dinoSprite(d, frame, hurt) {
   const fw = Math.ceil(Wd) + pad * 2, fh = Math.ceil(Hd) + pad * 2;
   const [c, g] = cv(fw, fh);
   g.translate(Math.round(fw / 2), fh - pad);                 // origen: pies, centrado
-  const col = hurt ? '#ff8a8a' : d.color, belly = hurt ? '#ffc0c0' : d.belly, dark = d.dark, line = 'rgba(0,0,0,0.45)';
+  const col = hurt ? '#ff8a8a' : d.color, belly = hurt ? '#ffc0c0' : d.belly, dark = d.dark;
   const bw = Wd * 0.62, bh = Hd * 0.4, by = -Hd * 0.5;
   const R = (x, y, w, h, c2) => { g.fillStyle = c2; g.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h))); };
   // óvalo pixelado fila a fila (cuerpo/cabeza redondeados pero en píxeles)
@@ -213,6 +213,7 @@ function _dinoSprite(d, frame, hurt) {
   if (d.horns) { R(hx + bw * 0.12, hy - bh * 0.1, bw * 0.3, 1, '#eee'); R(hx, hy - bh * 0.55, 1, bh * 0.5, '#eee'); R(hx - bw * 0.25, hy - bh * 0.4, bw * 0.1, bh * 0.5, dark); }
   // ojo
   R(hx + 1, hy - 2, 2, 2, '#fff'); R(hx + 2, hy - 1, 1, 1, d.hostile ? '#e23' : '#111');
+  outline1px(c, OUTLINE2D);                                   // contorno oscuro estilo protagonista
   _dinoCache[key] = c; return c;
 }
 function _dino(g, m, ox, oy) {
@@ -292,19 +293,42 @@ function updateNpc2d(dt) {
     }
   }
 }
+// aldeano encapuchado horneado a baja res (mismo lenguaje que el enano protagonista)
+const _npcCache = {};
+const NPC_ART = 12;
+function _npcSprite(robe) {
+  if (_npcCache[robe]) return _npcCache[robe];
+  const [c, g] = cv(18, 25);
+  const cx = 9, baseY = 23, dk = OUTLINE2D;
+  const dRobe = shade2d(robe, -0.30), lRobe = shade2d(robe, 0.14);
+  const skin = '#d8a57d', skinDk = '#c38d70';
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, Math.max(1, w), Math.max(1, h)); };
+  // túnica (torso + falda acampanada) con lado sombreado y brillo
+  R(cx - 4, 10, 8, 10, robe); R(cx - 6, 17, 12, 5, robe);
+  R(cx - 4, 10, 3, 12, dRobe); R(cx + 2, 10, 2, 7, lRobe);
+  R(cx - 6, 17, 4, 5, dRobe);
+  R(cx - 4, 21, 3, 2, '#3a2b26'); R(cx + 1, 21, 3, 2, '#3a2b26');   // pies
+  // cabeza (cara tostada) bajo la capucha
+  R(cx - 4, 3, 8, 7, skin); R(cx - 4, 8, 8, 2, skinDk);
+  R(cx - 5, 1, 10, 3, robe);                                        // techo de capucha
+  R(cx - 5, 3, 2, 6, robe); R(cx + 3, 3, 2, 6, robe);               // lados de la capucha
+  R(cx - 5, 1, 3, 8, dRobe);                                        // sombra de la capucha
+  R(cx - 2, 6, 1, 1, dk); R(cx + 1, 6, 1, 1, dk);                   // ojos
+  outline1px(c, dk);
+  _npcCache[robe] = c; return c;
+}
 function drawNpc2d(g, n, ox, oy) {
   const TS = CFG.TS, sx = (n.x - ox) * TS, sy = (n.y - oy) * TS;
   const bob = Math.sin((G.elapsed + n.t) * 2) * 1.3;
-  const h = TS * 1.7, w = TS * 0.72;
-  g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(sx, sy, TS * 0.32, TS * 0.12, 0, 0, 7); g.fill();
-  g.fillStyle = n.robe;                                   // túnica
-  g.beginPath(); g.moveTo(sx - w / 2, sy); g.lineTo(sx + w / 2, sy); g.lineTo(sx + w * 0.32, sy - h * 0.62 + bob); g.lineTo(sx - w * 0.32, sy - h * 0.62 + bob); g.closePath(); g.fill();
-  g.fillStyle = '#e8c9a0'; g.beginPath(); g.arc(sx, sy - h * 0.72 + bob, w * 0.27, 0, 7); g.fill();   // cara
-  g.fillStyle = n.robe; g.beginPath(); g.arc(sx, sy - h * 0.78 + bob, w * 0.32, Math.PI, 0); g.fill(); // capucha
-  g.fillStyle = '#222'; g.fillRect(Math.round(sx - 3), Math.round(sy - h * 0.72 + bob), 1, 1); g.fillRect(Math.round(sx + 2), Math.round(sy - h * 0.72 + bob), 1, 1);
+  g.fillStyle = 'rgba(0,0,0,0.28)'; g.beginPath(); g.ellipse(sx, sy, TS * 0.30, TS * 0.12, 0, 0, 7); g.fill();
+  const spr = _npcSprite(n.robe), scale = TS / NPC_ART, dw = spr.width * scale, dh = spr.height * scale;
+  const dx = Math.round(sx - dw / 2), dy = Math.round(sy - dh + bob + scale);
+  g.imageSmoothingEnabled = false;
+  if (player.x < n.x) { g.save(); g.translate(dx + dw, 0); g.scale(-1, 1); g.drawImage(spr, 0, dy, dw, dh); g.restore(); }
+  else g.drawImage(spr, dx, dy, dw, dh);
   // bocadillo de lore al acercarte
   if (n.near) {
-    g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - h - 20;
+    g.font = '7px monospace'; const tw = Math.min(220, g.measureText(n.line).width), bx = sx - tw / 2 - 5, by = sy - dh - 16;
     g.fillStyle = 'rgba(20,18,28,0.92)'; g.fillRect(bx, by, tw + 10, 16);
     g.fillStyle = 'rgba(20,18,28,0.92)'; g.beginPath(); g.moveTo(sx - 4, by + 16); g.lineTo(sx + 4, by + 16); g.lineTo(sx, by + 21); g.closePath(); g.fill();
     g.fillStyle = '#ffe9a6'; g.fillText(n.name, bx + 5, by + 7);

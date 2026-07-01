@@ -221,8 +221,6 @@ const NPC = {
     return pick(role.lines, 9);
   },
 
-  /* ---------- comercio ---------- */
-
   /* ---------- recados (quests) ---------- */
 
   // Genera un recado para un rol: tráeme N de X a cambio de monedas (y a veces objeto)

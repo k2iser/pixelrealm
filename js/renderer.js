@@ -810,7 +810,7 @@ function rigPoseFor(dir, st) {
     const w = Math.sin(st.prog * Math.PI), s = fs;
     if (dir === 'left') { Q.shL = (st.prog < 0.3 ? -0.6 * (st.prog / 0.3) : 1.0 * w) * s; Q.elbL = -0.5 - 0.5 * w; }
     else { Q.shR = (st.prog < 0.3 ? -0.6 * (st.prog / 0.3) : 1.0 * w) * s; Q.elbR = -0.5 - 0.5 * w; }
-    Q.torsoRot = -0.06 * w * s; Q.elbL = Q.elbL || -0.2; Q.elbR = Q.elbR || -0.2;
+    Q.torsoRot = -0.06 * w * s; Q.elbL = Q.elbL ?? -0.2; Q.elbR = Q.elbR ?? -0.2;
   } else {                                          // idle: brazos relajados (resto lo da computeLivePose)
     Q.elbL = -0.18; Q.elbR = -0.18;
   }

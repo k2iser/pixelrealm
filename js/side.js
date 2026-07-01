@@ -8,6 +8,35 @@ const SIDE = { HW: 0.34, BODY: 1.72 };   // medio ancho y alto de la caja del ju
 
 /* ---------- arte: tiles (atlas externo CC0 + fallback procedural) ---------- */
 const _tile2dCache = {};
+
+// === estilo unificado con el protagonista (enano CC0): contorno oscuro de 1px + paleta cálida ===
+const OUTLINE2D = '#231a1c';   // contorno oscuro (como el #222 del prota, un pelín cálido)
+const BUILD2D = new Set([T.WOOD, T.BRICK, T.ROOF, T.WINDOW, T.DOOR, T.PLATFORM]);   // materiales que llevan contorno de silueta
+// aclara/oscurece un color hex por un factor (-1..1)
+function shade2d(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const cl = v => Math.max(0, Math.min(255, Math.round(v)));
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  if (f >= 0) { r += (255 - r) * f; g += (255 - g) * f; b += (255 - b) * f; }
+  else { r *= 1 + f; g *= 1 + f; b *= 1 + f; }
+  return '#' + [cl(r), cl(g), cl(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+// pinta un contorno de 1px alrededor de la silueta opaca (sobre el lienzo de arte a baja res)
+function outline1px(c, color) {
+  color = color || OUTLINE2D;
+  const g = c.getContext('2d'), w = c.width, h = c.height;
+  if (w < 3 || h < 3) return c;
+  const img = g.getImageData(0, 0, w, h), d = img.data, a0 = new Uint8ClampedArray(d);   // alfa original
+  const r = parseInt(color.slice(1, 3), 16), gg = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+  const A = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : a0[(y * w + x) * 4 + 3];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (a0[i + 3] >= 40) continue;                                   // ya opaco
+    if (A(x - 1, y) >= 40 || A(x + 1, y) >= 40 || A(x, y - 1) >= 40 || A(x, y + 1) >= 40) { d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255; }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
 // iconos de hotbar para items del modo 2D que no tienen icono iso (se usa como fallback de iconURL)
 const ICON2D_MAT = { dirt: T.DIRT, stone: T.STONE, walls: T.BRICK, wallw: T.WOOD, plank: T.WOOD, wood: T.WOOD, torch: T.TORCH, gate: T.GATE, crystal: T.CRYSTAL, coal: T.COAL_ORE, iron_ore: T.IRON_ORE };
 function icon2dURL(id) {
@@ -106,8 +135,34 @@ function tile2d(mat, variant) {
     g.fillStyle = '#4e3320'; for (let i = 0; i < 6; i++) { const x = hash2(i, 1, variant * 5 + 2) * TS | 0, y = hash2(i, 2, variant * 5 + 2) * TS | 0; g.fillRect(x, y, 1, 1); }
     _tile2dCache[key] = c; return c;
   }
+  if (mat === T.ROOF) {                                     // tejado de tejas cálidas
+    g.fillStyle = '#b5603a'; g.fillRect(0, 0, TS, TS);
+    const rh = Math.max(3, TS / 3 | 0);
+    for (let y = 0; y < TS; y += rh) {
+      g.fillStyle = '#c9744a'; g.fillRect(0, y, TS, 1);                    // brillo superior de fila
+      g.fillStyle = '#8f4526'; g.fillRect(0, y + rh - 1, TS, 1);          // sombra inferior de teja
+      const off = ((y / rh) & 1) ? (TS / 2) : 0;
+      g.fillStyle = '#9a4d2c'; for (let x = off; x < TS; x += TS / 2) g.fillRect(Math.round(x), y, 1, rh);
+    }
+    _tile2dCache[key] = c; return c;
+  }
+  if (mat === T.WINDOW) {                                    // ventana con cristal cálido
+    g.fillStyle = '#5e3f24'; g.fillRect(0, 0, TS, TS);                     // marco de madera
+    g.fillStyle = '#ffd98a'; g.fillRect(3, 3, TS - 6, TS - 6);            // cristal cálido
+    g.fillStyle = '#ffe9b8'; g.fillRect(3, 3, TS - 6, 2);                 // reflejo
+    g.fillStyle = '#3a2715'; g.fillRect((TS >> 1) - 1, 3, 2, TS - 6); g.fillRect(3, (TS >> 1) - 1, TS - 6, 2);  // cruceta
+    _tile2dCache[key] = c; return c;
+  }
+  if (mat === T.DOOR) {                                      // puerta de tablones (margen transparente lateral)
+    g.fillStyle = '#6b4a2a'; g.fillRect(2, 0, TS - 4, TS);
+    g.fillStyle = '#523823'; g.fillRect(2, 0, 2, TS); g.fillRect(TS - 4, 0, 2, TS);
+    g.fillStyle = '#4e3320'; g.fillRect((TS >> 1), 1, 1, TS - 2);
+    g.fillStyle = '#5e3f24'; g.fillRect(4, 2, TS - 8, 2); g.fillRect(4, TS / 2 | 0, TS - 8, 2);   // travesaños
+    g.fillStyle = '#caa15a'; g.fillRect(TS - 7, (TS >> 1) - 1, 2, 2);      // pomo
+    _tile2dCache[key] = c; return c;
+  }
   if (mat === T.CHEST || mat === T.CHEST_OPEN) {
-    // cofre (placeholder procedural; sustituible por sprite de PixelLab)
+    // cofre (placeholder procedural)
     const open = mat === T.CHEST_OPEN;
     g.fillStyle = '#7a5230'; g.fillRect(2, TS - 12, TS - 4, 11);
     g.fillStyle = '#5e3f24'; g.fillRect(2, TS - 12, TS - 4, 1); g.fillRect(2, TS - 2, TS - 4, 1);
@@ -564,22 +619,35 @@ function skyDecor2d(g, W, H, ox, skyBottom) {
   }
 }
 // árbol de superficie (segundo plano, pixel, no colisiona): tronco + copa por bloques
+// árbol horneado a baja res con contorno oscuro (mismo lenguaje que el protagonista)
+const _treeCache = {};
+const TREE_ART = 12;
+function _treeSprite(biome, h) {
+  const key = biome + ':' + h;
+  if (_treeCache[key]) return _treeCache[key];
+  const A = TREE_ART, ch = Math.round(h * A * 1.08), cw = Math.round(h * A * 0.95);
+  const [c, g] = cv(cw + 2, ch + 2), W = cw + 2, Ht = ch + 2, cx = W / 2;
+  const dark = biome === 'forest' ? '#2f6b34' : biome === 'jungle' ? '#27773a' : '#4f9440';
+  const lite = shade2d(dark, 0.22);
+  const R = (x, y, w, hh, col) => { g.fillStyle = col; g.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(hh))); };
+  const blob = (bx, by, rx, ry, col) => { for (let yy = -Math.round(ry); yy <= Math.round(ry); yy++) { const t = yy / ry, w = rx * Math.sqrt(Math.max(0, 1 - t * t)); if (w < 0.5) continue; R(bx - w, by + yy, w * 2, 1, col); } };
+  const trunkW = Math.max(2, Math.round(A * 0.28)), trunkH = Math.round(ch * 0.42), fy = Ht - 1 - trunkH;
+  R(cx - trunkW / 2, fy, trunkW, trunkH, '#6b4a2a');
+  R(cx - trunkW / 2, fy, Math.max(1, trunkW * 0.42), trunkH, '#4e3320');
+  const fr = ch * 0.33;                                          // copa en blobs
+  blob(cx, fy - fr * 0.85, fr * 1.25, fr, dark);
+  blob(cx - fr * 0.72, fy - fr * 0.45, fr * 0.82, fr * 0.78, dark);
+  blob(cx + fr * 0.72, fy - fr * 0.5, fr * 0.82, fr * 0.78, dark);
+  blob(cx, fy - fr * 1.65, fr * 0.92, fr * 0.82, dark);
+  blob(cx - fr * 0.42, fy - fr * 1.15, fr * 0.5, fr * 0.46, lite);
+  blob(cx + fr * 0.52, fy - fr * 0.62, fr * 0.36, fr * 0.36, lite);
+  outline1px(c, OUTLINE2D);
+  _treeCache[key] = c; return c;
+}
 function drawTree2d(g, sx, baseY, h, biome) {
-  const TS = CFG.TS;
-  const trunkW = Math.max(3, Math.round(TS * 0.22)), trunkH = Math.round(h * TS * 0.5);
-  const tx = Math.round(sx - trunkW / 2), ty = Math.round(baseY - trunkH);
-  g.fillStyle = '#6b4a2a'; g.fillRect(tx, ty, trunkW, trunkH);
-  g.fillStyle = '#523823'; g.fillRect(tx, ty, Math.max(1, (trunkW * 0.38) | 0), trunkH);
-  const cy = ty, R = Math.round(h * TS * 0.4);
-  const dark = biome === 'forest' ? '#2f6b34' : biome === 'jungle' ? '#27773a' : '#3c8540';
-  const lite = biome === 'forest' ? '#43914a' : biome === 'jungle' ? '#3aa052' : '#5aa850';
-  const cw = R * 1.8, ch = R * 1.5;
-  g.fillStyle = dark;
-  g.fillRect(Math.round(sx - cw / 2), Math.round(cy - ch), Math.round(cw), Math.round(ch));
-  g.fillRect(Math.round(sx - cw * 0.34), Math.round(cy - ch * 1.35), Math.round(cw * 0.68), Math.round(ch * 0.55));
-  g.fillStyle = lite;
-  g.fillRect(Math.round(sx - cw * 0.32), Math.round(cy - ch * 0.95), Math.round(cw * 0.36), Math.round(ch * 0.4));
-  g.fillRect(Math.round(sx + cw * 0.05), Math.round(cy - ch * 1.15), Math.round(cw * 0.22), Math.round(ch * 0.3));
+  const spr = _treeSprite(biome, h), scale = CFG.TS / TREE_ART, dw = spr.width * scale, dh = spr.height * scale;
+  g.imageSmoothingEnabled = false;
+  g.drawImage(spr, Math.round(sx - dw / 2), Math.round(baseY - dh + scale), Math.round(dw), Math.round(dh));
 }
 function bg2d(g, W, H, ox, oy) {
   const TS = CFG.TS;
@@ -674,9 +742,18 @@ function render2d(g, W, H) {
       // variante por posición: 4 para piedra/vetas; volteo (0/1) para tierra/arena
       const variant = (m === T.STONE || m === T.COAL_ORE || m === T.IRON_ORE || m === T.CRYSTAL) ? (hash2(tx, ty, 5) * 4 | 0)
         : (m === T.DIRT || m === T.SAND) ? (hash2(tx, ty, 5) & 1) : 0;
-      g.drawImage(tile2d(m, variant), Math.round((tx - ox) * TS), Math.round((ty - oy) * TS));
+      const sx = Math.round((tx - ox) * TS), sy = Math.round((ty - oy) * TS);
+      g.drawImage(tile2d(m, variant), sx, sy);
+      // contorno de silueta SOLO en materiales de construcción (casas con trazo pixel; el terreno queda limpio)
+      if (BUILD2D.has(m)) {
+        const ow = Math.max(2, TS / 12 | 0); g.fillStyle = OUTLINE2D;
+        if (!BUILD2D.has(world.ground(tx, ty - 1))) g.fillRect(sx, sy, TS, ow);
+        if (!BUILD2D.has(world.ground(tx, ty + 1))) g.fillRect(sx, sy + TS - ow, TS, ow);
+        if (!BUILD2D.has(world.ground(tx - 1, ty))) g.fillRect(sx, sy, ow, TS);
+        if (!BUILD2D.has(world.ground(tx + 1, ty))) g.fillRect(sx + TS - ow, sy, ow, TS);
+      }
       const ld = TDEF[m] && TDEF[m].light;
-      if (ld) lights.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS, ld, m === T.TORCH]);
+      if (ld) lights.push([(tx + 0.5 - ox) * TS, (ty + 0.4 - oy) * TS, ld, m === T.TORCH || m === T.WINDOW]);
     }
   }
   // árboles de superficie (segundo plano: detrás del jugador, no colisionan)
