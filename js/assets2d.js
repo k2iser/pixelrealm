@@ -15,7 +15,6 @@ const Assets2D = {
     dHit0: 'assets/char/dwarf/hit_anim_f0.png',
     // tilesets
     terrain: 'assets/tiles/terrain.png',                                            // atlas 22x11 (16px) Pixel Frog
-    oreRocks: 'assets/tiles/ore/Stone_ore_gems/Stones_ores_gems_without_grass.png', // 7x9 (16px) Senmou
     dungeon: 'assets/tiles/dungeon.png',                                            // atlas 512x512 (0x72 DungeonTileset II, CC0) — mismo autor que el prota
   },
   load(cb) {
