@@ -162,7 +162,15 @@ function tile2d(mat, variant) {
     _tile2dCache[key] = c; return c;
   }
   if (mat === T.CHEST || mat === T.CHEST_OPEN) {
-    // cofre (placeholder procedural)
+    // cofre del pack 0x72 (cerrado = full, abierto = empty)
+    const cspr = (typeof dsprite === 'function') && dsprite(mat === T.CHEST_OPEN ? 'chest_empty_open_anim_f2' : 'chest_full_open_anim_f0');
+    if (cspr && cspr.width) {
+      g.imageSmoothingEnabled = false;
+      const dh = Math.round(TS * 0.92), dw = Math.round(cspr.width * (dh / cspr.height));
+      g.drawImage(cspr, 0, 0, cspr.width, cspr.height, Math.round((TS - dw) / 2), TS - dh, dw, dh);   // apoyado en el suelo
+      _tile2dCache[key] = c; return c;
+    }
+    // fallback procedural
     const open = mat === T.CHEST_OPEN;
     g.fillStyle = '#7a5230'; g.fillRect(2, TS - 12, TS - 4, 11);
     g.fillStyle = '#5e3f24'; g.fillRect(2, TS - 12, TS - 4, 1); g.fillRect(2, TS - 2, TS - 4, 1);
@@ -173,7 +181,10 @@ function tile2d(mat, variant) {
     _tile2dCache[key] = c; return c;
   }
   if (mat === T.BRICK) {
-    // ladrillo de piedra (dwarf-holds / viviendas de cueva)
+    // muro de mazmorra del pack 0x72 (dwarf-holds / salas subterráneas)
+    const wall = (typeof dsprite === 'function') && dsprite('wall_mid');
+    if (wall && wall.width) { g.imageSmoothingEnabled = false; g.drawImage(wall, 0, 0, wall.width, wall.height, 0, 0, TS, TS); _tile2dCache[key] = c; return c; }
+    // fallback procedural (ladrillo de piedra) si el atlas aún no cargó
     const bh = Math.max(3, (TS / 4) | 0);
     g.fillStyle = '#585463'; g.fillRect(0, 0, TS, TS);
     g.strokeStyle = '#3a3744'; g.lineWidth = 1;
